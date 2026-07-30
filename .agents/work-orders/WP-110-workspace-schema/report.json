@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-110-workspace-schema",
+  "status": "completed",
+  "summary": "Implemented typed workspace/entity/task/artifact contracts, aligned schemas and ADR 0008 fixtures, validated canonical templates with resolved references, enforced task hierarchy and context invariants, and added deterministic staged template synchronization.",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
+  "final_commit": "4169deab602fcd4b2bf7a4001380c48947e0a783",
+  "files_changed": [
+    "docs/guides/context-layout.md",
+    "schemas/artifact-manifest.schema.json",
+    "schemas/context.schema.json",
+    "schemas/entity.schema.json",
+    "schemas/task.schema.json",
+    "scripts/sync_context_template.py",
+    "src/workctx/domain/artifacts.py",
+    "src/workctx/domain/entities.py",
+    "src/workctx/domain/tasks.py",
+    "src/workctx/models/context.py",
+    "src/workctx/resources/context_template/99_meta/templates/claim.md",
+    "src/workctx/resources/context_template/99_meta/templates/decision.md",
+    "src/workctx/resources/context_template/99_meta/templates/evidence.md",
+    "src/workctx/resources/context_template/99_meta/templates/person.md",
+    "src/workctx/resources/context_template/99_meta/templates/question.md",
+    "src/workctx/resources/context_template/99_meta/templates/risk.md",
+    "src/workctx/resources/context_template/99_meta/templates/task.md",
+    "src/workctx/resources/context_template/README.md",
+    "src/workctx/resources/context_template/context.yaml",
+    "src/workctx/services/contexts.py",
+    "templates/context/99_meta/templates/claim.md",
+    "templates/context/99_meta/templates/decision.md",
+    "templates/context/99_meta/templates/evidence.md",
+    "templates/context/99_meta/templates/person.md",
+    "templates/context/99_meta/templates/question.md",
+    "templates/context/99_meta/templates/risk.md",
+    "templates/context/99_meta/templates/task.md",
+    "templates/context/README.md",
+    "templates/context/context.yaml",
+    "tests/test_context_init.py",
+    "tests/test_context_model.py",
+    "tests/test_schemas.py",
+    "tests/test_template_sync.py",
+    "tests/workspace/__init__.py",
+    "tests/workspace/fixtures/negative/artifact-manifest-hash.json",
+    "tests/workspace/fixtures/negative/artifact-manifest-missing-schema-version.json",
+    "tests/workspace/fixtures/negative/audit-event-hash.json",
+    "tests/workspace/fixtures/negative/context-date-time.json",
+    "tests/workspace/fixtures/negative/context-federated-search.json",
+    "tests/workspace/fixtures/negative/context-missing-schema-version.json",
+    "tests/workspace/fixtures/negative/context-missing-timestamps.json",
+    "tests/workspace/fixtures/negative/context-numeric-date-time.json",
+    "tests/workspace/fixtures/negative/context-schema-version.json",
+    "tests/workspace/fixtures/negative/entity-missing-schema-version.json",
+    "tests/workspace/fixtures/negative/entity-reference.json",
+    "tests/workspace/fixtures/negative/entity-type.json",
+    "tests/workspace/fixtures/negative/entity-uri-encoded-traversal.json",
+    "tests/workspace/fixtures/negative/entity-uri.json",
+    "tests/workspace/fixtures/negative/task-id.json",
+    "tests/workspace/fixtures/negative/task-missing-schema-version.json",
+    "tests/workspace/fixtures/negative/task-numeric-due-at.json",
+    "tests/workspace/fixtures/negative/transaction-proposal-operations.json",
+    "tests/workspace/fixtures/positive/artifact-manifest.json",
+    "tests/workspace/fixtures/positive/audit-event.json",
+    "tests/workspace/fixtures/positive/context.json",
+    "tests/workspace/fixtures/positive/entity.json",
+    "tests/workspace/fixtures/positive/task.json",
+    "tests/workspace/fixtures/positive/transaction-proposal.json",
+    "tests/workspace/schema_support.py",
+    "tests/workspace/test_contract_fixtures.py",
+    "tests/workspace/test_task_hierarchy.py",
+    "tests/workspace/test_template_instances.py",
+    ".agents/work-orders/WP-110-workspace-schema/report.md",
+    ".agents/work-orders/WP-110-workspace-schema/report.json"
+  ],
+  "behavior_implemented": [
+    "Added typed entity, task, and artifact-manifest models aligned with their owned JSON Schemas.",
+    "Required context timestamps and exact schema version 1 behavior with migration-required failures.",
+    "Pinned the model and schema entity vocabulary to the literal D-018 19-value list.",
+    "Enforced task ID, parent/root, existing-parent, duplicate, and context-boundary hierarchy rules.",
+    "Validated every canonical template instance through a Draft 2020-12 registry with resolved cross-schema references and RFC 3339 checking.",
+    "Added person, decision, risk, question, and claim frontmatter templates.",
+    "Declared the packaged template canonical and added byte-identical staged synchronization to the public mirror.",
+    "Extended context initialization behavior without changing its four frozen public signatures."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed."
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "161 files already formatted."
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 17 source files."
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "95 tests passed in 1.88 seconds."
+    },
+    {
+      "command": "python scripts\\sync_context_template.py --check",
+      "status": "passed",
+      "result": "Context template mirror is synchronized."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "result": "Exit code 0; no whitespace errors."
+    },
+    {
+      "command": "uv run python -c \"import json; from pathlib import Path; from jsonschema import Draft202012Validator; root = Path('.'); schema = json.loads((root / '.agents/plan/initial/agent-report.schema.json').read_text(encoding='utf-8')); report = json.loads((root / '.agents/work-orders/WP-110-workspace-schema/report.json').read_text(encoding='utf-8')); Draft202012Validator(schema).validate(report); print('WP-110 report.json validates against agent-report.schema.json')\"",
+      "status": "passed",
+      "result": "WP-110 report.json validates against agent-report.schema.json."
+    }
+  ],
+  "assumptions": [
+    "All context kinds and profiles retain the required top-level layout; profiles are persisted usage defaults rather than alternate security or directory contracts.",
+    "Entity URI type and ID equality is enforced as a tested code-only invariant because standard Draft 2020-12 cannot compare sibling field values.",
+    "Canonical writers may accept aware datetime objects in memory, but canonical serialized timestamps are RFC 3339 strings and numeric Unix timestamps are rejected."
+  ],
+  "decisions": [
+    "src/workctx/resources/context_template is the canonical template tree; templates/context is its generated byte-identical mirror.",
+    "Template sync stages and verifies a complete copy before replacement, restores the previous mirror after replacement failure, and retains the recovery copy if restoration fails.",
+    "Context initialization validates all discoverable inputs before filesystem mutation and writes the validated context configuration after template parameterization."
+  ],
+  "deviations": [
+    "The frozen WP-100 reference schema makes confidence, source_observations, and note optional but non-nullable. Absent values for those nested fields are therefore omitted as a scoped ADR 0005 exception; nullable valid_from and valid_to are emitted as null and emitted field order remains canonical."
+  ],
+  "security_considerations": [
+    "All fixtures and templates contain fictional values only and no secrets.",
+    "Isolated security boundaries, federated_search false, English repository content, typed URI validation, cross-context task rejection, and symlink rejection are enforced and tested.",
+    "The frozen workspace directory validation contract and evidence-retention zones were not changed."
+  ],
+  "migration_considerations": [
+    "All typed versioned contracts accept only schema version 1.",
+    "Unsupported schema versions fail with a migration-required error rather than being interpreted as the current format.",
+    "Context created_at and updated_at are now required schema fields and canonical initialization supplies both."
+  ],
+  "unresolved": [
+    "Lead integration must reconcile WP-100's optional/non-null reference fields with ADR 0005's universal null-emission policy.",
+    "Transaction-proposal and audit-event semantics remain owned by WP-300; WP-110 added ADR 0008 fixtures without tightening those schemas.",
+    "A low-level copy, parameterization, or write failure after context target creation can leave a partial new workspace; full transactional filesystem creation remains future hardening."
+  ],
+  "recommended_next_action": "Implementation lead review commit 4169deab602fcd4b2bf7a4001380c48947e0a783, rerun the four validation commands, verify WP-100 cross-branch D-018/reference compatibility, and explicitly track the reference null-policy integration item."
+}
