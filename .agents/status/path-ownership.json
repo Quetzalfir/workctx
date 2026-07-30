@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "baseline_commit": "PENDING-WAVE0-BASELINE",
+  "baseline_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
   "notes": [
     "frozen_paths bind Wave 1 workers. WP-001 is lead-executed on master BEFORE any Wave 1 assignment starts, which is why its broad paths (including pyproject.toml) conflict with nothing; pyproject.toml is frozen for every Wave 1 worker.",
     "Each work order may additionally write its own report.md and report.json inside its work-order directory; these are listed in each contract's allowed_paths.",
@@ -69,7 +69,7 @@
       ],
       "branch": "agent/WP-100-reference-contracts",
       "worktree": ".worktrees/WP-100-reference-contracts",
-      "status": "proposed"
+      "status": "ready"
     },
     {
       "work_order_id": "WP-110-workspace-schema",
@@ -100,7 +100,7 @@
       ],
       "branch": "agent/WP-110-workspace-schema",
       "worktree": ".worktrees/WP-110-workspace-schema",
-      "status": "proposed"
+      "status": "ready"
     },
     {
       "work_order_id": "WP-120-cli-envelope",
@@ -119,7 +119,7 @@
       ],
       "branch": "agent/WP-120-cli-envelope",
       "worktree": ".worktrees/WP-120-cli-envelope",
-      "status": "proposed"
+      "status": "ready"
     },
     {
       "work_order_id": "WP-130-skill-contract",
@@ -136,7 +136,7 @@
       ],
       "branch": "agent/WP-130-skill-contract",
       "worktree": ".worktrees/WP-130-skill-contract",
-      "status": "proposed"
+      "status": "ready"
     }
   ]
 }

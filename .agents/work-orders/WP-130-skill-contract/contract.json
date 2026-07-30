@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-130-skill-contract",
   "title": "Portable skill contract, registry, and adapter interface",
-  "status": "proposed",
+  "status": "ready",
   "objective": "Canonical skills have a side-effect registry, enforceable lint checks, an adapter manifest format for drift detection, and improved uniform bodies — without coupling to unimplemented tool names.",
   "business_value": "WP-320 (agent installer) consumes the registry and manifest formats defined here; without them, adapter generation has no drift detection and skills have no permission classification.",
   "scope": [
@@ -23,7 +23,7 @@
     "WP-000",
     "WP-001"
   ],
-  "base_commit": "PENDING-WAVE0-BASELINE",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
   "branch": "agent/WP-130-skill-contract",
   "worktree": ".worktrees/WP-130-skill-contract",
   "allowed_paths": [

@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-001-dev-foundation",
+  "status": "partial",
+  "summary": "Baseline established: validation gate green from the working tree, LF policy enforced via .gitattributes, uv.lock committed with CI --locked sync, CI build job with wheel template-content guard added, PEP 639 license metadata adopted, pre-commit added to the dev group and documented. Remaining: GitHub Actions matrix verification (no remote exists yet) and [project.urls] (deferred until the repository URL exists).",
+  "base_commit": "4e2aa2ccefac31c29254bc519d36f3dd55121735",
+  "final_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
+  "files_changed": [
+    ".gitattributes",
+    "uv.lock",
+    ".github/workflows/ci.yml",
+    "CONTRIBUTING.md",
+    "pyproject.toml",
+    "docs/concepts.md",
+    "src/workctx/cli.py",
+    "src/workctx/models/reference.py",
+    "src/workctx/services/contexts.py",
+    "src/workctx/validation/workspace.py",
+    "src/workctx/domain/__init__.py",
+    "tests/test_context_init.py",
+    "tests/test_plan_contracts.py",
+    "tests/test_schemas.py",
+    "tests/test_skills.py",
+    "tests/test_template_sync.py",
+    "tests/test_validation.py"
+  ],
+  "behavior_implemented": [
+    "Validation gate passes: ruff check, ruff format --check (141 files), mypy strict (14 source files), pytest (21 passed)",
+    "LF normalization on checkout via .gitattributes (* text=auto eol=lf plus binary exceptions); index verified 153 text files i/lf",
+    "Reproducible CI resolution via committed uv.lock and uv sync --locked --all-groups",
+    "CI build job: uv build plus inline wheel content check guarding the packaged context template",
+    "PEP 639 license metadata (license = 'Apache-2.0', license-files); legacy license classifier removed",
+    "pre-commit added to dev dependency group; hook installation documented in CONTRIBUTING.md",
+    "CI concurrency group cancels superseded runs",
+    "docs/concepts.md observation kinds aligned with observation.schema.json ('task signal' -> 'task')"
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "141 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 14 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "21 passed"
+    },
+    {
+      "command": "uv build",
+      "status": "passed",
+      "result": "wheel and sdist built; wheel contains 45/45 git-tracked context_template files including .gitignore and 98_state/.gitkeep"
+    },
+    {
+      "command": "git ls-files --eol",
+      "status": "passed",
+      "result": "153 text files i/lf, 59 i/none (binary/none); no CRLF in index"
+    },
+    {
+      "command": "GitHub Actions 3-OS matrix",
+      "status": "not_run",
+      "result": "No git remote configured; acceptance criterion deferred until first push"
+    }
+  ],
+  "assumptions": [
+    "Apache-2.0 SPDX expression matches the LICENSE file content",
+    "hatchling>=1.27 (build-system requirement) supports PEP 639 fields"
+  ],
+  "decisions": [
+    "[project.urls] deferred until a GitHub remote exists (no repository URL to record)",
+    "pre-commit kept (added to dev group) rather than removing the config",
+    "mcp extra intentionally not installed in CI (decision D-016)"
+  ],
+  "deviations": [
+    "domain/__init__.py scope item executed during WP-000 by the lead; verified committed with the baseline as re-scoped"
+  ],
+  "security_considerations": [
+    "No secrets or network-dependent steps added; CI retains permissions: contents: read"
+  ],
+  "migration_considerations": [
+    "None: no workspace schema changes"
+  ],
+  "unresolved": [
+    "GitHub Actions matrix must be verified green after the first push (WP-001 acceptance criterion outstanding)",
+    "[project.urls] must be added when the repository URL exists"
+  ],
+  "recommended_next_action": "Push to a GitHub remote, verify the CI matrix, add [project.urls], then close WP-001 and start Wave 1 workers."
+}

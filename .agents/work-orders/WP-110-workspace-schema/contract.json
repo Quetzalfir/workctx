@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-110-workspace-schema",
   "title": "Workspace schema and template contracts",
-  "status": "proposed",
+  "status": "ready",
   "objective": "Context configuration, canonical directory rules, entity frontmatter contracts, artifact manifests, task hierarchy, and template generation inputs exist as typed, validated, tested contracts, with the workspace template validated against them.",
   "business_value": "WP-200, WP-210, WP-220, and WP-400 need stable workspace and entity contracts; today only context config has a typed model and the template is never validated against its own schemas.",
   "scope": [
@@ -26,7 +26,7 @@
     "WP-000",
     "WP-001"
   ],
-  "base_commit": "PENDING-WAVE0-BASELINE",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
   "branch": "agent/WP-110-workspace-schema",
   "worktree": ".worktrees/WP-110-workspace-schema",
   "allowed_paths": [

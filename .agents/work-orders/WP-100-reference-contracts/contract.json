@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-100-reference-contracts",
   "title": "Domain identity, URI, and reference contracts",
-  "status": "proposed",
+  "status": "ready",
   "objective": "Stable ID families, canonical and source URIs, source locators, typed relations, and observation/claim contracts from the reference model exist as typed, validated, tested Python domain code aligned with the reference JSON Schemas.",
   "business_value": "Every durable claim in the product depends on precise, resolvable references; WP-200, WP-210, WP-230, and WP-300 all build on these contracts.",
   "scope": [
@@ -29,7 +29,7 @@
     "WP-000",
     "WP-001"
   ],
-  "base_commit": "PENDING-WAVE0-BASELINE",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
   "branch": "agent/WP-100-reference-contracts",
   "worktree": ".worktrees/WP-100-reference-contracts",
   "allowed_paths": [

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-120-cli-envelope",
   "title": "CLI framework, result envelope, and exit codes",
-  "status": "proposed",
+  "status": "ready",
   "objective": "Every CLI command emits the doc-04 result envelope in JSON mode with clean stdout, routes diagnostics to stderr, and maps failures through the doc-04 exit-code table via a single testable presentation boundary.",
   "business_value": "Later packages register many commands; without a shared envelope and exit-code layer each command reinvents serialization and automation cannot trust the output contract.",
   "scope": [
@@ -28,7 +28,7 @@
     "WP-000",
     "WP-001"
   ],
-  "base_commit": "PENDING-WAVE0-BASELINE",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
   "branch": "agent/WP-120-cli-envelope",
   "worktree": ".worktrees/WP-120-cli-envelope",
   "allowed_paths": [

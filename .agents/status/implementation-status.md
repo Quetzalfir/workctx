@@ -2,7 +2,7 @@
 
 ## Baseline
 
-- Baseline commit: `4e2aa2c` (scaffold) — Wave 1 baseline pending WP-001 completion
+- Baseline commit: `ea6861f956326c35fbbca2bcaf276f423e08570f` (Wave 1 base)
 - Plan revision: `.agents/plan/initial/` at `4e2aa2c` (plan state: proposed, adopted by lead)
 - Target release: `0.1.0-alpha`
 - Last updated: 2026-07-30
@@ -10,19 +10,20 @@
 
 ## Current wave
 
-Wave 0 (WP-000 lead baseline: deliverables written, pending operator ratification of ADRs
-0005-0008 and the baseline commit; WP-001 in execution by the lead).
+Wave 1 — the four work orders are `ready` at base `ea6861f`; ADRs 0005-0008 ratified by
+the operator on 2026-07-30. WP-001 is `partial`: CI-matrix verification and
+[project.urls] remain blocked until a GitHub remote exists.
 
 ## Work-package status
 
 | Work package | State | Dependencies | Assigned agent | Branch/worktree | Review | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| WP-000 | reported | — | lead | master / . | operator ratification pending | Status dir, ADRs 0005-0008 (amended after adversarial verify), 5 work orders, path ownership, [audit record](audit-2026-07-30-scaffold.md) |
-| WP-001 | in_progress | WP-000 | lead | master / . | — | All changes prepared and verified locally (gate green, uv build OK, wheel contains all 45 template files, LF policy in place); [project.urls] deferred until a remote exists; awaiting operator approval to commit |
-| WP-100 | proposed | WP-000, WP-001 | — | agent/WP-100-reference-contracts | — | Ready to assign once baseline commit is pinned |
-| WP-110 | proposed | WP-000, WP-001 | — | agent/WP-110-workspace-schema | — | Ready to assign once baseline commit is pinned |
-| WP-120 | proposed | WP-001 | — | agent/WP-120-cli-envelope | — | Ready to assign once baseline commit is pinned |
-| WP-130 | proposed | WP-000, WP-001 | — | agent/WP-130-skill-contract | — | Ready to assign once baseline commit is pinned |
+| WP-000 | closed | — | lead | master / . | operator ratified 2026-07-30 | Status dir, ADRs 0005-0008 (amended after adversarial verify, accepted), 5 work orders, path ownership, [audit record](audit-2026-07-30-scaffold.md) |
+| WP-001 | reported | WP-000 | lead | master / . | [report](../work-orders/WP-001-dev-foundation/report.md) | `partial`: gate green, LF policy, lock, build guard all landed in `ea6861f`; CI matrix + [project.urls] blocked on missing GitHub remote |
+| WP-100 | ready | WP-000, WP-001 | — | agent/WP-100-reference-contracts | — | Base pinned to `ea6861f`; awaiting worker assignment |
+| WP-110 | ready | WP-000, WP-001 | — | agent/WP-110-workspace-schema | — | Base pinned to `ea6861f`; awaiting worker assignment |
+| WP-120 | ready | WP-000, WP-001 | — | agent/WP-120-cli-envelope | — | Base pinned to `ea6861f`; awaiting worker assignment |
+| WP-130 | ready | WP-000, WP-001 | — | agent/WP-130-skill-contract | — | Base pinned to `ea6861f`; awaiting worker assignment |
 | WP-200..WP-500 | proposed | see backlog | — | — | — | Wave 2+ blocked on Wave 1 |
 
 ## Validation status
@@ -39,30 +40,25 @@ Wave 0 (WP-000 lead baseline: deliverables written, pending operator ratificatio
 
 ## Open decisions
 
-- Operator ratification of ADRs 0005-0008 (proposed; 0005/0006/0007/0008 amended after
-  adversarial verification).
 - D-019 (audit ledger representation) — must close before WP-300.
 - D-020 (first-alpha MCP tool surface) — must close before WP-330 contract creation.
-- See `.agents/status/decision-register.md` for the full register (D-001..D-021).
+- See `.agents/status/decision-register.md` for the full register (D-001..D-021);
+  ADRs 0005-0008 were operator-ratified on 2026-07-30.
 
 ## Active blockers
 
-- Wave 1 assignment blocked until the Wave 0 baseline commit exists (operator approval to
-  commit) and ADRs are ratified.
-- CI acceptance for WP-001 blocked until the repository has a GitHub remote.
+- WP-001 final acceptance (CI matrix, [project.urls]) blocked until the repository has a
+  GitHub remote.
 
 ## Integration queue
 
-1. WP-001 (baseline commit on master).
-2. Wave 1 integration order after acceptance: WP-100 → WP-110 → WP-130 → WP-120
-   (reference vocabulary first so WP-110's entity enum lands against it; CLI envelope last
-   because it rewrites tests that other integrations should not race).
+Wave 1 integration order after acceptance: WP-100 → WP-110 → WP-130 → WP-120
+(reference vocabulary first so WP-110's entity enum lands against it; CLI envelope last
+because it rewrites tests that other integrations should not race).
 
 ## Next lead actions
 
-1. Obtain operator approval for the baseline commit (WP-000 artifacts + WP-001 changes).
-2. Execute WP-001, write its report, record the baseline commit hash here and in
-   `path-ownership.json`, and flip Wave 1 contracts from `proposed` to `ready` with the
-   pinned `base_commit`.
-3. Hand the operator the four Wave 1 worktree commands and worker prompts.
-4. Review Wave 1 deliveries per the leader review gate.
+1. Operator creates the four worktrees from `ea6861f` and pastes each worker prompt.
+2. Review Wave 1 deliveries per the leader review gate (contracts `ready` → `assigned`
+   as the operator hands them out).
+3. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
