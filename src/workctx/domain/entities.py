@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from workctx.models.reference import WorkctxUri
+from workctx.domain.references import WorkctxUri
 
 EntityType = Literal[
     "evidence",

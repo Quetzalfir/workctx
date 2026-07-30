@@ -9,7 +9,7 @@ from typing import Annotated, Literal, Self
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from workctx.domain.entities import EntityFrontmatter
-from workctx.models.reference import WorkctxUri
+from workctx.domain.references import WorkctxUri
 
 PARENT_TASK_ID_PATTERN = r"^TASK-[0-9]{4}-[0-9]{3}$"
 SUBTASK_ID_PATTERN = r"^TASK-[0-9]{4}-[0-9]{3}-ST[0-9]{2}$"
