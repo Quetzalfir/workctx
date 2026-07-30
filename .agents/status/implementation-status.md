@@ -10,9 +10,12 @@
 
 ## Current wave
 
-Wave 1 — the four work orders are `ready` at base `ea6861f`; ADRs 0005-0008 ratified by
-the operator on 2026-07-30. WP-001 is `partial`: CI-matrix verification and
-[project.urls] remain blocked until a GitHub remote exists.
+Wave 1 COMPLETE (2026-07-30): all four work orders accepted and integrated in the planned
+order (WP-100 → WP-110 → WP-130 → WP-120). Final combined gate: 344 tests, mypy strict on
+29 files, build + wheel content check, end-to-end CLI smoke. ADR 0009 resolved the WP-110
+null-policy escalation. Next: Wave 2 planning (WP-200, WP-210, WP-220, WP-230) — D-019
+(audit ledger ADR) must close before WP-300 contracts are cut. WP-001 remains `partial`:
+CI-matrix verification and [project.urls] blocked until a GitHub remote exists.
 
 ## Work-package status
 
@@ -22,8 +25,8 @@ the operator on 2026-07-30. WP-001 is `partial`: CI-matrix verification and
 | WP-001 | reported | WP-000 | lead | master / . | [report](../work-orders/WP-001-dev-foundation/report.md) | `partial`: gate green, LF policy, lock, build guard all landed in `ea6861f`; CI matrix + [project.urls] blocked on missing GitHub remote |
 | WP-100 | verified | WP-000, WP-001 | Codex worker | agent/WP-100-reference-contracts | accepted | Integrated at `5c9cd03`; combined gate green (148 tests) |
 | WP-110 | verified | WP-000, WP-001 | Codex worker | agent/WP-110-workspace-schema | accepted | Integrated at `c577801`; combined gate green (222 tests); D-018 cross-check OK |
-| WP-120 | accepted | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | accepted | Delivery b4e7752 accepted; integration deferred until after WP-110 and WP-130 per integration order |
-| WP-130 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-130-skill-contract | — | Worker active from base `ea6861f`; no report yet |
+| WP-120 | verified | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | accepted | Integrated at `788aa1c`; final Wave 1 gate green |
+| WP-130 | verified | WP-000, WP-001 | Codex worker | agent/WP-130-skill-contract | accepted | Integrated at `6dfba1c`; final Wave 1 gate green |
 | WP-200..WP-500 | proposed | see backlog | — | — | — | Wave 2+ blocked on Wave 1 |
 
 ## Validation status
@@ -58,7 +61,10 @@ because it rewrites tests that other integrations should not race).
 
 ## Next lead actions
 
-1. Operator creates the four worktrees from `ea6861f` and pastes each worker prompt.
-2. Review Wave 1 deliveries per the leader review gate (contracts `ready` → `assigned`
-   as the operator hands them out).
-3. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
+1. Plan Wave 2: create work orders for WP-200, WP-210, WP-220, WP-230 with a fresh
+   path-ownership matrix over the integrated tree.
+2. Close D-019 (audit ledger ADR) before WP-300 contracts are cut; D-020 (MCP surface)
+   before WP-330.
+3. Consolidate re-exports (`models/__init__.py`, `domain/__init__.py`) now that Wave 1
+   freezes lifted.
+4. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
