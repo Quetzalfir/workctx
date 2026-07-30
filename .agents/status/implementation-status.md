@@ -22,7 +22,7 @@ the operator on 2026-07-30. WP-001 is `partial`: CI-matrix verification and
 | WP-001 | reported | WP-000 | lead | master / . | [report](../work-orders/WP-001-dev-foundation/report.md) | `partial`: gate green, LF policy, lock, build guard all landed in `ea6861f`; CI matrix + [project.urls] blocked on missing GitHub remote |
 | WP-100 | verified | WP-000, WP-001 | Codex worker | agent/WP-100-reference-contracts | accepted | Integrated at `5c9cd03`; combined gate green (148 tests) |
 | WP-110 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-110-workspace-schema | — | Worker active from base `ea6861f`; no report yet |
-| WP-120 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | — | Worker active from base `ea6861f`; no report yet |
+| WP-120 | accepted | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | accepted | Delivery b4e7752 accepted; integration deferred until after WP-110 and WP-130 per integration order |
 | WP-130 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-130-skill-contract | — | Worker active from base `ea6861f`; no report yet |
 | WP-200..WP-500 | proposed | see backlog | — | — | — | Wave 2+ blocked on Wave 1 |
 
