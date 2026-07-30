@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-100-reference-contracts",
+  "status": "completed",
+  "summary": "Implemented stable ID families, canonical and source URIs, the D-018 entity vocabulary, typed relations, nine source locators, and typed Observation/Claim models aligned with the four owned JSON Schemas through shared positive and negative fixtures. The full validation gate passes.",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
+  "final_commit": "69d8c8697fe180aeec25b8b167fd6b04c585188f",
+  "files_changed": [
+    "src/workctx/domain/ids.py",
+    "src/workctx/domain/references.py",
+    "src/workctx/domain/locators.py",
+    "src/workctx/domain/relations.py",
+    "src/workctx/domain/vocabulary.py",
+    "src/workctx/domain/observations.py",
+    "src/workctx/domain/claims.py",
+    "src/workctx/models/reference.py",
+    "schemas/reference.schema.json",
+    "schemas/source-locator.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/claim.schema.json",
+    "tests/domain/__init__.py",
+    "tests/domain/fixtures/reference.json",
+    "tests/domain/fixtures/source-locator.json",
+    "tests/domain/fixtures/observation.json",
+    "tests/domain/fixtures/claim.json",
+    "tests/domain/test_contract_alignment.py",
+    "tests/domain/test_ids.py",
+    "tests/domain/test_references.py",
+    "tests/domain/test_locators.py",
+    "tests/domain/test_models.py",
+    "tests/domain/test_vocabulary.py",
+    "docs/reference/reference-system.md",
+    ".agents/work-orders/WP-100-reference-contracts/report.md",
+    ".agents/work-orders/WP-100-reference-contracts/report.json"
+  ],
+  "behavior_implemented": [
+    "Immutable parse/validate/format types for ART, EVD, EVD#OBS, TASK, TASK-STNN, DEC, RISK, Q, CLM, PER, and SYS IDs",
+    "Exact D-018 19-value EntityType enum and schema-current relation, confidence, observation-kind, and claim-status enums",
+    "Domain-owned WorkctxUri with an identity-preserving compatibility shim and observation URI normalization",
+    "Canonical artifact and immutable repository source-reference types plus durable-reference safety validation",
+    "Nine discriminated source-locator models with ordering, bounds, path, and JSON Pointer validation",
+    "Typed references, observations, and claims aligned to hand-maintained public schemas",
+    "Shared positive and negative fixtures validating schema/model/default-dump round trips"
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "155 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 21 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "148 passed in 1.07s"
+    },
+    {
+      "command": "uv run pytest tests/domain tests/test_reference.py tests/test_schemas.py",
+      "status": "passed",
+      "result": "133 passed in 0.40s before the final full-suite run"
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "passed",
+      "result": "No whitespace errors before the implementation commit"
+    }
+  ],
+  "assumptions": [
+    "ID date/year and sequence values are lexical contracts; calendar semantics, nonzero allocation, and next-free allocation are out of scope",
+    "Repository commit values follow the source-locator schema's 7-64 hexadecimal grammar and preserve input case",
+    "WorkctxUri remains structurally generic to preserve the frozen API; D-018 membership is enforced at typed domain boundaries"
+  ],
+  "decisions": [
+    "Schema-current observation kinds and claim statuses take precedence over older doc-03 vocabulary",
+    "Known durable URI schemes require canonical grammar while external URI schemes remain syntax-only placeholders",
+    "Standard Pydantic model dumps must themselves remain valid against the public JSON Schemas"
+  ],
+  "deviations": [
+    "The forbidden branch copy of contract.json still says base_commit PENDING-WAVE0-BASELINE; the worker prompt and actual branch base are ea6861f956326c35fbbca2bcaf276f423e08570f"
+  ],
+  "security_considerations": [
+    "Fictional fixtures contain no credentials or private employer data",
+    "Decoded traversal, absolute machine paths, malformed percent escapes, unsafe repository paths, and file:// durable references are rejected"
+  ],
+  "migration_considerations": [
+    "The workctx.models.reference.WorkctxUri compatibility import remains valid",
+    "Owned schemas intentionally tighten formerly accepted malformed, noncanonical, unknown-entity, file://, and unsafe-path inputs"
+  ],
+  "unresolved": [],
+  "recommended_next_action": "Implementation lead: inspect commit 69d8c8697fe180aeec25b8b167fd6b04c585188f, rerun the full gate, integrate WP-100 before WP-110, and consolidate duplicate Wave 1 validators against these canonical modules."
+}
