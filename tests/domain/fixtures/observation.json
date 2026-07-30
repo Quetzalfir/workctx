@@ -1,0 +1,173 @@
+{
+  "positive": [
+    {
+      "id": "EVD-20260730-auth-review-01#OBS-001",
+      "kind": "fact",
+      "statement": "The fictional portal delegates authentication.",
+      "confidence": "high",
+      "source": {
+        "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "locator": {
+          "type": "line_range",
+          "start_line": 10,
+          "end_line": 14
+        }
+      }
+    },
+    {
+      "id": "EVD-20260730-auth-review-01#OBS-002",
+      "kind": "inference",
+      "statement": "The identity service is probably the enforcement point.",
+      "confidence": "low",
+      "source": {
+        "ref": "artifact://sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "locator": {
+          "type": "time_range",
+          "start_ms": 412000,
+          "end_ms": 439000,
+          "speaker": "Alex Rivera"
+        }
+      },
+      "observed_at": "2026-07-30T14:42:00Z",
+      "valid_from": "2026-07-30T14:42:00Z",
+      "valid_to": null,
+      "derived_from": [
+        "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+      ],
+      "related": [
+        {
+          "relation": "mentions",
+          "target": "workctx://fictional-lab/system/SYS-identity-service",
+          "confidence": "medium"
+        }
+      ]
+    }
+  ],
+  "negative": [
+    {
+      "name": "malformed observation ID",
+      "data": {
+        "id": "EVD-anything#OBS-001",
+        "kind": "fact",
+        "statement": "Invalid fixture.",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "unknown observation kind",
+      "data": {
+        "id": "EVD-20260730-auth-review-01#OBS-001",
+        "kind": "opinion",
+        "statement": "Invalid fixture.",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "empty statement",
+      "data": {
+        "id": "EVD-20260730-auth-review-01#OBS-001",
+        "kind": "fact",
+        "statement": "",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "invalid artifact reference",
+      "data": {
+        "id": "EVD-20260730-auth-review-01#OBS-001",
+        "kind": "fact",
+        "statement": "Invalid fixture.",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/ABCDEF",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "duplicate derivation",
+      "data": {
+        "id": "EVD-20260730-auth-review-01#OBS-001",
+        "kind": "fact",
+        "statement": "Invalid fixture.",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        },
+        "derived_from": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-002",
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-002"
+        ]
+      }
+    },
+    {
+      "name": "numeric observed date-time",
+      "data": {
+        "id": "EVD-20260730-auth-review-01#OBS-001",
+        "kind": "fact",
+        "statement": "Invalid fixture.",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        },
+        "observed_at": 1785422520
+      }
+    },
+    {
+      "name": "extra property",
+      "data": {
+        "id": "EVD-20260730-auth-review-01#OBS-001",
+        "kind": "fact",
+        "statement": "Invalid fixture.",
+        "confidence": "high",
+        "source": {
+          "ref": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "locator": {
+            "type": "line_range",
+            "start_line": 1,
+            "end_line": 1
+          }
+        },
+        "author": "Nobody"
+      }
+    }
+  ]
+}

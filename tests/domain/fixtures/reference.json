@@ -1,0 +1,112 @@
+{
+  "positive": [
+    {
+      "relation": "supports",
+      "target": "workctx://fictional-lab/task/TASK-2026-014"
+    },
+    {
+      "relation": "evidenced_by",
+      "target": "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "confidence": "high",
+      "source_observations": [
+        "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+      ],
+      "valid_from": "2026-07-30T14:42:00Z",
+      "valid_to": null,
+      "note": "Fictional contract fixture."
+    }
+  ],
+  "negative": [
+    {
+      "name": "unknown relation",
+      "data": {
+        "relation": "approximately_related",
+        "target": "workctx://fictional-lab/task/TASK-2026-014"
+      }
+    },
+    {
+      "name": "machine-specific file URI",
+      "data": {
+        "relation": "supports",
+        "target": "file:///tmp/private.txt"
+      }
+    },
+    {
+      "name": "malformed artifact target",
+      "data": {
+        "relation": "supports",
+        "target": "artifact://sha256/abc"
+      }
+    },
+    {
+      "name": "mutable repository target",
+      "data": {
+        "relation": "supports",
+        "target": "repo://fictional-repo@main/src/example.py#L1-L2"
+      }
+    },
+    {
+      "name": "literal Work Context fragment",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/observation/EVD-20260730-auth-review-01#OBS-001"
+      }
+    },
+    {
+      "name": "unknown Work Context entity type",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/unknown/UNKNOWN-001"
+      }
+    },
+    {
+      "name": "noncanonical uppercase scheme",
+      "data": {
+        "relation": "supports",
+        "target": "WORKCTX://fictional-lab/task/TASK-2026-014"
+      }
+    },
+    {
+      "name": "malformed percent escape",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/task/TASK%GG"
+      }
+    },
+    {
+      "name": "numeric date-time",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/task/TASK-2026-014",
+        "valid_from": 1785422520
+      }
+    },
+    {
+      "name": "duplicate source observations",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/task/TASK-2026-014",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001",
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "explicit null confidence",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/task/TASK-2026-014",
+        "confidence": null
+      }
+    },
+    {
+      "name": "extra property",
+      "data": {
+        "relation": "supports",
+        "target": "workctx://fictional-lab/task/TASK-2026-014",
+        "weight": 1
+      }
+    }
+  ]
+}

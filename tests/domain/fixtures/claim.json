@@ -1,0 +1,218 @@
+{
+  "positive": [
+    {
+      "schema_version": 1,
+      "id": "CLM-2026-00421",
+      "subject": "workctx://fictional-lab/task/TASK-2026-014",
+      "predicate": "status",
+      "object": null,
+      "observed_at": "2026-07-30T14:42:00Z",
+      "status": "current",
+      "confidence": "high",
+      "source_observations": [
+        "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+      ]
+    },
+    {
+      "schema_version": 1,
+      "id": "CLM-2026-00422",
+      "subject": "workctx://fictional-lab/system/SYS-identity-service",
+      "predicate": "configuration",
+      "object": {
+        "mode": "delegated",
+        "enabled": true
+      },
+      "observed_at": "2026-07-30T15:00:00Z",
+      "valid_from": "2026-07-30T15:00:00Z",
+      "valid_to": null,
+      "status": "superseded",
+      "supersedes": "CLM-2026-00420",
+      "superseded_by": "CLM-2026-00423",
+      "confidence": "medium",
+      "source_observations": [
+        "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001",
+        "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-002"
+      ]
+    }
+  ],
+  "negative": [
+    {
+      "name": "wrong schema version",
+      "data": {
+        "schema_version": 2,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "malformed claim ID",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "empty predicate",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "unknown subject entity type",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/unknown/UNKNOWN-001",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "numeric observed date-time",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": 1785422520,
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "canonicalized duplicate source observations",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001",
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS%2D001"
+        ]
+      }
+    },
+    {
+      "name": "unknown status",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "archived",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "malformed supersedes ID",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "superseded",
+        "supersedes": "claim-420",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "empty source observations",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": []
+      }
+    },
+    {
+      "name": "duplicate source observations",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001",
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ]
+      }
+    },
+    {
+      "name": "extra property",
+      "data": {
+        "schema_version": 1,
+        "id": "CLM-2026-00421",
+        "subject": "workctx://fictional-lab/task/TASK-2026-014",
+        "predicate": "status",
+        "object": "blocked",
+        "observed_at": "2026-07-30T14:42:00Z",
+        "status": "current",
+        "confidence": "high",
+        "source_observations": [
+          "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001"
+        ],
+        "author": "Nobody"
+      }
+    }
+  ]
+}
