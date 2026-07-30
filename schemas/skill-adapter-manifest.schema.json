@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/skill-adapter-manifest.schema.json",
+  "title": "Generated skill adapter manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "adapter",
+    "adapter_version",
+    "scope",
+    "generated_at",
+    "registry",
+    "skills"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "adapter": {
+      "enum": [
+        "codex",
+        "claude",
+        "gemini"
+      ]
+    },
+    "adapter_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "scope": {
+      "const": "project"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "registry": {
+      "$ref": "#/$defs/registrySource"
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/skillAdapter"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "const": "codex"
+          }
+        },
+        "required": [
+          "adapter"
+        ]
+      },
+      "then": {
+        "properties": {
+          "skills": {
+            "items": {
+              "properties": {
+                "generated": {
+                  "items": {
+                    "properties": {
+                      "path": {
+                        "pattern": "^\\.codex/"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "const": "claude"
+          }
+        },
+        "required": [
+          "adapter"
+        ]
+      },
+      "then": {
+        "properties": {
+          "skills": {
+            "items": {
+              "properties": {
+                "generated": {
+                  "items": {
+                    "properties": {
+                      "path": {
+                        "pattern": "^\\.claude/"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "adapter": {
+            "const": "gemini"
+          }
+        },
+        "required": [
+          "adapter"
+        ]
+      },
+      "then": {
+        "properties": {
+          "skills": {
+            "items": {
+              "properties": {
+                "generated": {
+                  "items": {
+                    "properties": {
+                      "path": {
+                        "pattern": "^\\.gemini/"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "contentHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "generatedPath": {
+      "type": "string",
+      "pattern": "^\\.(?:codex|claude|gemini)/(?!\\.\\.?(?:/|$))(?!.*(?:/\\.\\.?)(?:/|$))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "registrySource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {
+          "const": ".agents/skills/registry.yaml"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
+    "canonicalSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*/SKILL\\.md$"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
+    "generatedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/generatedPath"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
+    "skillAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "canonical",
+        "generated"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "canonical": {
+          "$ref": "#/$defs/canonicalSource"
+        },
+        "generated": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/generatedFile"
+          }
+        }
+      }
+    }
+  }
+}
