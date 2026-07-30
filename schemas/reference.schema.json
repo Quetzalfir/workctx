@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/reference.schema.json",
+  "title": "Typed reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "relation",
+    "target"
+  ],
+  "properties": {
+    "relation": {
+      "enum": [
+        "derived_from",
+        "evidenced_by",
+        "supports",
+        "contradicts",
+        "supersedes",
+        "parent_of",
+        "depends_on",
+        "blocks",
+        "requested_by",
+        "owned_by",
+        "waiting_on",
+        "produces",
+        "implements",
+        "calls",
+        "publishes_to",
+        "consumes_from",
+        "stores_in",
+        "authenticates_via",
+        "operated_by",
+        "affects",
+        "mentions",
+        "related_to"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9+.-]*://.+$"
+    },
+    "confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "source_observations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "valid_from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "valid_to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "note": {
+      "type": "string"
+    }
+  }
+}

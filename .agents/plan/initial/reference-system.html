@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Work Context OS — Reference and Retrieval Model</title>
+  <style>
+    :root { color-scheme: light dark; --accent: #4f46e5; --muted: #6b7280; --card: color-mix(in srgb, Canvas 92%, var(--accent) 8%); }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; margin: 0; line-height: 1.5; background: Canvas; color: CanvasText; }
+    main { max-width: 1180px; margin: 0 auto; padding: 2rem; }
+    h1 { font-size: clamp(2rem, 5vw, 4rem); line-height: 1.05; margin-bottom: .6rem; }
+    h2 { margin-top: 2.5rem; }
+    .lead { font-size: 1.2rem; color: var(--muted); max-width: 850px; }
+    .flow { display: grid; grid-template-columns: repeat(5, minmax(160px, 1fr)); gap: 1rem; align-items: stretch; margin: 2rem 0; }
+    .card { padding: 1rem; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius: 14px; background: var(--card); }
+    .arrow { font-size: 1.5rem; align-self: center; text-align: center; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    pre { padding: 1rem; border-radius: 12px; overflow: auto; background: color-mix(in srgb, Canvas 88%, CanvasText 12%); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .75rem; border-bottom: 1px solid color-mix(in srgb, CanvasText 18%, transparent); vertical-align: top; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+    .badge { display: inline-block; border-radius: 999px; padding: .2rem .65rem; background: var(--accent); color: white; font-size: .8rem; }
+    @media (max-width: 900px) { .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); } }
+  </style>
+</head>
+<body>
+<main>
+  <span class="badge">Phase 1 design</span>
+  <h1>Traceable context, not just connected notes</h1>
+  <p class="lead">Every operational conclusion should resolve from a task or claim to an atomic observation and then to the smallest useful source locator.</p>
+
+  <section class="flow" aria-label="Reference flow">
+    <article class="card"><strong>Task or question</strong><br>Current work, status, blocker, or decision.</article>
+    <div class="arrow">→</div>
+    <article class="card"><strong>Typed relation</strong><br><code>depends_on</code>, <code>supports</code>, <code>waiting_on</code>.</article>
+    <div class="arrow">→</div>
+    <article class="card"><strong>Observation</strong><br>Atomic fact, inference, decision, commitment, or risk.</article>
+  </section>
+  <section class="flow" aria-label="Source flow">
+    <article class="card"><strong>Observation</strong><br><code>EVD-...#OBS-004</code></article>
+    <div class="arrow">→</div>
+    <article class="card"><strong>Source locator</strong><br>Lines, page, time range, message, image region, JSON pointer, or repo commit.</article>
+    <div class="arrow">→</div>
+    <article class="card"><strong>Preserved artifact</strong><br><code>artifact://sha256/...</code></article>
+  </section>
+
+  <h2>Canonical addressing</h2>
+  <pre>workctx://new-company/task/TASK-2026-014
+workctx://new-company/person/PER-alex-rivera
+repo://identity-service@9f31c2a/src/auth/policy.py#L80-L121
+artifact://sha256/8ca9...</pre>
+
+  <h2>Retrieval context pack</h2>
+  <div class="grid">
+    <article class="card"><strong>Current state</strong><p>Latest reliable claims and status history.</p></article>
+    <article class="card"><strong>Work graph</strong><p>Parents, subtasks, blockers, dependencies, and outputs.</p></article>
+    <article class="card"><strong>People</strong><p>Owners, requesters, waiting-on relationships, and recent interactions.</p></article>
+    <article class="card"><strong>Evidence</strong><p>Direct observations with precise source locators.</p></article>
+    <article class="card"><strong>History</strong><p>Contradicted and superseded statements remain inspectable.</p></article>
+    <article class="card"><strong>Architecture</strong><p>Bounded one-hop systems, flows, repositories, and decisions.</p></article>
+  </div>
+
+  <h2>Why this is different</h2>
+  <table>
+    <thead><tr><th>Weak approach</th><th>Work Context OS approach</th></tr></thead>
+    <tbody>
+      <tr><td>Free-form link to a long transcript</td><td>Atomic observation plus time range and speaker</td></tr>
+      <tr><td>Absolute path on one laptop</td><td>Stable context, artifact, repository, or external URI</td></tr>
+      <tr><td>Manual backlink lists</td><td>Canonical outbound edge and generated inbound index</td></tr>
+      <tr><td>Status overwritten in place</td><td>Current claim plus preserved superseded history</td></tr>
+      <tr><td>Agent scans all files</td><td>Bounded context pack ranked by semantics, recency, and confidence</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

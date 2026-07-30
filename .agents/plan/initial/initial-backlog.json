@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "release": "0.1.0-alpha",
+  "work_packages": [
+    {
+      "id": "WP-000",
+      "title": "Lead baseline and decision register",
+      "wave": 0,
+      "dependencies": [],
+      "parallel_group": null,
+      "status": "proposed"
+    },
+    {
+      "id": "WP-001",
+      "title": "Development foundation",
+      "wave": 0,
+      "dependencies": [
+        "WP-000"
+      ],
+      "parallel_group": null,
+      "status": "proposed"
+    },
+    {
+      "id": "WP-100",
+      "title": "Domain identity, URI, and reference contracts",
+      "wave": 1,
+      "dependencies": [
+        "WP-000",
+        "WP-001"
+      ],
+      "parallel_group": "wave-1",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-110",
+      "title": "Workspace schema and template",
+      "wave": 1,
+      "dependencies": [
+        "WP-000",
+        "WP-001"
+      ],
+      "parallel_group": "wave-1",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-120",
+      "title": "CLI framework and result envelope",
+      "wave": 1,
+      "dependencies": [
+        "WP-001"
+      ],
+      "parallel_group": "wave-1",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-130",
+      "title": "Portable skill contract and agent bridges",
+      "wave": 1,
+      "dependencies": [
+        "WP-000",
+        "WP-001"
+      ],
+      "parallel_group": "wave-1",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-200",
+      "title": "Canonical filesystem repository",
+      "wave": 2,
+      "dependencies": [
+        "WP-100",
+        "WP-110"
+      ],
+      "parallel_group": "wave-2a",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-210",
+      "title": "SQLite and FTS projections",
+      "wave": 2,
+      "dependencies": [
+        "WP-100",
+        "WP-110"
+      ],
+      "parallel_group": "wave-2a",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-220",
+      "title": "Validation and repair engine",
+      "wave": 2,
+      "dependencies": [
+        "WP-100",
+        "WP-110"
+      ],
+      "parallel_group": "wave-2b",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-230",
+      "title": "Retrieval and context packs",
+      "wave": 2,
+      "dependencies": [
+        "WP-100",
+        "WP-210"
+      ],
+      "parallel_group": null,
+      "status": "proposed"
+    },
+    {
+      "id": "WP-300",
+      "title": "Transaction engine and audit",
+      "wave": 3,
+      "dependencies": [
+        "WP-200",
+        "WP-210",
+        "WP-220"
+      ],
+      "parallel_group": null,
+      "status": "proposed"
+    },
+    {
+      "id": "WP-310",
+      "title": "Artifact and inbox lifecycle",
+      "wave": 3,
+      "dependencies": [
+        "WP-200",
+        "WP-220",
+        "WP-300"
+      ],
+      "parallel_group": "wave-3b",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-320",
+      "title": "Agent installer and session bootstrap",
+      "wave": 3,
+      "dependencies": [
+        "WP-120",
+        "WP-130"
+      ],
+      "parallel_group": "wave-3a",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-330",
+      "title": "MCP server",
+      "wave": 3,
+      "dependencies": [
+        "WP-120",
+        "WP-220",
+        "WP-230",
+        "WP-300"
+      ],
+      "parallel_group": null,
+      "status": "proposed"
+    },
+    {
+      "id": "WP-400",
+      "title": "Tasks, claims, and generated operational views",
+      "wave": 4,
+      "dependencies": [
+        "WP-110",
+        "WP-210",
+        "WP-300"
+      ],
+      "parallel_group": "wave-4",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-410",
+      "title": "Evidence-processing workflow contracts",
+      "wave": 4,
+      "dependencies": [
+        "WP-230",
+        "WP-300",
+        "WP-310",
+        "WP-330"
+      ],
+      "parallel_group": "wave-4",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-420",
+      "title": "Drafting and outbox workflow",
+      "wave": 4,
+      "dependencies": [
+        "WP-230",
+        "WP-300",
+        "WP-400"
+      ],
+      "parallel_group": "wave-4",
+      "status": "proposed"
+    },
+    {
+      "id": "WP-500",
+      "title": "End-to-end alpha, migration, docs, and packaging",
+      "wave": 5,
+      "dependencies": [
+        "WP-310",
+        "WP-320",
+        "WP-330",
+        "WP-400",
+        "WP-410",
+        "WP-420"
+      ],
+      "parallel_group": null,
+      "status": "proposed"
+    }
+  ]
+}

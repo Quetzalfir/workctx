@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/observation.schema.json",
+  "title": "Evidence observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "kind",
+    "statement",
+    "confidence",
+    "source"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^EVD-.+#OBS-[0-9]{3}$"
+    },
+    "kind": {
+      "enum": [
+        "fact",
+        "inference",
+        "assumption",
+        "decision",
+        "commitment",
+        "task",
+        "risk",
+        "blocker",
+        "dependency",
+        "question"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "locator"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^artifact://sha256/[0-9a-f]{64}$"
+        },
+        "locator": {
+          "$ref": "source-locator.schema.json"
+        }
+      }
+    },
+    "observed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "valid_from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "valid_to": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "derived_from": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "related": {
+      "type": "array",
+      "items": {
+        "$ref": "reference.schema.json"
+      }
+    }
+  }
+}

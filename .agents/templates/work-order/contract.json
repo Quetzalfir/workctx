@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "id": "WP-000-example",
+  "title": "Replace with a bounded title",
+  "status": "proposed",
+  "objective": "State the observable outcome.",
+  "business_value": "Explain why this package matters.",
+  "scope": [
+    "One explicit responsibility"
+  ],
+  "non_goals": [
+    "A nearby concern intentionally excluded"
+  ],
+  "dependencies": [],
+  "base_commit": "REPLACE_WITH_COMMIT",
+  "branch": "agent/WP-000-example",
+  "worktree": ".worktrees/WP-000-example",
+  "allowed_paths": [
+    "src/workctx/example/**",
+    "tests/example/**"
+  ],
+  "forbidden_paths": [
+    "AGENTS.md",
+    ".agents/plan/initial/**"
+  ],
+  "required_reading": [
+    "AGENTS.md"
+  ],
+  "context_refs": [],
+  "deliverables": [
+    "Implementation",
+    "Tests",
+    "Documentation"
+  ],
+  "acceptance_criteria": [
+    "Observable behavior is implemented"
+  ],
+  "validation_commands": [
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Do not introduce secrets or cross-context access"
+  ],
+  "stop_conditions": [
+    "Required architecture change outside the contract"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-000-example/report.md",
+    "json": ".agents/work-orders/WP-000-example/report.json"
+  }
+}

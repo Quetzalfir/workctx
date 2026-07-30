@@ -1,0 +1,15 @@
+# Generated local state
+98_state/*
+!98_state/.gitkeep
+
+# Credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Agent-local files
+.codex/config.local.toml
+.agents/tmp/

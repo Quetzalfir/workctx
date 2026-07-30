@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    {
+      "id": "WP-000",
+      "wave": 0
+    },
+    {
+      "id": "WP-001",
+      "wave": 0
+    },
+    {
+      "id": "WP-100",
+      "wave": 1
+    },
+    {
+      "id": "WP-110",
+      "wave": 1
+    },
+    {
+      "id": "WP-120",
+      "wave": 1
+    },
+    {
+      "id": "WP-130",
+      "wave": 1
+    },
+    {
+      "id": "WP-200",
+      "wave": 2
+    },
+    {
+      "id": "WP-210",
+      "wave": 2
+    },
+    {
+      "id": "WP-220",
+      "wave": 2
+    },
+    {
+      "id": "WP-230",
+      "wave": 2
+    },
+    {
+      "id": "WP-300",
+      "wave": 3
+    },
+    {
+      "id": "WP-310",
+      "wave": 3
+    },
+    {
+      "id": "WP-320",
+      "wave": 3
+    },
+    {
+      "id": "WP-330",
+      "wave": 3
+    },
+    {
+      "id": "WP-400",
+      "wave": 4
+    },
+    {
+      "id": "WP-410",
+      "wave": 4
+    },
+    {
+      "id": "WP-420",
+      "wave": 4
+    },
+    {
+      "id": "WP-500",
+      "wave": 5
+    }
+  ],
+  "edges": [
+    {
+      "from": "WP-000",
+      "to": "WP-001",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-000",
+      "to": "WP-100",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-001",
+      "to": "WP-100",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-000",
+      "to": "WP-110",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-001",
+      "to": "WP-110",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-001",
+      "to": "WP-120",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-000",
+      "to": "WP-130",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-001",
+      "to": "WP-130",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-100",
+      "to": "WP-200",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-110",
+      "to": "WP-200",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-100",
+      "to": "WP-210",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-110",
+      "to": "WP-210",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-100",
+      "to": "WP-220",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-110",
+      "to": "WP-220",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-100",
+      "to": "WP-230",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-210",
+      "to": "WP-230",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-200",
+      "to": "WP-300",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-210",
+      "to": "WP-300",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-220",
+      "to": "WP-300",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-200",
+      "to": "WP-310",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-220",
+      "to": "WP-310",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-300",
+      "to": "WP-310",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-120",
+      "to": "WP-320",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-130",
+      "to": "WP-320",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-120",
+      "to": "WP-330",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-220",
+      "to": "WP-330",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-230",
+      "to": "WP-330",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-300",
+      "to": "WP-330",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-110",
+      "to": "WP-400",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-210",
+      "to": "WP-400",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-300",
+      "to": "WP-400",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-230",
+      "to": "WP-410",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-300",
+      "to": "WP-410",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-310",
+      "to": "WP-410",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-330",
+      "to": "WP-410",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-230",
+      "to": "WP-420",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-300",
+      "to": "WP-420",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-400",
+      "to": "WP-420",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-310",
+      "to": "WP-500",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-320",
+      "to": "WP-500",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-330",
+      "to": "WP-500",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-400",
+      "to": "WP-500",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-410",
+      "to": "WP-500",
+      "type": "blocks"
+    },
+    {
+      "from": "WP-420",
+      "to": "WP-500",
+      "type": "blocks"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-000-example",
+  "status": "completed",
+  "summary": "Replace with summary.",
+  "base_commit": "REPLACE",
+  "final_commit": "REPLACE",
+  "files_changed": [],
+  "behavior_implemented": [],
+  "tests": [],
+  "assumptions": [],
+  "decisions": [],
+  "deviations": [],
+  "security_considerations": [],
+  "migration_considerations": [],
+  "unresolved": [],
+  "recommended_next_action": "Lead review."
+}

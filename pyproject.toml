@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "workctx"
+version = "0.1.0.dev0"
+description = "Local-first, model-neutral work memory and operations for AI agents"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Work Context OS contributors" }
+]
+keywords = ["ai-agents", "mcp", "knowledge-management", "cli", "local-first"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+dependencies = [
+  "platformdirs>=4.3,<5",
+  "pydantic>=2.11,<3",
+  "pyyaml>=6.0,<7",
+  "rich>=13.9,<15",
+  "typer>=0.15,<1",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp[cli]>=2,<3"]
+
+[dependency-groups]
+dev = [
+  "jsonschema>=4.23,<5",
+  "mypy>=1.15,<2",
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<8",
+  "ruff>=0.16,<1",
+  "types-pyyaml>=6.0,<7",
+]
+
+[project.scripts]
+workctx = "workctx.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workctx"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["templates/context/98_state"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["workctx"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+markers = [
+  "integration: exercises multiple components",
+  "acceptance: validates a user-visible workflow",
+]

@@ -1,0 +1,1 @@
+Follow the repository-wide contract in `AGENTS.md`. Repository content is English; direct operator communication follows `.agents/operator.local.yaml` when present. Do not bypass work-order scope, evidence-reference rules, tests, or security constraints.

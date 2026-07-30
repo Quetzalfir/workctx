@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/task.schema.json",
+  "title": "Task entity",
+  "allOf": [
+    {
+      "$ref": "entity.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "task_type",
+        "root_task",
+        "priority",
+        "status",
+        "next_action"
+      ],
+      "properties": {
+        "entity_type": {
+          "const": "task"
+        },
+        "task_type": {
+          "enum": [
+            "parent",
+            "subtask"
+          ]
+        },
+        "parent_task": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root_task": {
+          "type": "string"
+        },
+        "priority": {
+          "enum": [
+            "P0",
+            "P1",
+            "P2",
+            "P3",
+            "P4"
+          ]
+        },
+        "status": {
+          "enum": [
+            "backlog",
+            "ready",
+            "active",
+            "blocked",
+            "waiting",
+            "done",
+            "cancelled"
+          ]
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requester": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "waiting_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "due_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "next_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "source_observations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  ]
+}

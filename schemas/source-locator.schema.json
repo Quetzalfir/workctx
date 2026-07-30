@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/source-locator.schema.json",
+  "title": "Source locator",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "type": {
+          "const": "line_range"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start_page",
+        "end_page"
+      ],
+      "properties": {
+        "type": {
+          "const": "page_range"
+        },
+        "start_page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_page": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "start_ms",
+        "end_ms"
+      ],
+      "properties": {
+        "type": {
+          "const": "time_range"
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "speaker": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "message_id"
+      ],
+      "properties": {
+        "type": {
+          "const": "message"
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "thread_id": {
+          "type": "string"
+        },
+        "message_id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "type": {
+          "const": "image_region"
+        },
+        "page_or_frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "pointer"
+      ],
+      "properties": {
+        "type": {
+          "const": "json_pointer"
+        },
+        "pointer": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sheet",
+        "range"
+      ],
+      "properties": {
+        "type": {
+          "const": "table_range"
+        },
+        "sheet": {
+          "type": "string"
+        },
+        "range": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "repo_id",
+        "commit",
+        "path",
+        "start_line",
+        "end_line"
+      ],
+      "properties": {
+        "type": {
+          "const": "repo_range"
+        },
+        "repo_id": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{7,64}$"
+        },
+        "path": {
+          "type": "string"
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "justification"
+      ],
+      "properties": {
+        "type": {
+          "const": "whole_artifact"
+        },
+        "justification": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  ]
+}

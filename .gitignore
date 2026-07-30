@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local sandboxes and generated state
+.sandbox/
+.workctx/
+**/98_state/*
+!**/98_state/.gitkeep
+
+# Agent-specific generated adapters
+.claude/skills/
+.gemini/commands/
+.codex/config.local.toml
+
+# Worktrees and temporary agent output
+.worktrees/
+.agents/tmp/
+
+# Credentials and environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local operator preferences
+.agents/operator.local.yaml

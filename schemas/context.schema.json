@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/context.schema.json",
+  "title": "Work Context configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "kind",
+    "profile",
+    "languages",
+    "timezone",
+    "classification",
+    "security_boundary",
+    "policies"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "kind": {
+      "enum": [
+        "company",
+        "project",
+        "product",
+        "personal",
+        "laboratory"
+      ]
+    },
+    "profile": {
+      "enum": [
+        "light",
+        "architect",
+        "developer",
+        "hybrid"
+      ]
+    },
+    "languages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "user_interaction"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "const": "en"
+        },
+        "user_interaction": {
+          "type": "string",
+          "minLength": 2
+        }
+      }
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classification": {
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ]
+    },
+    "security_boundary": {
+      "type": "string",
+      "const": "isolated"
+    },
+    "policies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_mutations",
+        "external_writes",
+        "raw_evidence_retention",
+        "federated_search"
+      ],
+      "properties": {
+        "local_mutations": {
+          "enum": [
+            "review_required",
+            "allowed_after_validation"
+          ]
+        },
+        "external_writes": {
+          "enum": [
+            "never",
+            "approval_required"
+          ]
+        },
+        "raw_evidence_retention": {
+          "enum": [
+            "preserve",
+            "preserve_with_redaction"
+          ]
+        },
+        "federated_search": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

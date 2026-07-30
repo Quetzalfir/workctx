@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "REPLACE_WITH_COMMIT",
+  "assignments": [
+    {
+      "work_order_id": "WP-000-example",
+      "mode": "write",
+      "paths": [
+        "src/workctx/example/**",
+        "tests/example/**"
+      ],
+      "branch": "agent/WP-000-example",
+      "worktree": ".worktrees/WP-000-example",
+      "status": "planned"
+    }
+  ]
+}
