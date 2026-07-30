@@ -1,0 +1,13 @@
+{
+  "id": "PER-jordan-lee",
+  "entity_type": "person",
+  "title": "Jordan Lee",
+  "uri": "workctx://fictional-context/person/PER-jordan-lee",
+  "aliases": [],
+  "status": "active",
+  "confidence": "high",
+  "tags": [],
+  "references": [],
+  "created_at": "2026-07-30T12:00:00Z",
+  "updated_at": "2026-07-30T12:00:00Z"
+}

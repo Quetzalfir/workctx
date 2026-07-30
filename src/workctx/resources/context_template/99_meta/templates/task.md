@@ -1,14 +1,20 @@
 ---
 schema_version: 1
-id: TASK-YYYY-NNN
+id: TASK-0000-000
 entity_type: task
 title: Replace with task title
-uri: workctx://example-context/task/TASK-YYYY-NNN
+uri: workctx://example-context/task/TASK-0000-000
+aliases: []
+status: backlog
+confidence: high
+tags: []
+references: []
+created_at: "2000-01-01T00:00:00Z"
+updated_at: "2000-01-01T00:00:00Z"
 task_type: parent
 parent_task: null
-root_task: TASK-YYYY-NNN
+root_task: TASK-0000-000
 priority: P2
-status: backlog
 owner: null
 requester: null
 waiting_on: []
@@ -17,10 +23,6 @@ next_action: Define the next observable action.
 dependencies: []
 blockers: []
 source_observations: []
-aliases: []
-references: []
-created_at: 2026-07-30T00:00:00Z
-updated_at: 2026-07-30T00:00:00Z
 ---
 
 # Objective

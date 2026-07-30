@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+
+CURRENT_SCHEMA_VERSION = 1
 
 
 class ContextKind(StrEnum):
@@ -46,31 +48,63 @@ class EvidenceRetentionPolicy(StrEnum):
 class ContextLanguages(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    repository: str = Field(default="en", pattern="^en$")
-    user_interaction: str = Field(default="en", min_length=2, max_length=16)
+    repository: str = Field(pattern="^en$")
+    user_interaction: str = Field(min_length=2, max_length=16)
 
 
 class ContextPolicies(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    local_mutations: LocalMutationPolicy = LocalMutationPolicy.REVIEW_REQUIRED
-    external_writes: ExternalWritePolicy = ExternalWritePolicy.APPROVAL_REQUIRED
-    raw_evidence_retention: EvidenceRetentionPolicy = EvidenceRetentionPolicy.PRESERVE
-    federated_search: bool = False
+    local_mutations: LocalMutationPolicy
+    external_writes: ExternalWritePolicy
+    raw_evidence_retention: EvidenceRetentionPolicy
+    federated_search: bool
+
+    @field_validator("federated_search", mode="before")
+    @classmethod
+    def _require_isolated_search(cls, value: object) -> bool:
+        if value is not False:
+            raise ValueError("federated_search must remain false for an isolated context")
+        return False
 
 
 class ContextConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = Field(default=1, ge=1)
+    schema_version: int = Field(strict=True)
     id: str = Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", min_length=2, max_length=64)
     name: str = Field(min_length=1, max_length=120)
-    kind: ContextKind = ContextKind.PROJECT
-    profile: ContextProfile = ContextProfile.HYBRID
-    languages: ContextLanguages = Field(default_factory=ContextLanguages)
-    timezone: str = Field(default="UTC", min_length=1)
-    classification: DataClassification = DataClassification.CONFIDENTIAL
-    security_boundary: str = Field(default="isolated", pattern="^isolated$")
-    policies: ContextPolicies = Field(default_factory=ContextPolicies)
-    created_at: datetime
-    updated_at: datetime
+    kind: ContextKind
+    profile: ContextProfile
+    languages: ContextLanguages
+    timezone: str = Field(min_length=1)
+    classification: DataClassification
+    security_boundary: str = Field(pattern="^isolated$")
+    policies: ContextPolicies
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def _require_current_schema_version(cls, value: object) -> int:
+        if isinstance(value, bool):
+            raise ValueError("schema_version must be an integer")
+        if isinstance(value, int):
+            normalized = value
+        elif isinstance(value, float) and value.is_integer():
+            normalized = int(value)
+        else:
+            raise ValueError("schema_version must be an integer")
+        if normalized != CURRENT_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported schema_version {normalized}; migration to schema version "
+                f"{CURRENT_SCHEMA_VERSION} is required"
+            )
+        return normalized
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def _reject_numeric_timestamps(cls, value: object) -> object:
+        if not isinstance(value, (str, datetime)):
+            raise ValueError("timestamps must be RFC 3339 strings or datetime values")
+        return value
