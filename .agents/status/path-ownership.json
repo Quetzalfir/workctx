@@ -1,142 +1,96 @@
 {
   "schema_version": 1,
-  "baseline_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
+  "wave": 2,
+  "baseline_commit": "PENDING-WAVE2-BASELINE",
   "notes": [
-    "frozen_paths bind Wave 1 workers. WP-001 is lead-executed on master BEFORE any Wave 1 assignment starts, which is why its broad paths (including pyproject.toml) conflict with nothing; pyproject.toml is frozen for every Wave 1 worker.",
-    "Each work order may additionally write its own report.md and report.json inside its work-order directory; these are listed in each contract's allowed_paths.",
-    "Status values follow the work-order lifecycle enum of agent-task-contract.schema.json."
+    "Wave 1 assignments are historical; see Git history of this file and the integration log.",
+    "WP-200, WP-210, and WP-220 run in parallel (wave-2a/2b); WP-230 is sequential after WP-210 integrates and its base_commit is pinned then.",
+    "98_state runtime-name ownership: WP-200 owns lock.json, staging/**, backups/; WP-210 owns index.sqlite3 and wal/shm/temp siblings. 99_meta/audit/ belongs to WP-300 (ADR 0010) and no Wave 2 order may claim it.",
+    "CLI command wiring for wave-2 engines (index rebuild, --strict, registry step 3, ref/context-pack commands) is lead integration work, not worker scope.",
+    "Each work order may write its own report.md and report.json inside its work-order directory."
   ],
   "frozen_paths": [
-    "src/workctx/domain/__init__.py",
-    "src/workctx/models/__init__.py",
-    "src/workctx/validation/**",
-    "schemas/skill-frontmatter.schema.json",
+    "src/workctx/adapters/__init__.py",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "templates/**",
+    "schemas/** (existing files; WP-230 adds context-pack.schema.json only)",
     ".agents/plan/**",
     ".agents/templates/**",
+    ".agents/skills/**",
     "AGENTS.md",
     "docs/adr/**",
     "pyproject.toml"
   ],
   "frozen_interfaces": [
-    "workctx.models.reference.WorkctxUri: parse, __str__, require_context",
-    "workctx.services.contexts: initialize_context, load_context_config, resolve_context_root, slugify_context_id",
-    "workctx.errors: existing exception classes (additive changes only, WP-120)"
+    "workctx.services.contexts: initialize_context, load_context_config, resolve_context_root, slugify_context_id (WP-200 owns the file, signatures frozen)",
+    "workctx.validation.workspace: validate_workspace(root) -> ValidationReport; ValidationReport.ok/.errors/.warnings; ValidationIssue.severity/.code/.message/.path (WP-220 owns the file, consumed surface frozen)",
+    "workctx.domain.frontmatter: parse_frontmatter, split_frontmatter (lead-owned, frozen for all)",
+    "workctx.domain.references.WorkctxUri public API (stable since Wave 1)"
   ],
   "assignments": [
     {
-      "work_order_id": "WP-001-dev-foundation",
+      "work_order_id": "WP-200-canonical-store",
       "mode": "write",
       "paths": [
-        ".gitattributes",
-        "uv.lock",
-        ".github/workflows/ci.yml",
-        "CONTRIBUTING.md",
-        "pyproject.toml",
-        ".pre-commit-config.yaml",
-        "src/workctx/**",
-        "tests/**",
-        "docs/**",
-        ".agents/status/**",
-        ".agents/work-orders/WP-001-dev-foundation/report.md",
-        ".agents/work-orders/WP-001-dev-foundation/report.json"
-      ],
-      "branch": "master",
-      "worktree": ".",
-      "status": "assigned",
-      "note": "Lead-executed, sequential; produces the Wave 1 baseline commit."
-    },
-    {
-      "work_order_id": "WP-100-reference-contracts",
-      "mode": "write",
-      "paths": [
-        "src/workctx/domain/ids.py",
-        "src/workctx/domain/references.py",
-        "src/workctx/domain/locators.py",
-        "src/workctx/domain/relations.py",
-        "src/workctx/domain/vocabulary.py",
-        "src/workctx/domain/observations.py",
-        "src/workctx/domain/claims.py",
-        "src/workctx/models/reference.py",
-        "schemas/reference.schema.json",
-        "schemas/source-locator.schema.json",
-        "schemas/observation.schema.json",
-        "schemas/claim.schema.json",
-        "tests/domain/**",
-        "tests/test_reference.py",
-        "docs/reference/reference-system.md",
-        ".agents/work-orders/WP-100-reference-contracts/report.md",
-        ".agents/work-orders/WP-100-reference-contracts/report.json"
-      ],
-      "branch": "agent/WP-100-reference-contracts",
-      "worktree": ".worktrees/WP-100-reference-contracts",
-      "status": "ready"
-    },
-    {
-      "work_order_id": "WP-110-workspace-schema",
-      "mode": "write",
-      "paths": [
-        "src/workctx/domain/entities.py",
-        "src/workctx/domain/tasks.py",
-        "src/workctx/domain/artifacts.py",
-        "src/workctx/models/context.py",
+        "src/workctx/adapters/filesystem/**",
         "src/workctx/services/contexts.py",
-        "src/workctx/resources/context_template/**",
-        "templates/context/**",
-        "schemas/context.schema.json",
-        "schemas/entity.schema.json",
-        "schemas/task.schema.json",
-        "schemas/artifact-manifest.schema.json",
-        "schemas/transaction-proposal.schema.json",
-        "schemas/audit-event.schema.json",
-        "tests/test_context_init.py",
-        "tests/test_context_model.py",
-        "tests/test_schemas.py",
-        "tests/test_template_sync.py",
-        "tests/workspace/**",
-        "docs/guides/context-layout.md",
-        "scripts/sync_context_template.py",
-        ".agents/work-orders/WP-110-workspace-schema/report.md",
-        ".agents/work-orders/WP-110-workspace-schema/report.json"
+        "tests/filesystem/**",
+        "docs/reference/canonical-store.md",
+        ".agents/work-orders/WP-200-canonical-store/report.md",
+        ".agents/work-orders/WP-200-canonical-store/report.json"
       ],
-      "branch": "agent/WP-110-workspace-schema",
-      "worktree": ".worktrees/WP-110-workspace-schema",
-      "status": "ready"
+      "branch": "agent/WP-200-canonical-store",
+      "worktree": ".worktrees/WP-200-canonical-store",
+      "status": "proposed"
     },
     {
-      "work_order_id": "WP-120-cli-envelope",
+      "work_order_id": "WP-210-sqlite-projections",
       "mode": "write",
       "paths": [
-        "src/workctx/cli.py",
-        "src/workctx/presentation/**",
-        "src/workctx/doctor.py",
-        "src/workctx/errors.py",
-        "schemas/cli-envelope.schema.json",
-        "tests/test_cli.py",
-        "tests/cli/**",
-        "docs/reference/cli-envelope.md",
-        ".agents/work-orders/WP-120-cli-envelope/report.md",
-        ".agents/work-orders/WP-120-cli-envelope/report.json"
+        "src/workctx/adapters/sqlite/**",
+        "tests/projections/**",
+        "docs/reference/projections.md",
+        ".agents/work-orders/WP-210-sqlite-projections/report.md",
+        ".agents/work-orders/WP-210-sqlite-projections/report.json"
       ],
-      "branch": "agent/WP-120-cli-envelope",
-      "worktree": ".worktrees/WP-120-cli-envelope",
-      "status": "ready"
+      "branch": "agent/WP-210-sqlite-projections",
+      "worktree": ".worktrees/WP-210-sqlite-projections",
+      "status": "proposed"
     },
     {
-      "work_order_id": "WP-130-skill-contract",
+      "work_order_id": "WP-220-validation-engine",
       "mode": "write",
       "paths": [
-        ".agents/skills/**",
-        "schemas/skill-registry.schema.json",
-        "schemas/skill-adapter-manifest.schema.json",
-        "tests/test_skills.py",
-        "tests/skills/**",
-        "docs/reference/skill-adapters.md",
-        ".agents/work-orders/WP-130-skill-contract/report.md",
-        ".agents/work-orders/WP-130-skill-contract/report.json"
+        "src/workctx/validation/**",
+        "tests/validation_engine/**",
+        "tests/test_validation.py",
+        "docs/reference/validation-diagnostics.md",
+        ".agents/work-orders/WP-220-validation-engine/report.md",
+        ".agents/work-orders/WP-220-validation-engine/report.json"
       ],
-      "branch": "agent/WP-130-skill-contract",
-      "worktree": ".worktrees/WP-130-skill-contract",
-      "status": "ready"
+      "branch": "agent/WP-220-validation-engine",
+      "worktree": ".worktrees/WP-220-validation-engine",
+      "status": "proposed"
+    },
+    {
+      "work_order_id": "WP-230-context-packs",
+      "mode": "write",
+      "paths": [
+        "src/workctx/retrieval/**",
+        "schemas/context-pack.schema.json",
+        "tests/retrieval/**",
+        "docs/reference/context-packs.md",
+        ".agents/work-orders/WP-230-context-packs/report.md",
+        ".agents/work-orders/WP-230-context-packs/report.json"
+      ],
+      "branch": "agent/WP-230-context-packs",
+      "worktree": ".worktrees/WP-230-context-packs",
+      "status": "proposed",
+      "note": "Sequential: assignable only after WP-210 integrates; base_commit pinned at that point."
     }
   ]
 }

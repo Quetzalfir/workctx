@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "id": "WP-220-validation-engine",
+  "title": "Validation and repair engine",
+  "status": "proposed",
+  "objective": "workctx context validate becomes a real integrity engine: typed-model document validation, ID and reference integrity, task-hierarchy and claim-temporal rules, secret and path safety, and pluggable projection-freshness — with stable, actionable diagnostic codes.",
+  "business_value": "Deterministic validation is the trust anchor of the product (risk R-001); WP-300 preconditions and WP-310 quarantine both build on these checks, and users rely on actionable diagnostics to repair their workspaces.",
+  "scope": [
+    "Rebuild src/workctx/validation/ into an engine that walks a context root and validates every canonical document through the integrated domain models (EntityFrontmatter, Task, ArtifactManifest, Observation, Claim, ContextConfig), reporting one diagnostic per failure with file path and stable code — the existing structural checks (required directories, UTF-8, absolute paths, secrets, federated_search) are preserved as engine rules",
+    "Reference integrity: every workctx:// URI in canonical documents parses, matches the active context (require_context), uses the D-018 vocabulary, and resolves to an existing entity in the workspace; unresolved external/artifact references are reported as advisories, not errors, per doc-03",
+    "Task hierarchy: run workctx.domain.tasks.validate_task_hierarchy across the workspace corpus and map violations to diagnostics; detect blocks/depends_on contradiction cycles per doc-03",
+    "Claim temporal rules per doc-03: no two current claims for the same single-valued subject+predicate with overlapping validity; supersession chains acyclic and targets existing",
+    "Projection freshness as a protocol: define a small FreshnessProbe interface the engine consumes optionally; ship a null implementation (always unknown) — the SQLite-backed probe is wired by the lead at integration with WP-210",
+    "Keep the consumed public interface stable: validate_workspace(root) -> ValidationReport and the public fields of ValidationReport/ValidationIssue/Severity that src/workctx/cli.py and the presentation layer read; extend with new codes and optional strictness parameter without breaking callers",
+    "Implement the --strict semantics at API level (warnings escalate to errors) without touching the CLI (lead wires the doc-04 flag at integration)",
+    "Document every diagnostic code with cause and repair action in docs/reference/validation-diagnostics.md"
+  ],
+  "non_goals": [
+    "No CLI changes (the --strict flag wiring and repair commands are lead/integration work)",
+    "No mutation or automatic repair execution — the engine reports repair actions, it does not perform them (repair execution arrives with WP-300 transactions)",
+    "No SQLite queries or projection internals (consume only the FreshnessProbe protocol you define)",
+    "No jsonschema at runtime: domain models are the runtime validators; JSON Schemas remain the public contract validated in dev tests (ADR 0008)",
+    "No new runtime dependencies"
+  ],
+  "dependencies": [
+    "WP-100",
+    "WP-110"
+  ],
+  "base_commit": "PENDING-WAVE2-BASELINE",
+  "branch": "agent/WP-220-validation-engine",
+  "worktree": ".worktrees/WP-220-validation-engine",
+  "allowed_paths": [
+    "src/workctx/validation/**",
+    "tests/validation_engine/**",
+    "tests/test_validation.py",
+    "docs/reference/validation-diagnostics.md",
+    ".agents/work-orders/WP-220-validation-engine/report.md",
+    ".agents/work-orders/WP-220-validation-engine/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/services/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "schemas/**",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/filesystem/**",
+    "tests/projections/**",
+    "tests/test_cli.py",
+    "tests/test_context_init.py",
+    "tests/test_context_model.py",
+    "tests/test_schemas.py",
+    "tests/test_skills.py",
+    "tests/test_template_sync.py",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/03-reference-and-retrieval-model.md",
+    ".agents/plan/initial/08-security-and-privacy.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-220-validation-engine/context.md",
+    ".agents/work-orders/WP-220-validation-engine/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/06-implementation-work-packages.md",
+    "src/workctx/validation/workspace.py",
+    "src/workctx/domain/frontmatter.py"
+  ],
+  "deliverables": [
+    "Validation engine with typed rules, stable diagnostic codes, and FreshnessProbe protocol",
+    "docs/reference/validation-diagnostics.md",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "A workspace with an invalid document, a broken URI, a foreign-context URI, an unknown entity type, a task-hierarchy violation, a blocks/depends_on contradiction cycle, an overlapping current claim, and a supersession cycle produces one correctly-coded diagnostic each (negative fixtures per case)",
+    "A freshly initialized context validates clean; existing CLI validate tests pass unchanged (interface stability)",
+    "Strict mode escalates warnings to errors at API level, tested",
+    "Unresolvable artifact:// and external references are advisories, not errors",
+    "Every emitted code appears in docs/reference/validation-diagnostics.md with a repair action (test enforces the doc/code sync)",
+    "Diagnostics never echo secret-looking values back in messages (report the location, not the value)",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Secret detection must not print matched values in diagnostics or logs",
+    "Fictional fixtures only; the engine reads, never writes, workspace content"
+  ],
+  "stop_conditions": [
+    "Any needed change to the frozen consumed interface (validate_workspace signature or the report/issue public fields the CLI reads)",
+    "Any needed change to domain models, adapters, or frozen files",
+    "A doc-03 validation rule that cannot be implemented without SQLite (record and defer to integration instead of importing the adapter)"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-220-validation-engine/report.md",
+    "json": ".agents/work-orders/WP-220-validation-engine/report.json"
+  }
+}

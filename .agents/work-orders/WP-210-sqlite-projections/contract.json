@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "id": "WP-210-sqlite-projections",
+  "title": "SQLite and FTS projections with full rebuild",
+  "status": "proposed",
+  "objective": "A rebuildable SQLite projection indexes entities, typed reference edges, backlinks, observations, claims, tasks, aliases, and full text from canonical files, with projection metadata that triggers full rebuild on schema-version mismatch and guaranteed no cross-context rows.",
+  "business_value": "WP-230 retrieval, WP-300 projection staleness behavior, and WP-400 views all query this projection; the plan's decisive acceptance scenario requires rebuild-from-canonical equivalence.",
+  "scope": [
+    "Implement src/workctx/adapters/sqlite/ using the stdlib sqlite3 module: connection management scoped to one context (database file 98_state/index.sqlite3), schema DDL, and a projection metadata table recording projection schema version, source context revision inputs, and build timestamps",
+    "Projection schema versioning per ADR 0007: a version mismatch triggers a full rebuild from canonical files — never in-place migration of projection tables",
+    "Index canonical documents into: entities (id, type, uri, title, aliases), typed reference edges with direction, derived backlinks, observations with locator metadata, claims with temporal fields and supersession links, tasks with hierarchy and waiting-on fields",
+    "FTS5 full-text index over canonical text (titles, bodies, statements) with a documented tokenizer choice and ranking-ready structure",
+    "Full rebuild API: scan the canonical tree (read-only, using workctx.domain.frontmatter and the domain models for parsing/validation), rebuild all tables atomically (build into a temporary database file, then swap via os.replace), and report counts and skipped/invalid documents without failing the whole rebuild on one bad file",
+    "Read-query API surface for later packages: entity lookup by id/uri, outbound/inbound edges, FTS search returning ranked ids, task state queries — typed functions, no SQL leakage to callers",
+    "Enforce context isolation: the adapter never accepts paths outside its context root and the database never contains rows from another context (denial test with two contexts)",
+    "Document the projection design and rebuild semantics in docs/reference/projections.md"
+  ],
+  "non_goals": [
+    "No retrieval ranking, context packs, or budgets (WP-230 consumes your query APIs)",
+    "No transaction engine integration or incremental writes on mutation (WP-300 wires staleness and incremental updates; this wave ships full rebuild plus queries)",
+    "No filesystem write primitives, locks, or staging (WP-200 owns those; your only 98_state files are index.sqlite3 and its -wal/-shm/tmp siblings)",
+    "No CLI commands (lead wires index rebuild at integration)",
+    "No new runtime dependencies: stdlib sqlite3 only; FTS5 unavailability on a supported platform is a stop condition, not a reason to add a dependency"
+  ],
+  "dependencies": [
+    "WP-100",
+    "WP-110"
+  ],
+  "base_commit": "PENDING-WAVE2-BASELINE",
+  "branch": "agent/WP-210-sqlite-projections",
+  "worktree": ".worktrees/WP-210-sqlite-projections",
+  "allowed_paths": [
+    "src/workctx/adapters/sqlite/**",
+    "tests/projections/**",
+    "docs/reference/projections.md",
+    ".agents/work-orders/WP-210-sqlite-projections/report.md",
+    ".agents/work-orders/WP-210-sqlite-projections/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/__init__.py",
+    "src/workctx/adapters/filesystem/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/validation/**",
+    "src/workctx/services/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "schemas/**",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/filesystem/**",
+    "tests/test_cli.py",
+    "tests/test_context_init.py",
+    "tests/test_context_model.py",
+    "tests/test_schemas.py",
+    "tests/test_skills.py",
+    "tests/test_template_sync.py",
+    "tests/test_validation.py",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/02-architecture.md",
+    ".agents/plan/initial/03-reference-and-retrieval-model.md",
+    "docs/adr/0007-workspace-schema-migrations.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-210-sqlite-projections/context.md",
+    ".agents/work-orders/WP-210-sqlite-projections/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/07-test-strategy.md",
+    "src/workctx/domain/frontmatter.py",
+    "docs/adr/0001-canonical-markdown-yaml.md"
+  ],
+  "deliverables": [
+    "SQLite adapter package with schema, rebuild, and typed query APIs plus tests",
+    "docs/reference/projections.md",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "Rebuild equivalence: rebuilding twice from the same canonical tree yields identical query results; deleting the database and rebuilding restores them (NFR-004 path)",
+    "Projection schema-version mismatch triggers full rebuild, verified by test",
+    "Backlinks are derived from outbound canonical references and match them exactly in tests",
+    "FTS returns expected documents for fixture queries; tokenizer documented",
+    "Two-context denial test: no query against context A ever returns context B rows",
+    "A malformed canonical document is reported and skipped without aborting the rebuild",
+    "Concurrent readers during a rebuild see either the old or the new projection, never a partial one (temp-build-and-swap verified)",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Fictional fixtures only; no secrets; the projection must not leak content into logs",
+    "SQLite is never the sole copy of user knowledge (ADR 0001) — no data may exist only in the projection"
+  ],
+  "stop_conditions": [
+    "FTS5 unavailable on a supported platform",
+    "Any need for a filesystem write primitive beyond your own database files",
+    "Any needed change to frozen files or pyproject.toml"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-210-sqlite-projections/report.md",
+    "json": ".agents/work-orders/WP-210-sqlite-projections/report.json"
+  }
+}

@@ -10,12 +10,12 @@
 
 ## Current wave
 
-Wave 1 COMPLETE (2026-07-30): all four work orders accepted and integrated in the planned
-order (WP-100 → WP-110 → WP-130 → WP-120). Final combined gate: 344 tests, mypy strict on
-29 files, build + wheel content check, end-to-end CLI smoke. ADR 0009 resolved the WP-110
-null-policy escalation. Next: Wave 2 planning (WP-200, WP-210, WP-220, WP-230) — D-019
-(audit ledger ADR) must close before WP-300 contracts are cut. WP-001 remains `partial`:
-CI-matrix verification and [project.urls] blocked until a GitHub remote exists.
+Wave 2 (opened 2026-07-30): WP-200, WP-210, WP-220 parallel; WP-230 sequential after
+WP-210. ADR 0010 (audit ledger) operator-ratified; lead pre-work landed
+(domain/frontmatter.py shared parser, adapters/ package marker, domain re-export
+consolidation). Wave 1 closed with 344 tests; suite now 351. WP-001 remains `partial`
+(CI matrix + [project.urls] await a GitHub remote). D-020 (MCP surface) must close
+before WP-330 at Wave 3 planning.
 
 ## Work-package status
 
@@ -27,7 +27,11 @@ CI-matrix verification and [project.urls] blocked until a GitHub remote exists.
 | WP-110 | verified | WP-000, WP-001 | Codex worker | agent/WP-110-workspace-schema | accepted | Integrated at `c577801`; combined gate green (222 tests); D-018 cross-check OK |
 | WP-120 | verified | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | accepted | Integrated at `788aa1c`; final Wave 1 gate green |
 | WP-130 | verified | WP-000, WP-001 | Codex worker | agent/WP-130-skill-contract | accepted | Integrated at `6dfba1c`; final Wave 1 gate green |
-| WP-200..WP-500 | proposed | see backlog | — | — | — | Wave 2+ blocked on Wave 1 |
+| WP-200 | proposed | WP-100, WP-110 | — | agent/WP-200-canonical-store | — | Contract cut; ready at Wave 2 baseline pin |
+| WP-210 | proposed | WP-100, WP-110 | — | agent/WP-210-sqlite-projections | — | Contract cut; ready at Wave 2 baseline pin |
+| WP-220 | proposed | WP-100, WP-110 | — | agent/WP-220-validation-engine | — | Contract cut; ready at Wave 2 baseline pin |
+| WP-230 | proposed | WP-100, WP-210 | — | agent/WP-230-context-packs | — | Sequential; base pinned after WP-210 integrates |
+| WP-300..WP-500 | proposed | see backlog | — | — | — | Wave 3+ blocked on Wave 2 |
 
 ## Validation status
 
@@ -61,10 +65,11 @@ because it rewrites tests that other integrations should not race).
 
 ## Next lead actions
 
-1. Plan Wave 2: create work orders for WP-200, WP-210, WP-220, WP-230 with a fresh
-   path-ownership matrix over the integrated tree.
-2. Close D-019 (audit ledger ADR) before WP-300 contracts are cut; D-020 (MCP surface)
-   before WP-330.
-3. Consolidate re-exports (`models/__init__.py`, `domain/__init__.py`) now that Wave 1
-   freezes lifted.
-4. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
+1. Pin the Wave 2 baseline commit into WP-200/WP-210/WP-220 contracts (`proposed` ->
+   `ready`) and hand the operator their worktree commands and prompts.
+2. Review Wave 2 deliveries per the leader review gate; integration order:
+   WP-210 -> WP-200 -> WP-220, then pin and assign WP-230.
+3. At integration: wire index rebuild, --strict, registry step 3, and the SQLite
+   FreshnessProbe into the CLI/presentation layer; rerun combined gates.
+4. Close D-020 (MCP tool surface ADR) before Wave 3 planning.
+5. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.

@@ -1,6 +1,6 @@
 # ADR 0010: Audit ledger representation and tamper evidence
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-30
 
 ## Context

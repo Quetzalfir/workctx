@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "id": "WP-230-context-packs",
+  "title": "Retrieval and context packs",
+  "status": "proposed",
+  "objective": "Reference resolution, typed-relation traversal, source tracing, ranked retrieval, and budgeted context-pack assembly work over the SQLite projection and canonical files, serialized against a public context-pack schema.",
+  "business_value": "Context packs are the product's core promise — a fresh agent session recovering precise, traceable operational context (UC-002, UC-004, the doc-00 success signal).",
+  "scope": [
+    "Implement src/workctx/retrieval/: reference resolution (workctx:// to entity records via WP-210 query APIs; artifact:// and repo:// to source descriptors), inbound/outbound typed traversal with depth control, and source tracing from task/claim through observations to locators (doc-03 trace behavior)",
+    "Ranking per doc-03: relation semantics, recency of reliable evidence, current-vs-superseded state, confidence, directness, query match, and source quality — as a documented, deterministic scoring function with unit-tested ordering",
+    "Context-pack assembly per the doc-03 ten-point structure with a token/size budget, deterministic truncation order, and truncation metadata explaining what was cut",
+    "Current-vs-historical claim handling: packs present current claims and expose superseded history on request",
+    "Define schemas/context-pack.schema.json (hand-maintained, ADR 0008) with positive and negative fixtures; pack serialization validates against it",
+    "Expose typed application APIs (resolve, related, trace, build_pack) for the CLI and MCP layers; no CLI wiring this order",
+    "Document ranking and budget semantics in docs/reference/context-packs.md"
+  ],
+  "non_goals": [
+    "No CLI commands (lead wires ref/context-pack commands after integration)",
+    "No MCP server (WP-330)",
+    "No projection schema changes — consume WP-210 query APIs; needing a new index is a coordination request to the lead, not a cross-package edit",
+    "No embeddings, vector search, or LLM calls: deterministic retrieval only",
+    "No new runtime dependencies"
+  ],
+  "dependencies": [
+    "WP-100",
+    "WP-210"
+  ],
+  "base_commit": "PENDING-WP210-INTEGRATION",
+  "branch": "agent/WP-230-context-packs",
+  "worktree": ".worktrees/WP-230-context-packs",
+  "allowed_paths": [
+    "src/workctx/retrieval/**",
+    "schemas/context-pack.schema.json",
+    "tests/retrieval/**",
+    "docs/reference/context-packs.md",
+    ".agents/work-orders/WP-230-context-packs/report.md",
+    ".agents/work-orders/WP-230-context-packs/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/services/**",
+    "src/workctx/validation/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "schemas/reference.schema.json",
+    "schemas/source-locator.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/claim.schema.json",
+    "schemas/context.schema.json",
+    "schemas/entity.schema.json",
+    "schemas/task.schema.json",
+    "schemas/artifact-manifest.schema.json",
+    "schemas/transaction-proposal.schema.json",
+    "schemas/audit-event.schema.json",
+    "schemas/skill-frontmatter.schema.json",
+    "schemas/skill-registry.schema.json",
+    "schemas/skill-adapter-manifest.schema.json",
+    "schemas/cli-envelope.schema.json",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/filesystem/**",
+    "tests/projections/**",
+    "tests/validation_engine/**",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/03-reference-and-retrieval-model.md",
+    "docs/adr/0008-json-schema-ownership.md",
+    "docs/reference/projections.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-230-context-packs/context.md",
+    ".agents/work-orders/WP-230-context-packs/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/01-product-scope.md",
+    "docs/reference/reference-system.md"
+  ],
+  "deliverables": [
+    "Retrieval package with resolution, traversal, trace, ranking, and pack assembly plus tests",
+    "schemas/context-pack.schema.json with ADR 0008 fixtures",
+    "docs/reference/context-packs.md",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "A fixture workspace resolves a task to its context pack containing all ten doc-03 sections with correct current-vs-superseded claims",
+    "Trace from a claim reaches the exact observation and source locator (UC-004)",
+    "Ranking order is deterministic and unit-tested against crafted fixtures per factor",
+    "Budgeted packs truncate in the documented order and always include truncation metadata; identical inputs produce identical packs",
+    "Packs validate against context-pack.schema.json (positive and negative fixtures per ADR 0008)",
+    "Cross-context references are refused (require_context enforced at the retrieval boundary)",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Fictional fixtures only; packs must never include secret-looking values from workspace content in cleartext summaries (pass through the existing secret patterns as a filter guard)",
+    "No cross-context retrieval"
+  ],
+  "stop_conditions": [
+    "A required query shape WP-210's APIs cannot serve (raise a coordination request; do not edit the adapter)",
+    "Any needed change to frozen files or domain models"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-230-context-packs/report.md",
+    "json": ".agents/work-orders/WP-230-context-packs/report.json"
+  }
+}

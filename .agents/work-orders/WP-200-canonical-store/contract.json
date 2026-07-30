@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "id": "WP-200-canonical-store",
+  "title": "Canonical filesystem repository: store, lock, and atomic writes",
+  "status": "proposed",
+  "objective": "A typed canonical filesystem adapter reads and writes workspace documents with ADR 0005 serialization, ADR 0006 locking and staged atomic replacement, path-boundary enforcement, and a user-level context registry — all consumable as application APIs by later packages.",
+  "business_value": "WP-300 transactions, WP-210 rebuilds, and every mutation workflow depend on one safe, deterministic canonical store; today writes are ad-hoc and unlocked.",
+  "scope": [
+    "Implement src/workctx/adapters/filesystem/serialization.py: the ADR 0005 canonical emitter (exact pinned PyYAML parameters, declaration-order keys, ADR 0009 null-vs-omit rule) and canonical Markdown+frontmatter rendering using workctx.domain.frontmatter for the read side; include the hand-edit detection primitive from ADR 0005 (byte comparison against canonical re-serialization)",
+    "Implement src/workctx/adapters/filesystem/store.py: CanonicalStore bound to a resolved context root — typed read/write of workspace documents (context config, entity frontmatter, tasks, artifact manifests via the domain models), directory-zone awareness, and path-boundary enforcement (resolve and compare canonical paths, reject .. escape and symlink/reparse escape per 08-security-and-privacy.md)",
+    "Implement src/workctx/adapters/filesystem/lock.py: the full ADR 0006 lock protocol — O_EXCL create with nonce identity, atomic heartbeat refresh preserving nonce, stale detection (pid, heartbeat threshold, unparseable-lock mtime rule), observable takeover via lock.stale-<timestamp>.json rename, and fence verification helper",
+    "Implement src/workctx/adapters/filesystem/staging.py: staged multi-file atomic replacement — same-volume staging under 98_state/staging/, fsync, write-ahead intent record (intent.json with transaction id, nonce, ordered targets, content hashes) before the first os.replace, bounded exponential-backoff retry on Windows PermissionError, and recovery inspection API that reports partially applied intent records",
+    "Implement the user-level context registry (doc-04 resolution step 3): platformdirs-based user registry mapping context ids to roots, with list/register/unregister APIs in src/workctx/adapters/filesystem/registry.py; do NOT wire it into the CLI presentation layer (lead integrates)",
+    "Route _write_context_config in src/workctx/services/contexts.py through the new canonical serializer without changing the four frozen public signatures",
+    "Document the runtime 98_state layout you own: lock.json, staging/**, backups/ naming (docs/reference/canonical-store.md)"
+  ],
+  "non_goals": [
+    "No transaction proposals, preconditions, audit events, or ledger writes (WP-300; ADR 0010 semantics land there)",
+    "No SQLite files or projections (WP-210 owns 98_state/index.sqlite3)",
+    "No CLI commands or presentation changes; the registry is API-only this wave (lead wires resolution step 3 at integration)",
+    "No validation-engine rules (WP-220)",
+    "No new runtime dependencies (platformdirs and PyYAML are already runtime deps); needing one is a stop condition"
+  ],
+  "dependencies": [
+    "WP-100",
+    "WP-110"
+  ],
+  "base_commit": "PENDING-WAVE2-BASELINE",
+  "branch": "agent/WP-200-canonical-store",
+  "worktree": ".worktrees/WP-200-canonical-store",
+  "allowed_paths": [
+    "src/workctx/adapters/filesystem/**",
+    "src/workctx/services/contexts.py",
+    "tests/filesystem/**",
+    "docs/reference/canonical-store.md",
+    ".agents/work-orders/WP-200-canonical-store/report.md",
+    ".agents/work-orders/WP-200-canonical-store/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/__init__.py",
+    "src/workctx/adapters/sqlite/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/validation/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "schemas/**",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/test_cli.py",
+    "tests/test_context_init.py",
+    "tests/test_context_model.py",
+    "tests/test_schemas.py",
+    "tests/test_skills.py",
+    "tests/test_template_sync.py",
+    "tests/test_validation.py",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    "docs/adr/0005-canonical-serialization.md",
+    "docs/adr/0006-context-locking-and-atomic-writes.md",
+    "docs/adr/0009-null-emission-scope.md",
+    ".agents/plan/initial/02-architecture.md",
+    ".agents/plan/initial/08-security-and-privacy.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-200-canonical-store/context.md",
+    ".agents/work-orders/WP-200-canonical-store/acceptance.md"
+  ],
+  "context_refs": [
+    "docs/adr/0007-workspace-schema-migrations.md",
+    "docs/adr/0010-audit-ledger-representation.md",
+    "src/workctx/domain/frontmatter.py"
+  ],
+  "deliverables": [
+    "Filesystem adapter package: serialization, store, lock, staging, registry — with full unit and integration tests",
+    "services/contexts.py writing through the canonical serializer, signatures unchanged",
+    "docs/reference/canonical-store.md with the 98_state layout contract",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "Canonical serialization is byte-deterministic: serializing the same logical document twice, and re-serializing a parsed document, produce identical bytes; golden-file test pins the format",
+    "Lock protocol passes contention, stale-takeover, fence-abort, torn-heartbeat, and unparseable-lock tests using plain files and simulated second holders",
+    "Staged replacement: an injected failure between replaces leaves the intent record and staged files; the recovery API reports exactly which targets are partially applied; retry policy triggers on injected PermissionError and gives up with a recoverable error after the bounded attempts",
+    "Path-boundary enforcement rejects .. traversal and symlink/junction escape in tests (junction test may be skipped with a recorded reason when the CI user lacks privileges)",
+    "Registry APIs are idempotent and never store machine-absolute paths inside workspace files (registry lives in the user config dir, not the context)",
+    "Existing context init/inspect/validate behavior and all existing tests pass unchanged; context.yaml output remains byte-compatible or the change is proven canonical per ADR 0005 and covered by an updated golden test",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "No secrets in fixtures; no network; symlink/junction handling must fail closed",
+    "Lock and staging files stay inside 98_state/ of the target context only"
+  ],
+  "stop_conditions": [
+    "Any needed change to frozen files, the four public service signatures, or pyproject.toml",
+    "Discovery that ADR 0005/0006 semantics cannot be implemented as specified on a supported platform",
+    "Any need to define transaction or audit semantics (WP-300 territory)"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-200-canonical-store/report.md",
+    "json": ".agents/work-orders/WP-200-canonical-store/report.json"
+  }
+}
