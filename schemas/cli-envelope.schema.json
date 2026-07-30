@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/cli-envelope.schema.json",
+  "title": "Work Context OS CLI envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "command",
+    "context_id",
+    "result",
+    "warnings",
+    "errors",
+    "meta"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "context_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "result": {
+      "type": "object"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "duration_ms"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_-]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "not": {
+            "pattern": "[\\r\\n]"
+          }
+        },
+        "path": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 500,
+              "not": {
+                "pattern": "[\\r\\n]"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": false
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "then": {
+        "properties": {
+          "errors": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

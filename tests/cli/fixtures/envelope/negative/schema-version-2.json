@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "command": "doctor",
+  "context_id": null,
+  "result": {},
+  "warnings": [],
+  "errors": [],
+  "meta": {
+    "schema_version": 2,
+    "duration_ms": 0
+  }
+}
