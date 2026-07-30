@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-120-cli-envelope",
+  "status": "completed",
+  "summary": "Implemented the shared CLI result envelope, single top-level exception and exit-code boundary, split stdout/stderr presentation, context-resolution shell, JSON Schema and ADR 0008 fixtures, command rewiring, documentation, and comprehensive CLI tests.",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
+  "final_commit": "b4e7752d337a917d3096ca999e5d09446dbc6f41",
+  "files_changed": [
+    "src/workctx/cli.py",
+    "src/workctx/errors.py",
+    "src/workctx/presentation/__init__.py",
+    "src/workctx/presentation/boundary.py",
+    "src/workctx/presentation/context.py",
+    "src/workctx/presentation/envelope.py",
+    "src/workctx/presentation/streams.py",
+    "schemas/cli-envelope.schema.json",
+    "docs/reference/cli-envelope.md",
+    "tests/test_cli.py",
+    "tests/cli/__init__.py",
+    "tests/cli/test_envelope_contract.py",
+    "tests/cli/test_exit_codes.py",
+    "tests/cli/fixtures/envelope/positive/doctor-success.json",
+    "tests/cli/fixtures/envelope/positive/context-warning.json",
+    "tests/cli/fixtures/envelope/positive/context-failure.json",
+    "tests/cli/fixtures/envelope/positive/integral-float-duration.json",
+    "tests/cli/fixtures/envelope/negative/extra-property.json",
+    "tests/cli/fixtures/envelope/negative/failure-without-errors.json",
+    "tests/cli/fixtures/envelope/negative/fractional-duration.json",
+    "tests/cli/fixtures/envelope/negative/malformed-diagnostic.json",
+    "tests/cli/fixtures/envelope/negative/missing-errors.json",
+    "tests/cli/fixtures/envelope/negative/multiline-message.json",
+    "tests/cli/fixtures/envelope/negative/negative-duration.json",
+    "tests/cli/fixtures/envelope/negative/result-array.json",
+    "tests/cli/fixtures/envelope/negative/schema-version-2.json",
+    "tests/cli/fixtures/envelope/negative/success-with-errors.json",
+    ".agents/work-orders/WP-120-cli-envelope/report.md",
+    ".agents/work-orders/WP-120-cli-envelope/report.json"
+  ],
+  "behavior_implemented": [
+    "Every parsed JSON-capable command emits the strict shared envelope with object-shaped result, structured diagnostics, schema_version, and duration_ms",
+    "A root Typer group provides the single runtime exception boundary and maps exit bands 0, 1, 2, 3, 4, 5, 6, and 10 exactly",
+    "Typer owns pre-command usage failures at exit 2 while parsed JSON runtime failures emit one stdout envelope plus a sanitized stderr diagnostic",
+    "doctor, context init, context inspect, context validate, and the validate alias are rewired; version remains plain text",
+    "The shared context option overrides positional and ancestor discovery, missing contexts fail clearly, and the WP-200 registry seam is documented as step 3",
+    "Draft 2020-12 schema and Pydantic presentation models are aligned through positive and negative ADR 0008 fixtures",
+    "Invalid configuration, aggregated parser failures, secret-looking diagnostics, and unexpected exceptions are sanitized without exposing raw exception content"
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "151 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 19 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "66 passed in 1.84s"
+    },
+    {
+      "command": "uv run workctx context inspect --help",
+      "status": "passed",
+      "result": "Installed entry point help exposed the shared --context option and --json"
+    }
+  ],
+  "assumptions": [
+    "The operator's explicit assignment and supplied ready contract supersede the base-commit copy's stale proposed/PENDING-WAVE0-BASELINE metadata; forbidden metadata was not modified",
+    "Typer parsing failures retain native empty-stdout/stderr usage behavior at exit 2 because no parsed JSON command exists yet"
+  ],
+  "decisions": [
+    "The validate alias uses canonical command identity context.validate",
+    "Pydantic CLI envelope models live under the allowed presentation package because src/workctx/models is frozen",
+    "CTX-CONFIG and unexpected exceptions use stable generic messages instead of attempting to expose sanitized parser or exception details"
+  ],
+  "deviations": [],
+  "security_considerations": [
+    "Unexpected failures never expose exception text, reprs, causes, locals, or tracebacks",
+    "Diagnostics are structured, single-line, bounded, secret-redacted, and rendered without Rich markup interpretation",
+    "Aggregated CTX-CONFIG parser snippets are replaced with stable generic text in result.issues and errors",
+    "No network access, external writes, secrets, or new dependencies were introduced"
+  ],
+  "migration_considerations": [
+    "No migration is required because no canonical workspace schema or stored data format changed"
+  ],
+  "unresolved": [],
+  "recommended_next_action": "Implementation lead review of commit b4e7752d337a917d3096ca999e5d09446dbc6f41, report-schema validation, independent full gate, then accept or request revision."
+}
