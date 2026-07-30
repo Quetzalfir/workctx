@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from collections.abc import Iterator
 from pathlib import Path
 
 from workctx.errors import InvalidContextError
@@ -84,7 +84,7 @@ def validate_workspace(root: Path) -> ValidationReport:
         report.issues.append(
             ValidationIssue(Severity.ERROR, "CTX-CONFIG", str(exc), "context.yaml")
         )
-    except Exception as exc:  # noqa: BLE001 - validation must aggregate user-correctable failures
+    except Exception as exc:  # validation must aggregate user-correctable failures
         report.issues.append(
             ValidationIssue(Severity.ERROR, "CTX-CONFIG", str(exc), "context.yaml")
         )

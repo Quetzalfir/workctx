@@ -95,12 +95,12 @@ def context_init(
 
 @context_app.command("inspect")
 def context_inspect(
-    path: Annotated[Path, typer.Argument(help="Path inside a context.")] = Path.cwd(),
+    path: Annotated[Path | None, typer.Argument(help="Path inside a context.")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Show resolved context configuration."""
     try:
-        root = resolve_context_root(path)
+        root = resolve_context_root(path or Path.cwd())
         config = load_context_config(root)
     except (ContextNotFoundError, InvalidContextError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
@@ -119,12 +119,12 @@ def context_inspect(
 
 @context_app.command("validate")
 def context_validate(
-    path: Annotated[Path, typer.Argument(help="Context root or path inside it.")] = Path.cwd(),
+    path: Annotated[Path | None, typer.Argument(help="Context root or path inside it.")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Validate the initial workspace structure and safety checks."""
     try:
-        root = resolve_context_root(path)
+        root = resolve_context_root(path or Path.cwd())
     except ContextNotFoundError as exc:
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -168,7 +168,7 @@ def context_validate(
 
 @app.command("validate")
 def validate_alias(
-    path: Annotated[Path, typer.Argument(help="Context root or path inside it.")] = Path.cwd(),
+    path: Annotated[Path | None, typer.Argument(help="Context root or path inside it.")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Alias for `workctx context validate`."""

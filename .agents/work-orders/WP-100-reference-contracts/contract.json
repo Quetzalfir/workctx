@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "id": "WP-100-reference-contracts",
+  "title": "Domain identity, URI, and reference contracts",
+  "status": "proposed",
+  "objective": "Stable ID families, canonical and source URIs, source locators, typed relations, and observation/claim contracts from the reference model exist as typed, validated, tested Python domain code aligned with the reference JSON Schemas.",
+  "business_value": "Every durable claim in the product depends on precise, resolvable references; WP-200, WP-210, WP-230, and WP-300 all build on these contracts.",
+  "scope": [
+    "Implement ID family contracts (parse, validate, format) for ART, EVD, EVD#OBS, TASK, TASK-STNN, DEC, RISK, Q, CLM, PER, SYS in src/workctx/domain/ids.py per doc-03",
+    "Implement the canonical entity-type vocabulary as a Python enum in src/workctx/domain/vocabulary.py containing exactly the 19 values fixed by decision D-018 (evidence, person, team, project, system, service, module, flow, integration, decision, risk, question, task, claim, draft, investigation, incident, observation, artifact)",
+    "Move canonical URI logic into src/workctx/domain/references.py, keeping src/workctx/models/reference.py as a compatibility shim so existing imports keep working; the WorkctxUri public API (parse, __str__, require_context) is frozen during Wave 1",
+    "Implement artifact://sha256/<digest> and repo://<repo-id>@<commit>/<path>#L<start>-L<end> source reference parsing/formatting in src/workctx/domain/references.py",
+    "Implement typed source-locator models (all 9 locator types) with ordering validation (end >= start) that JSON Schema cannot express, in src/workctx/domain/locators.py",
+    "Implement the typed-relation vocabulary as a Python enum aligned with schemas/reference.schema.json, in src/workctx/domain/relations.py",
+    "Implement typed Observation and Claim models in src/workctx/domain/observations.py and src/workctx/domain/claims.py aligned with schemas/observation.schema.json and schemas/claim.schema.json (kinds, confidence, supersession fields, source references with locators)",
+    "Document the observation-URI encoding rule: '#' must be percent-encoded (%23) in workctx:// URIs; hand-authored URIs with a literal '#' are rejected by parse — add a normalization helper and tests",
+    "Reject absolute machine paths and file:// schemes as durable references in code (doc-03 validation rule the schema cannot enforce)",
+    "Align schemas/reference.schema.json, schemas/source-locator.schema.json, schemas/observation.schema.json, and schemas/claim.schema.json with the implemented contracts via shared example fixtures, including negative fixtures per ADR 0008"
+  ],
+  "non_goals": [
+    "No SQLite indexing, retrieval, ranking, or context packs (WP-210, WP-230)",
+    "No resolver against stored workspace files (WP-200/WP-230); this package is in-memory contracts only",
+    "No CLI commands (WP-120 owns the CLI framework)",
+    "No edits to entity.schema.json, task.schema.json, context.schema.json, or other WP-110-owned schemas",
+    "No external URI connectors (jira://, confluence://, github://, dynatrace://) beyond a documented grammar placeholder (decision D-021 tracks the residue)",
+    "No claim-lifecycle logic (supersession application, temporal overlap resolution) — model shape and field validation only; WP-300/WP-400 own behavior"
+  ],
+  "dependencies": [
+    "WP-000",
+    "WP-001"
+  ],
+  "base_commit": "PENDING-WAVE0-BASELINE",
+  "branch": "agent/WP-100-reference-contracts",
+  "worktree": ".worktrees/WP-100-reference-contracts",
+  "allowed_paths": [
+    "src/workctx/domain/ids.py",
+    "src/workctx/domain/references.py",
+    "src/workctx/domain/locators.py",
+    "src/workctx/domain/relations.py",
+    "src/workctx/domain/vocabulary.py",
+    "src/workctx/domain/observations.py",
+    "src/workctx/domain/claims.py",
+    "src/workctx/models/reference.py",
+    "schemas/reference.schema.json",
+    "schemas/source-locator.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/claim.schema.json",
+    "tests/domain/**",
+    "tests/test_reference.py",
+    "docs/reference/reference-system.md",
+    ".agents/work-orders/WP-100-reference-contracts/report.md",
+    ".agents/work-orders/WP-100-reference-contracts/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/domain/__init__.py",
+    "src/workctx/domain/entities.py",
+    "src/workctx/domain/tasks.py",
+    "src/workctx/domain/artifacts.py",
+    "src/workctx/models/__init__.py",
+    "src/workctx/models/context.py",
+    "src/workctx/services/**",
+    "src/workctx/validation/**",
+    "src/workctx/cli.py",
+    "schemas/entity.schema.json",
+    "schemas/task.schema.json",
+    "schemas/context.schema.json",
+    "schemas/artifact-manifest.schema.json",
+    "schemas/transaction-proposal.schema.json",
+    "schemas/audit-event.schema.json",
+    "schemas/skill-frontmatter.schema.json",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/03-reference-and-retrieval-model.md",
+    "docs/adr/0008-json-schema-ownership.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-100-reference-contracts/context.md",
+    ".agents/work-orders/WP-100-reference-contracts/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/02-architecture.md",
+    "docs/reference/reference-system.md",
+    "schemas/reference.schema.json",
+    "schemas/source-locator.schema.json"
+  ],
+  "deliverables": [
+    "Typed domain modules for IDs, entity-type vocabulary, URIs, locators, relations, observations, and claims with full unit tests",
+    "Compatibility shim keeping workctx.models.reference imports working",
+    "Shared example fixtures (positive and negative) validating against both JSON Schemas and Python models",
+    "Updated docs/reference/reference-system.md where implemented behavior clarifies the contract",
+    "Worker report.md and report.json in this work-order directory"
+  ],
+  "acceptance_criteria": [
+    "Every doc-03 ID family round-trips through parse/format with valid and invalid cases tested",
+    "The entity-type enum equals the D-018 19-value list exactly (test against the literal list, not against another branch's files)",
+    "workctx:// URIs with %23-encoded fragments round-trip; literal '#' input is rejected with an actionable error; normalization helper converts authoring form to canonical form",
+    "artifact:// and repo:// references parse and format per doc-03, with commit SHA required for repo references",
+    "All 9 locator types validate, including range-ordering rules the JSON Schema cannot express",
+    "Observation and Claim models round-trip fixtures against their schemas, including at least one negative fixture per model demonstrating a schema/model divergence would be caught",
+    "Absolute machine paths and file:// are rejected as durable references",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Do not introduce secrets or private data in fixtures; fictional examples only",
+    "Path traversal segments must remain rejected in entity IDs"
+  ],
+  "stop_conditions": [
+    "Any change required to WorkctxUri's frozen public API",
+    "Any change required to WP-110-owned schemas or shared files listed as forbidden",
+    "Discovery that doc-03 semantics conflict with an existing ADR or with the D-018 vocabulary"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-100-reference-contracts/report.md",
+    "json": ".agents/work-orders/WP-100-reference-contracts/report.json"
+  }
+}

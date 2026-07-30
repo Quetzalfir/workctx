@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "id": "WP-001-dev-foundation",
+  "title": "Development foundation: reproducible green baseline",
+  "status": "assigned",
+  "objective": "A clean checkout of the repository passes the full validation gate locally and on Windows, macOS, and Linux CI, builds valid distribution artifacts, and has deterministic line endings and a committed dependency lock.",
+  "business_value": "Every later work package depends on a reproducible, verifiable baseline; without it, worker validation evidence is not trustworthy.",
+  "scope": [
+    "Commit the lint, format, and typing fixes that make the scaffold pass the validation gate",
+    "Add .gitattributes enforcing LF for text files so checkout matches ruff line-ending=lf on all platforms",
+    "Commit uv.lock and switch CI to uv sync --locked for reproducible resolution",
+    "Add wheel and sdist build to CI (uv build) and verify the built wheel contains the packaged context template, including files hatchling might drop through VCS-ignore handling (context_template/.gitignore, 98_state/.gitkeep)",
+    "Add [project.urls] and PEP 639 license metadata to pyproject.toml",
+    "Add pre-commit to the dev dependency group and document it in CONTRIBUTING.md, or remove .pre-commit-config.yaml; pick one and record it",
+    "Add a CI concurrency group to cancel superseded runs",
+    "Verify the src/workctx/domain/__init__.py package marker (created by the lead during WP-000) is committed with the baseline",
+    "Align docs/concepts.md observation-kind wording ('task signal') with the observation.schema.json enum value ('task')"
+  ],
+  "non_goals": [
+    "No new product features or CLI commands",
+    "No changes to plan documents or product invariants",
+    "No PyPI publishing or release automation",
+    "No testing of the mcp optional extra (deferred to WP-330)",
+    "No coverage threshold enforcement (recorded as a later decision)"
+  ],
+  "dependencies": [
+    "WP-000"
+  ],
+  "base_commit": "4e2aa2ccefac31c29254bc519d36f3dd55121735",
+  "branch": "master",
+  "worktree": ".",
+  "allowed_paths": [
+    ".gitattributes",
+    "uv.lock",
+    ".github/workflows/ci.yml",
+    "CONTRIBUTING.md",
+    "pyproject.toml",
+    ".pre-commit-config.yaml",
+    "src/workctx/**",
+    "tests/**",
+    "docs/**",
+    ".agents/status/**",
+    ".agents/work-orders/WP-001-dev-foundation/report.md",
+    ".agents/work-orders/WP-001-dev-foundation/report.json"
+  ],
+  "forbidden_paths": [
+    "AGENTS.md",
+    "START-HERE.md",
+    ".agents/plan/**",
+    ".agents/skills/**",
+    "schemas/**",
+    "templates/**"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/06-implementation-work-packages.md",
+    "docs/development/scaffold-validation.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/09-open-source-distribution.md"
+  ],
+  "deliverables": [
+    "Green validation gate from a clean checkout",
+    ".gitattributes with LF policy",
+    "Committed uv.lock with CI using --locked",
+    "CI build step producing wheel and sdist, with verified template content",
+    "Baseline commit hash recorded in .agents/status/implementation-status.md"
+  ],
+  "acceptance_criteria": [
+    "uv run ruff check ., uv run ruff format --check ., uv run mypy src, and uv run pytest all pass from a clean checkout",
+    "A fresh git checkout on Windows produces LF working-tree files for tracked text (verified via git ls-files --eol)",
+    "uv build produces a wheel and sdist; the wheel contains src/workctx/resources/context_template with the same file set tracked in git, including .gitignore and 98_state/.gitkeep",
+    "GitHub Actions CI matrix passes on ubuntu, windows, and macos for Python 3.12 and 3.13 once the repository is pushed"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest",
+    "uv build",
+    "git ls-files --eol"
+  ],
+  "security_constraints": [
+    "Do not introduce secrets, private data, or network-dependent tests",
+    "Do not add install steps that execute remote scripts outside documented package-manager behavior"
+  ],
+  "stop_conditions": [
+    "Any required change to product invariants or plan documents",
+    "CI requires repository settings or credentials only the human operator can provide"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-001-dev-foundation/report.md",
+    "json": ".agents/work-orders/WP-001-dev-foundation/report.json"
+  }
+}

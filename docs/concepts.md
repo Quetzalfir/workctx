@@ -14,7 +14,7 @@ An evidence note is a readable synthesis of one or more artifacts. It contains a
 
 ## Observation
 
-An observation is the smallest traceable statement extracted from evidence. It is classified as a fact, inference, assumption, decision, commitment, task signal, risk, blocker, dependency, or question.
+An observation is the smallest traceable statement extracted from evidence. It is classified as a fact, inference, assumption, decision, commitment, task, risk, blocker, dependency, or question.
 
 ## Claim
 

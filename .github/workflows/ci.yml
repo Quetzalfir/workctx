@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     strategy:
@@ -21,8 +25,40 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-      - run: uv sync --all-groups
+      - run: uv sync --locked --all-groups
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy src
       - run: uv run pytest --cov=workctx --cov-report=term-missing
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv build
+      # hatchling honors VCS ignore files; guard against the packaged context
+      # template silently losing files (its own .gitignore, 98_state/.gitkeep).
+      - name: Verify wheel contains the full context template
+        shell: python
+        run: |
+          import glob
+          import sys
+          import zipfile
+
+          wheel = glob.glob("dist/*.whl")[0]
+          names = set(zipfile.ZipFile(wheel).namelist())
+          required = [
+              "workctx/resources/context_template/context.yaml",
+              "workctx/resources/context_template/.gitignore",
+              "workctx/resources/context_template/98_state/.gitkeep",
+              "workctx/resources/context_template/00_inbox/quarantine/.gitkeep",
+              "workctx/resources/context_template/99_meta/templates/task.md",
+          ]
+          missing = [r for r in required if r not in names]
+          if missing:
+              sys.exit("missing from wheel: " + ", ".join(missing))
+          print(f"wheel OK: {wheel} ({len(names)} entries)")

@@ -3,15 +3,12 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-
 ROOT = Path(__file__).parents[1]
 
 
 def test_initial_backlog_dependencies_reference_existing_work_packages() -> None:
     backlog = json.loads(
-        (ROOT / ".agents" / "plan" / "initial" / "initial-backlog.json").read_text(
-            encoding="utf-8"
-        )
+        (ROOT / ".agents" / "plan" / "initial" / "initial-backlog.json").read_text(encoding="utf-8")
     )
     ids = {item["id"] for item in backlog["work_packages"]}
     for item in backlog["work_packages"]:
@@ -40,9 +37,7 @@ def test_worker_report_template_validates_against_plan_schema() -> None:
         )
     )
     report = json.loads(
-        (ROOT / ".agents" / "templates" / "work-order" / "report.json").read_text(
-            encoding="utf-8"
-        )
+        (ROOT / ".agents" / "templates" / "work-order" / "report.json").read_text(encoding="utf-8")
     )
     Draft202012Validator(schema).validate(report)
 
@@ -52,9 +47,7 @@ def test_initial_backlog_is_acyclic_and_matches_dependency_graph() -> None:
     backlog = json.loads((base / "initial-backlog.json").read_text(encoding="utf-8"))
     graph = json.loads((base / "dependency-graph.json").read_text(encoding="utf-8"))
 
-    dependencies = {
-        item["id"]: set(item["dependencies"]) for item in backlog["work_packages"]
-    }
+    dependencies = {item["id"]: set(item["dependencies"]) for item in backlog["work_packages"]}
     graph_edges = {(edge["from"], edge["to"]) for edge in graph["edges"]}
     expected_edges = {
         (dependency, work_package)

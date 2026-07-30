@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "id": "WP-120-cli-envelope",
+  "title": "CLI framework, result envelope, and exit codes",
+  "status": "proposed",
+  "objective": "Every CLI command emits the doc-04 result envelope in JSON mode with clean stdout, routes diagnostics to stderr, and maps failures through the doc-04 exit-code table via a single testable presentation boundary.",
+  "business_value": "Later packages register many commands; without a shared envelope and exit-code layer each command reinvents serialization and automation cannot trust the output contract.",
+  "scope": [
+    "Create a presentation module (new files, e.g. src/workctx/presentation/) providing: envelope builder {ok, command, context_id, result, warnings, errors, meta{schema_version, duration_ms}}, stdout/stderr console separation, duration capture, and a single exception-to-exit-code boundary",
+    "Implement the context-resolution shell of doc-04: a shared --context option (explicit path, precedence step 1) falling back to nearest-ancestor discovery (step 2) and a clear failure (step 4), reusing resolve_context_root unchanged; document the step-3 (user registry) seam for WP-200 in docs/reference/cli-envelope.md",
+    "workctx.errors: existing exception classes are frozen (services/contexts.py and validation/workspace.py import them); you may add new classes only — the exit-code boundary maps existing exceptions without renaming or restructuring them",
+    "result is always a JSON object: list-shaped payloads are wrapped (doctor uses {\"checks\": [...]})",
+    "Implement the exit-code mapping decided by the lead: 0 success; 1 validation/user-correctable (invalid context, init on non-empty dir); 2 usage/config (Click default preserved); 3 context boundary or permission denial; 4 conflict/stale precondition (reserved, mapped for future errors); 5 unavailable dependency (doctor required-check failure moves from 1 to 5); 6 partial success with stale derived state (reserved); 10 unexpected internal failure via top-level exception boundary",
+    "Rewire existing commands through the envelope: doctor --json, context inspect --json, context validate --json (and the top-level validate alias), context init (add --json and resolved-context print); version stays plain text per doc-04",
+    "In JSON mode nothing decorative reaches stdout; error details go into the envelope errors array and human diagnostics to stderr",
+    "Add empty typer sub-app scaffolding only where it clarifies the framework (do not pre-create all doc-04 families)",
+    "Add an envelope JSON Schema under schemas/cli-envelope.schema.json with ADR 0008 fixtures",
+    "Update tests/test_cli.py to the envelope shapes with split stdout/stderr assertions and exit-code coverage; the doctor monkeypatch-by-import-site pattern may need adjusting"
+  ],
+  "non_goals": [
+    "No business commands (inbox, artifact, proposal, transaction, search, ref, context-pack, task, brief, view, index, agent, mcp, dev)",
+    "No context-resolution step 3 implementation (user-level registry) — WP-200 owns discovery; you ship the documented seam only",
+    "No --strict flag (WP-220 owns validation strictness)",
+    "No changes to services/contexts.py, validation/workspace.py, or models (consume frozen interfaces only)",
+    "Removing the top-level validate alias is out of scope: it stays (lead decision D-012)"
+  ],
+  "dependencies": [
+    "WP-000",
+    "WP-001"
+  ],
+  "base_commit": "PENDING-WAVE0-BASELINE",
+  "branch": "agent/WP-120-cli-envelope",
+  "worktree": ".worktrees/WP-120-cli-envelope",
+  "allowed_paths": [
+    "src/workctx/cli.py",
+    "src/workctx/presentation/**",
+    "src/workctx/doctor.py",
+    "src/workctx/errors.py",
+    "schemas/cli-envelope.schema.json",
+    "tests/test_cli.py",
+    "tests/cli/**",
+    "docs/reference/cli-envelope.md",
+    ".agents/work-orders/WP-120-cli-envelope/report.md",
+    ".agents/work-orders/WP-120-cli-envelope/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/services/**",
+    "src/workctx/validation/**",
+    "src/workctx/models/**",
+    "src/workctx/domain/**",
+    "src/workctx/resources/**",
+    "schemas/context.schema.json",
+    "schemas/entity.schema.json",
+    "schemas/task.schema.json",
+    "schemas/reference.schema.json",
+    "schemas/source-locator.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/claim.schema.json",
+    "schemas/artifact-manifest.schema.json",
+    "schemas/transaction-proposal.schema.json",
+    "schemas/audit-event.schema.json",
+    "schemas/skill-frontmatter.schema.json",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/04-cli-specification.md",
+    "docs/adr/0008-json-schema-ownership.md",
+    ".agents/status/decision-register.md",
+    ".agents/status/path-ownership.json",
+    ".agents/work-orders/WP-120-cli-envelope/context.md",
+    ".agents/work-orders/WP-120-cli-envelope/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/02-architecture.md",
+    "src/workctx/validation/workspace.py",
+    "src/workctx/services/contexts.py"
+  ],
+  "deliverables": [
+    "Presentation module with envelope, streams, timing, and exit-code boundary",
+    "All existing commands rewired through the envelope",
+    "schemas/cli-envelope.schema.json plus fixtures",
+    "docs/reference/cli-envelope.md documenting the contract including the kept validate alias",
+    "Updated CLI tests with split-stream and exit-code assertions"
+  ],
+  "acceptance_criteria": [
+    "Every --json output validates against cli-envelope.schema.json in tests",
+    "JSON mode stdout contains exactly one JSON document; diagnostics go to stderr (tests split streams)",
+    "Exit codes follow the contracted mapping, including doctor required-failure = 5 and an injected unexpected exception = 10; the mapper itself has unit tests covering every band (0-6, 10), including reserved codes 3, 4, and 6",
+    "--context resolves an explicit path with precedence over ancestor discovery; missing context fails with the doc-04 step-4 clear error; the step-3 seam is documented",
+    "context init supports --json and prints the resolved context target",
+    "duration_ms and schema_version appear in meta for every envelope",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Error envelopes must not leak raw evidence content or secret-looking values; sanitize exception text at the boundary",
+    "No network access; no new runtime dependencies without a lead decision"
+  ],
+  "stop_conditions": [
+    "The envelope requires changing a frozen service signature or a WP-110/WP-100 file",
+    "Doc-04 semantics conflict with an existing test in a way not covered by this contract"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-120-cli-envelope/report.md",
+    "json": ".agents/work-orders/WP-120-cli-envelope/report.json"
+  }
+}

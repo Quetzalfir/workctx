@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "PENDING-WAVE0-BASELINE",
+  "notes": [
+    "frozen_paths bind Wave 1 workers. WP-001 is lead-executed on master BEFORE any Wave 1 assignment starts, which is why its broad paths (including pyproject.toml) conflict with nothing; pyproject.toml is frozen for every Wave 1 worker.",
+    "Each work order may additionally write its own report.md and report.json inside its work-order directory; these are listed in each contract's allowed_paths.",
+    "Status values follow the work-order lifecycle enum of agent-task-contract.schema.json."
+  ],
+  "frozen_paths": [
+    "src/workctx/domain/__init__.py",
+    "src/workctx/models/__init__.py",
+    "src/workctx/validation/**",
+    "schemas/skill-frontmatter.schema.json",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "frozen_interfaces": [
+    "workctx.models.reference.WorkctxUri: parse, __str__, require_context",
+    "workctx.services.contexts: initialize_context, load_context_config, resolve_context_root, slugify_context_id",
+    "workctx.errors: existing exception classes (additive changes only, WP-120)"
+  ],
+  "assignments": [
+    {
+      "work_order_id": "WP-001-dev-foundation",
+      "mode": "write",
+      "paths": [
+        ".gitattributes",
+        "uv.lock",
+        ".github/workflows/ci.yml",
+        "CONTRIBUTING.md",
+        "pyproject.toml",
+        ".pre-commit-config.yaml",
+        "src/workctx/**",
+        "tests/**",
+        "docs/**",
+        ".agents/status/**",
+        ".agents/work-orders/WP-001-dev-foundation/report.md",
+        ".agents/work-orders/WP-001-dev-foundation/report.json"
+      ],
+      "branch": "master",
+      "worktree": ".",
+      "status": "assigned",
+      "note": "Lead-executed, sequential; produces the Wave 1 baseline commit."
+    },
+    {
+      "work_order_id": "WP-100-reference-contracts",
+      "mode": "write",
+      "paths": [
+        "src/workctx/domain/ids.py",
+        "src/workctx/domain/references.py",
+        "src/workctx/domain/locators.py",
+        "src/workctx/domain/relations.py",
+        "src/workctx/domain/vocabulary.py",
+        "src/workctx/domain/observations.py",
+        "src/workctx/domain/claims.py",
+        "src/workctx/models/reference.py",
+        "schemas/reference.schema.json",
+        "schemas/source-locator.schema.json",
+        "schemas/observation.schema.json",
+        "schemas/claim.schema.json",
+        "tests/domain/**",
+        "tests/test_reference.py",
+        "docs/reference/reference-system.md",
+        ".agents/work-orders/WP-100-reference-contracts/report.md",
+        ".agents/work-orders/WP-100-reference-contracts/report.json"
+      ],
+      "branch": "agent/WP-100-reference-contracts",
+      "worktree": ".worktrees/WP-100-reference-contracts",
+      "status": "proposed"
+    },
+    {
+      "work_order_id": "WP-110-workspace-schema",
+      "mode": "write",
+      "paths": [
+        "src/workctx/domain/entities.py",
+        "src/workctx/domain/tasks.py",
+        "src/workctx/domain/artifacts.py",
+        "src/workctx/models/context.py",
+        "src/workctx/services/contexts.py",
+        "src/workctx/resources/context_template/**",
+        "templates/context/**",
+        "schemas/context.schema.json",
+        "schemas/entity.schema.json",
+        "schemas/task.schema.json",
+        "schemas/artifact-manifest.schema.json",
+        "schemas/transaction-proposal.schema.json",
+        "schemas/audit-event.schema.json",
+        "tests/test_context_init.py",
+        "tests/test_context_model.py",
+        "tests/test_schemas.py",
+        "tests/test_template_sync.py",
+        "tests/workspace/**",
+        "docs/guides/context-layout.md",
+        "scripts/sync_context_template.py",
+        ".agents/work-orders/WP-110-workspace-schema/report.md",
+        ".agents/work-orders/WP-110-workspace-schema/report.json"
+      ],
+      "branch": "agent/WP-110-workspace-schema",
+      "worktree": ".worktrees/WP-110-workspace-schema",
+      "status": "proposed"
+    },
+    {
+      "work_order_id": "WP-120-cli-envelope",
+      "mode": "write",
+      "paths": [
+        "src/workctx/cli.py",
+        "src/workctx/presentation/**",
+        "src/workctx/doctor.py",
+        "src/workctx/errors.py",
+        "schemas/cli-envelope.schema.json",
+        "tests/test_cli.py",
+        "tests/cli/**",
+        "docs/reference/cli-envelope.md",
+        ".agents/work-orders/WP-120-cli-envelope/report.md",
+        ".agents/work-orders/WP-120-cli-envelope/report.json"
+      ],
+      "branch": "agent/WP-120-cli-envelope",
+      "worktree": ".worktrees/WP-120-cli-envelope",
+      "status": "proposed"
+    },
+    {
+      "work_order_id": "WP-130-skill-contract",
+      "mode": "write",
+      "paths": [
+        ".agents/skills/**",
+        "schemas/skill-registry.schema.json",
+        "schemas/skill-adapter-manifest.schema.json",
+        "tests/test_skills.py",
+        "tests/skills/**",
+        "docs/reference/skill-adapters.md",
+        ".agents/work-orders/WP-130-skill-contract/report.md",
+        ".agents/work-orders/WP-130-skill-contract/report.json"
+      ],
+      "branch": "agent/WP-130-skill-contract",
+      "worktree": ".worktrees/WP-130-skill-contract",
+      "status": "proposed"
+    }
+  ]
+}

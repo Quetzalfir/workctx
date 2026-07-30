@@ -1,0 +1,16 @@
+# Normalize all text files to LF in the repository and on checkout.
+# ruff format enforces line-ending=lf; without this, checkouts on machines
+# with core.autocrlf=true materialize CRLF and the format gate fails.
+* text=auto eol=lf
+
+# Binary files: never normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.whl binary
+*.p12 binary
+*.pfx binary

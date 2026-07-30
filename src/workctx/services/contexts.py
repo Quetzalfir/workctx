@@ -11,7 +11,17 @@ from typing import Any
 import yaml
 
 from workctx.errors import ContextAlreadyExistsError, ContextNotFoundError, InvalidContextError
-from workctx.models.context import ContextConfig, ContextKind, ContextProfile
+from workctx.models.context import (
+    ContextConfig,
+    ContextKind,
+    ContextLanguages,
+    ContextPolicies,
+    ContextProfile,
+    DataClassification,
+    EvidenceRetentionPolicy,
+    ExternalWritePolicy,
+    LocalMutationPolicy,
+)
 
 _CONTEXT_FILE = "context.yaml"
 
@@ -78,16 +88,16 @@ def initialize_context(
         name=name,
         kind=kind,
         profile=profile,
-        languages={"repository": "en", "user_interaction": user_language},
+        languages=ContextLanguages(repository="en", user_interaction=user_language),
         timezone=timezone,
-        classification="confidential",
+        classification=DataClassification.CONFIDENTIAL,
         security_boundary="isolated",
-        policies={
-            "local_mutations": "review_required",
-            "external_writes": "approval_required",
-            "raw_evidence_retention": "preserve",
-            "federated_search": False,
-        },
+        policies=ContextPolicies(
+            local_mutations=LocalMutationPolicy.REVIEW_REQUIRED,
+            external_writes=ExternalWritePolicy.APPROVAL_REQUIRED,
+            raw_evidence_retention=EvidenceRetentionPolicy.PRESERVE,
+            federated_search=False,
+        ),
         created_at=now,
         updated_at=now,
     )

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 PUBLIC_TEMPLATE = ROOT / "templates" / "context"
 PACKAGE_TEMPLATE = ROOT / "src" / "workctx" / "resources" / "context_template"

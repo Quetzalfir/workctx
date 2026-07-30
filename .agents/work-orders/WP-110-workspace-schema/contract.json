@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "id": "WP-110-workspace-schema",
+  "title": "Workspace schema and template contracts",
+  "status": "proposed",
+  "objective": "Context configuration, canonical directory rules, entity frontmatter contracts, artifact manifests, task hierarchy, and template generation inputs exist as typed, validated, tested contracts, with the workspace template validated against them.",
+  "business_value": "WP-200, WP-210, WP-220, and WP-400 need stable workspace and entity contracts; today only context config has a typed model and the template is never validated against its own schemas.",
+  "scope": [
+    "Implement typed Pydantic models for entity frontmatter, task, artifact manifest, and audit-relevant workspace documents in src/workctx/domain/entities.py, tasks.py, artifacts.py (WP-100 owns ids/references/locators/relations file names; do not create those)",
+    "Fix schemas/context.schema.json drift: created_at/updated_at must be required, matching ContextConfig; align the schema_version constraint (schema const 1 vs model ge=1) so model and schema express the same rule — the model must reject versions other than 1 with a migration-required error per ADR 0007",
+    "Align schemas/entity.schema.json entity_type enum with the canonical vocabulary fixed by decision D-018: exactly evidence, person, team, project, system, service, module, flow, integration, decision, risk, question, task, claim, draft, investigation, incident, observation, artifact (test against this literal list; do not read WP-100's branch)",
+    "Define the task ID grammar and parent/subtask/root consistency rules as typed validation (task.schema.json shape plus code rules JSON Schema cannot express)",
+    "Add instance validation: template context.yaml validates against context.schema.json; template frontmatter documents validate against their schemas; use a $ref registry so cross-schema references actually resolve in tests",
+    "Add frontmatter templates for the remaining entity types that have directories but no template under 99_meta/templates/, at minimum person, decision, risk, question, claim",
+    "Declare src/workctx/resources/context_template as the canonical template tree and templates/context as the generated mirror; add a deterministic sync check or generation script and document the rule",
+    "Extend template generation inputs: context init must parameterize timestamps and honor kind/profile where doc-01 profiles imply differences; keep changes to services/contexts.py minimal and signature-stable",
+    "Add contract-test fixtures per ADR 0008 for every schema you own"
+  ],
+  "non_goals": [
+    "No SQLite projections (WP-210), no validation engine rewrite (WP-220), no transaction engine (WP-300)",
+    "No changes to reference/source-locator/observation/claim schemas (WP-100 owns them)",
+    "No CLI framework changes (WP-120); services/contexts.py public function signatures (initialize_context, load_context_config, resolve_context_root, slugify_context_id) are frozen during Wave 1",
+    "No tightening of transaction-proposal.schema.json and audit-event.schema.json beyond documented TODO markers (WP-300 owns semantics); record the boundary in your report"
+  ],
+  "dependencies": [
+    "WP-000",
+    "WP-001"
+  ],
+  "base_commit": "PENDING-WAVE0-BASELINE",
+  "branch": "agent/WP-110-workspace-schema",
+  "worktree": ".worktrees/WP-110-workspace-schema",
+  "allowed_paths": [
+    "src/workctx/domain/entities.py",
+    "src/workctx/domain/tasks.py",
+    "src/workctx/domain/artifacts.py",
+    "src/workctx/models/context.py",
+    "src/workctx/services/contexts.py",
+    "src/workctx/resources/context_template/**",
+    "templates/context/**",
+    "schemas/context.schema.json",
+    "schemas/entity.schema.json",
+    "schemas/task.schema.json",
+    "schemas/artifact-manifest.schema.json",
+    "schemas/transaction-proposal.schema.json",
+    "schemas/audit-event.schema.json",
+    "tests/test_context_init.py",
+    "tests/test_context_model.py",
+    "tests/test_schemas.py",
+    "tests/test_template_sync.py",
+    "tests/workspace/**",
+    "docs/guides/context-layout.md",
+    "scripts/sync_context_template.py",
+    ".agents/work-orders/WP-110-workspace-schema/report.md",
+    ".agents/work-orders/WP-110-workspace-schema/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/domain/__init__.py",
+    "src/workctx/domain/ids.py",
+    "src/workctx/domain/references.py",
+    "src/workctx/domain/locators.py",
+    "src/workctx/domain/relations.py",
+    "src/workctx/models/__init__.py",
+    "src/workctx/models/reference.py",
+    "src/workctx/validation/**",
+    "src/workctx/cli.py",
+    "schemas/reference.schema.json",
+    "schemas/source-locator.schema.json",
+    "schemas/observation.schema.json",
+    "schemas/claim.schema.json",
+    "schemas/skill-frontmatter.schema.json",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/01-product-scope.md",
+    ".agents/plan/initial/03-reference-and-retrieval-model.md",
+    ".agents/plan/initial/06-implementation-work-packages.md",
+    ".agents/status/decision-register.md",
+    "docs/adr/0005-canonical-serialization.md",
+    "docs/adr/0007-workspace-schema-migrations.md",
+    "docs/adr/0008-json-schema-ownership.md",
+    ".agents/work-orders/WP-110-workspace-schema/context.md",
+    ".agents/work-orders/WP-110-workspace-schema/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/01-product-scope.md",
+    ".agents/plan/initial/02-architecture.md",
+    "docs/guides/context-layout.md"
+  ],
+  "deliverables": [
+    "Typed entity/task/artifact contracts with tests",
+    "Schema drift fixes and instance validation with a $ref registry",
+    "Canonical-template declaration with sync mechanism",
+    "New entity frontmatter templates",
+    "ADR 0008 contract-test fixtures"
+  ],
+  "acceptance_criteria": [
+    "Template context.yaml and frontmatter documents validate against their schemas in tests, with $refs actually resolved",
+    "context.schema.json requires created_at/updated_at and its schema_version rule matches the model's, guarded by positive and negative fixtures per ADR 0008",
+    "entity_type enum equals the D-018 19-value list exactly, tested against the literal list (cross-branch equality with WP-100's enum is verified by the lead at integration, not by this order)",
+    "Task parent/subtask/root consistency rules are enforced in code with negative tests",
+    "Byte-equality or generated-sync between the two template trees is enforced by test, with the canonical direction documented",
+    "workctx context init still passes existing tests with unchanged service signatures",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Fictional examples only; no secrets; template must keep 98_state ignored and credentials excluded",
+    "Do not weaken security_boundary, federated_search, or policy invariants pinned in the model and schema"
+  ],
+  "stop_conditions": [
+    "Any needed change to frozen service signatures or WP-100-owned files",
+    "Any template change that alters the REQUIRED_DIRECTORIES contract in src/workctx/validation/workspace.py (frozen this wave; raise to the lead)",
+    "Entity-type vocabulary conflict with WP-100 that the lead has not resolved"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-110-workspace-schema/report.md",
+    "json": ".agents/work-orders/WP-110-workspace-schema/report.json"
+  }
+}

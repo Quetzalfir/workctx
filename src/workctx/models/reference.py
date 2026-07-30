@@ -19,9 +19,7 @@ class WorkctxUri:
         if not _CONTEXT_ID_PATTERN.fullmatch(self.context_id):
             raise ValueError(f"Invalid context ID: {_CONTEXT_PATTERN_HELP}")
         if not _ENTITY_TYPE_PATTERN.fullmatch(self.entity_type):
-            raise ValueError(
-                "Entity types use lowercase ASCII letters, digits, and single hyphens"
-            )
+            raise ValueError("Entity types use lowercase ASCII letters, digits, and single hyphens")
         if not self.entity_id or self.entity_id in {".", ".."}:
             raise ValueError("Entity ID is required and cannot be a path traversal segment")
 

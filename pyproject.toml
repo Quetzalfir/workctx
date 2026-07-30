@@ -8,7 +8,8 @@ version = "0.1.0.dev0"
 description = "Local-first, model-neutral work memory and operations for AI agents"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
   { name = "Work Context OS contributors" }
 ]
@@ -16,7 +17,6 @@ keywords = ["ai-agents", "mcp", "knowledge-management", "cli", "local-first"]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Environment :: Console",
-  "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
@@ -39,6 +39,7 @@ mcp = ["mcp[cli]>=2,<3"]
 dev = [
   "jsonschema>=4.23,<5",
   "mypy>=1.15,<2",
+  "pre-commit>=4,<5",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<8",
   "ruff>=0.16,<1",

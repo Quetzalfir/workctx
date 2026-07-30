@@ -14,9 +14,9 @@ def test_initialize_context_creates_valid_isolated_workspace(tmp_path: Path) -> 
     assert (target / "00_inbox" / "raw").is_dir()
     assert (target / "98_state").is_dir()
     assert load_context_config(target).id == "company-a"
-    assert "workctx://company-a/task" in (
-        target / "99_meta" / "templates" / "task.md"
-    ).read_text(encoding="utf-8")
+    assert "workctx://company-a/task" in (target / "99_meta" / "templates" / "task.md").read_text(
+        encoding="utf-8"
+    )
 
     raw = yaml.safe_load((target / "context.yaml").read_text(encoding="utf-8"))
     assert raw["languages"]["repository"] == "en"

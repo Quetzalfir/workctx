@@ -13,8 +13,7 @@ def test_validation_detects_missing_required_directory(tmp_path: Path) -> None:
 
     assert not report.ok
     assert any(
-        issue.code == "CTX-MISSING-DIRECTORY" and issue.path == "03_work"
-        for issue in report.issues
+        issue.code == "CTX-MISSING-DIRECTORY" and issue.path == "03_work" for issue in report.issues
     )
 
 

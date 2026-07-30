@@ -19,6 +19,12 @@ uv run mypy src
 uv run pytest
 ```
 
+Optional but recommended: install the Git hooks so lint and formatting run on each commit.
+
+```powershell
+uv run pre-commit install
+```
+
 ## Pull requests
 
 A pull request should include:
