@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-130-skill-contract",
+  "status": "completed",
+  "summary": "Implemented the schema-backed 13-skill side-effect registry, uniform portable skill bodies, adversarial lint, and deterministic WP-320 skill-adapter manifest contract without generating adapter copies.",
+  "base_commit": "ea6861f956326c35fbbca2bcaf276f423e08570f",
+  "final_commit": "e3779602ba4806d980b8654f1a38afa2ccec83d0",
+  "files_changed": [
+    ".agents/skills/README.md",
+    ".agents/skills/bootstrap-session/SKILL.md",
+    ".agents/skills/close-session/SKILL.md",
+    ".agents/skills/create-work-order/SKILL.md",
+    ".agents/skills/curate-knowledge/SKILL.md",
+    ".agents/skills/draft-replies/SKILL.md",
+    ".agents/skills/investigate-system/SKILL.md",
+    ".agents/skills/lead-implementation/SKILL.md",
+    ".agents/skills/manage-tasks/SKILL.md",
+    ".agents/skills/migrate-legacy-context/SKILL.md",
+    ".agents/skills/process-evidence/SKILL.md",
+    ".agents/skills/registry.yaml",
+    ".agents/skills/review-work-order/SKILL.md",
+    ".agents/skills/trace-context/SKILL.md",
+    ".agents/skills/validate-context/SKILL.md",
+    "docs/reference/skill-adapters.md",
+    "schemas/skill-adapter-manifest.schema.json",
+    "schemas/skill-registry.schema.json",
+    "tests/test_skills.py",
+    ".agents/work-orders/WP-130-skill-contract/report.md",
+    ".agents/work-orders/WP-130-skill-contract/report.json"
+  ],
+  "behavior_implemented": [
+    "Classified the exact 13-skill inventory into the five doc-13 side-effect classes with an affirmative explicit-approval constraint for future external writes.",
+    "Standardized all canonical skill bodies on one ten-section workflow contract with explicit side-effect, approval, untrusted-input, stop, output, and validation boundaries.",
+    "Added proper YAML frontmatter parsing and adversarial lint for portable paths, secrets, CommonMark links, registry completeness, the fixed skill inventory, and implemented-versus-planned product references.",
+    "Defined schema_version 1 adapter manifests with deterministic exact-byte hashing, adapter-root constraints, concrete drift precedence, safe read and mutation rules, approval binding, crash recovery, repair, and uninstall semantics.",
+    "Kept the minimal skill frontmatter schema frozen and generated no client adapter directories."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "143 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 14 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "98 passed"
+    },
+    {
+      "command": "uv run pytest tests/test_skills.py -q",
+      "status": "passed",
+      "result": "78 passed"
+    }
+  ],
+  "assumptions": [
+    "The operator's explicit WP-130 assignment authorized execution even though the base-branch contract copy retains pre-activation proposed/PENDING metadata.",
+    "The system-provided Codex worktree is the assigned worktree after attaching it to the required branch and resolved base commit.",
+    "markdown-it-py remains available through the declared Rich dependency because pyproject.toml was outside this work order's writable scope."
+  ],
+  "decisions": [
+    "Manifest v1 inventories skill-derived files only; non-skill client configuration requires separate versioned ownership records.",
+    "Remote delivery, publication, push, merge, and hosted transitions remain outside current skill workflows, so no current skill is external_write.",
+    "Adapter mutation semantics align with ADR 0006 lock fencing, same-filesystem staging, os.replace, intent journaling, and bounded external-race guarantees rather than claiming non-portable filesystem CAS."
+  ],
+  "deviations": [
+    "The physical Codex-managed worktree location differs from the nominal relative worktree path, while the required branch and exact base commit were preserved.",
+    "No objective, architecture, public-interface, or allowed-path deviation was made."
+  ],
+  "security_considerations": [
+    "Evidence and connector responses remain untrusted data and are never executable instructions.",
+    "Lint rejects machine-specific paths, credential-like assignments, known token forms, unsafe links, and undeclared product operations.",
+    "Adapter paths, manifests, registries, and transaction state are validated without following links; unsafe or non-regular state blocks mutation and cannot be approval-overridden.",
+    "Approval for a modified adapter target is bound to the exact path, operation, observed current hash, and replacement hash when applicable."
+  ],
+  "migration_considerations": [
+    "The registry and adapter manifest are additive schema_version 1 contracts.",
+    "The minimal canonical skill frontmatter schema is unchanged.",
+    "No adapter files or data migration were generated; WP-320 consumes these formats later."
+  ],
+  "unresolved": [
+    "The lead-owned base contract copy retains pre-activation status/base placeholders and may need metadata reconciliation during integration."
+  ],
+  "recommended_next_action": "Lead review the implementation commit and reports, re-run the full validation gate, and integrate WP-130 for WP-320 consumption."
+}
