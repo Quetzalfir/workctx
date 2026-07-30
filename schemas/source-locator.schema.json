@@ -150,7 +150,8 @@
           "const": "json_pointer"
         },
         "pointer": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(?:|(?:/(?:[^~/]|~[01])*)+)$"
         }
       }
     },
@@ -190,14 +191,38 @@
           "const": "repo_range"
         },
         "repo_id": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
         },
         "commit": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{7,64}$"
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "not": {
+                "pattern": "^(?:/|[A-Za-z]:/)"
+              }
+            },
+            {
+              "not": {
+                "pattern": "\\\\"
+              }
+            },
+            {
+              "not": {
+                "pattern": "(?:^|/)(?:\\.{1,2})(?:/|$)"
+              }
+            },
+            {
+              "not": {
+                "pattern": "//"
+              }
+            }
+          ]
         },
         "start_line": {
           "type": "integer",
