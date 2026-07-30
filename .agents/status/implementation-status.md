@@ -20,10 +20,10 @@ the operator on 2026-07-30. WP-001 is `partial`: CI-matrix verification and
 | --- | --- | --- | --- | --- | --- | --- |
 | WP-000 | closed | — | lead | master / . | operator ratified 2026-07-30 | Status dir, ADRs 0005-0008 (amended after adversarial verify, accepted), 5 work orders, path ownership, [audit record](audit-2026-07-30-scaffold.md) |
 | WP-001 | reported | WP-000 | lead | master / . | [report](../work-orders/WP-001-dev-foundation/report.md) | `partial`: gate green, LF policy, lock, build guard all landed in `ea6861f`; CI matrix + [project.urls] blocked on missing GitHub remote |
-| WP-100 | ready | WP-000, WP-001 | — | agent/WP-100-reference-contracts | — | Base pinned to `ea6861f`; awaiting worker assignment |
-| WP-110 | ready | WP-000, WP-001 | — | agent/WP-110-workspace-schema | — | Base pinned to `ea6861f`; awaiting worker assignment |
-| WP-120 | ready | WP-000, WP-001 | — | agent/WP-120-cli-envelope | — | Base pinned to `ea6861f`; awaiting worker assignment |
-| WP-130 | ready | WP-000, WP-001 | — | agent/WP-130-skill-contract | — | Base pinned to `ea6861f`; awaiting worker assignment |
+| WP-100 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-100-reference-contracts | — | Worker active from base `ea6861f`; no report yet |
+| WP-110 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-110-workspace-schema | — | Worker active from base `ea6861f`; no report yet |
+| WP-120 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | — | Worker active from base `ea6861f`; no report yet |
+| WP-130 | in_progress | WP-000, WP-001 | Codex worker | agent/WP-130-skill-contract | — | Worker active from base `ea6861f`; no report yet |
 | WP-200..WP-500 | proposed | see backlog | — | — | — | Wave 2+ blocked on Wave 1 |
 
 ## Validation status
