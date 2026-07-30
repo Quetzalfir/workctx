@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-200-canonical-store",
   "title": "Canonical filesystem repository: store, lock, and atomic writes",
-  "status": "proposed",
+  "status": "ready",
   "objective": "A typed canonical filesystem adapter reads and writes workspace documents with ADR 0005 serialization, ADR 0006 locking and staged atomic replacement, path-boundary enforcement, and a user-level context registry — all consumable as application APIs by later packages.",
   "business_value": "WP-300 transactions, WP-210 rebuilds, and every mutation workflow depend on one safe, deterministic canonical store; today writes are ad-hoc and unlocked.",
   "scope": [
@@ -25,7 +25,7 @@
     "WP-100",
     "WP-110"
   ],
-  "base_commit": "PENDING-WAVE2-BASELINE",
+  "base_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
   "branch": "agent/WP-200-canonical-store",
   "worktree": ".worktrees/WP-200-canonical-store",
   "allowed_paths": [

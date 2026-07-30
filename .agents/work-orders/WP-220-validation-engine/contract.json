@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-220-validation-engine",
   "title": "Validation and repair engine",
-  "status": "proposed",
+  "status": "ready",
   "objective": "workctx context validate becomes a real integrity engine: typed-model document validation, ID and reference integrity, task-hierarchy and claim-temporal rules, secret and path safety, and pluggable projection-freshness — with stable, actionable diagnostic codes.",
   "business_value": "Deterministic validation is the trust anchor of the product (risk R-001); WP-300 preconditions and WP-310 quarantine both build on these checks, and users rely on actionable diagnostics to repair their workspaces.",
   "scope": [
@@ -26,7 +26,7 @@
     "WP-100",
     "WP-110"
   ],
-  "base_commit": "PENDING-WAVE2-BASELINE",
+  "base_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
   "branch": "agent/WP-220-validation-engine",
   "worktree": ".worktrees/WP-220-validation-engine",
   "allowed_paths": [

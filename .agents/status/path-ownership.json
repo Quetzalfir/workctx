@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "wave": 2,
-  "baseline_commit": "PENDING-WAVE2-BASELINE",
+  "baseline_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
   "notes": [
     "Wave 1 assignments are historical; see Git history of this file and the integration log.",
     "WP-200, WP-210, and WP-220 run in parallel (wave-2a/2b); WP-230 is sequential after WP-210 integrates and its base_commit is pinned then.",
@@ -45,7 +45,7 @@
       ],
       "branch": "agent/WP-200-canonical-store",
       "worktree": ".worktrees/WP-200-canonical-store",
-      "status": "proposed"
+      "status": "ready"
     },
     {
       "work_order_id": "WP-210-sqlite-projections",
@@ -59,7 +59,7 @@
       ],
       "branch": "agent/WP-210-sqlite-projections",
       "worktree": ".worktrees/WP-210-sqlite-projections",
-      "status": "proposed"
+      "status": "ready"
     },
     {
       "work_order_id": "WP-220-validation-engine",
@@ -74,7 +74,7 @@
       ],
       "branch": "agent/WP-220-validation-engine",
       "worktree": ".worktrees/WP-220-validation-engine",
-      "status": "proposed"
+      "status": "ready"
     },
     {
       "work_order_id": "WP-230-context-packs",

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-210-sqlite-projections",
   "title": "SQLite and FTS projections with full rebuild",
-  "status": "proposed",
+  "status": "ready",
   "objective": "A rebuildable SQLite projection indexes entities, typed reference edges, backlinks, observations, claims, tasks, aliases, and full text from canonical files, with projection metadata that triggers full rebuild on schema-version mismatch and guaranteed no cross-context rows.",
   "business_value": "WP-230 retrieval, WP-300 projection staleness behavior, and WP-400 views all query this projection; the plan's decisive acceptance scenario requires rebuild-from-canonical equivalence.",
   "scope": [
@@ -26,7 +26,7 @@
     "WP-100",
     "WP-110"
   ],
-  "base_commit": "PENDING-WAVE2-BASELINE",
+  "base_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
   "branch": "agent/WP-210-sqlite-projections",
   "worktree": ".worktrees/WP-210-sqlite-projections",
   "allowed_paths": [
