@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "fictional-context",
+  "name": "Fictional Context",
+  "kind": "project",
+  "profile": "hybrid",
+  "languages": {
+    "repository": "en",
+    "user_interaction": "en"
+  },
+  "timezone": "UTC",
+  "classification": "confidential",
+  "security_boundary": "isolated",
+  "policies": {
+    "local_mutations": "review_required",
+    "external_writes": "approval_required",
+    "raw_evidence_retention": "preserve",
+    "federated_search": false
+  }
+}

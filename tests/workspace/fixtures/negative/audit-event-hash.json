@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "AUD-20260730T120000Z-fixture",
+  "context_id": "fictional-context",
+  "timestamp": "2026-07-30T12:00:00Z",
+  "actor": {
+    "type": "human",
+    "id": "fictional-operator"
+  },
+  "action": "fixture_validation",
+  "result": "success",
+  "source_refs": [],
+  "target_refs": [],
+  "content_hash": "sha256:invalid"
+}

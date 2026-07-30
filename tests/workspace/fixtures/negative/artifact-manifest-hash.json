@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "ART-20260730-fictional-note-01",
+  "content_hash": "sha256:not-a-valid-digest",
+  "original_name": "fictional-note.txt",
+  "media_type": "text/plain",
+  "source_type": "note",
+  "source_origin": null,
+  "event_at": null,
+  "event_at_inferred": false,
+  "ingested_at": "2026-07-30T12:00:00Z",
+  "language": null,
+  "participants": [],
+  "classification": null,
+  "status": "pending",
+  "preserved_path": "00_inbox/raw/fictional-note.txt",
+  "sidecars": [],
+  "duplicate_of": null,
+  "notes": null
+}

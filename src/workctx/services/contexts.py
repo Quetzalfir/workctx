@@ -12,6 +12,7 @@ import yaml
 
 from workctx.errors import ContextAlreadyExistsError, ContextNotFoundError, InvalidContextError
 from workctx.models.context import (
+    CURRENT_SCHEMA_VERSION,
     ContextConfig,
     ContextKind,
     ContextLanguages,
@@ -24,6 +25,8 @@ from workctx.models.context import (
 )
 
 _CONTEXT_FILE = "context.yaml"
+_TEMPLATE_CONTEXT_ID = "example-context"
+_TEMPLATE_TIMESTAMP = "2000-01-01T00:00:00Z"
 
 
 def slugify_context_id(value: str) -> str:
@@ -76,14 +79,10 @@ def initialize_context(
     if target.exists() and any(target.iterdir()):
         raise ContextAlreadyExistsError(f"Target directory is not empty: {target}")
 
-    target.mkdir(parents=True, exist_ok=True)
     resolved_id = slugify_context_id(context_id or name)
-    resource = files("workctx.resources").joinpath("context_template")
-    with as_file(resource) as template_path:
-        shutil.copytree(template_path, target, dirs_exist_ok=True)
-
-    now = datetime.now(UTC)
+    now = _utc_now()
     config = ContextConfig(
+        schema_version=CURRENT_SCHEMA_VERSION,
         id=resolved_id,
         name=name,
         kind=kind,
@@ -101,22 +100,53 @@ def initialize_context(
         created_at=now,
         updated_at=now,
     )
+
+    target.mkdir(parents=True, exist_ok=True)
+    resource = files("workctx.resources").joinpath("context_template")
+    with as_file(resource) as template_path:
+        shutil.copytree(template_path, target, dirs_exist_ok=True)
+
+    _parameterize_template_files(
+        target,
+        context_id=resolved_id,
+        timestamp=_format_utc_timestamp(now),
+    )
     _write_context_config(target, config)
-    _replace_template_context_id(target, resolved_id)
     return config
 
 
 def _write_context_config(root: Path, config: ContextConfig) -> None:
     payload = config.model_dump(mode="json")
-    rendered = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+    rendered = yaml.safe_dump(
+        payload,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+        indent=2,
+        width=4096,
+    )
     (root / _CONTEXT_FILE).write_text(rendered, encoding="utf-8", newline="\n")
 
 
-def _replace_template_context_id(root: Path, context_id: str) -> None:
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _format_utc_timestamp(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _parameterize_template_files(root: Path, *, context_id: str, timestamp: str) -> None:
+    replacements = {
+        _TEMPLATE_CONTEXT_ID: context_id,
+        _TEMPLATE_TIMESTAMP: timestamp,
+    }
     for path in root.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in {".md", ".yaml", ".yml", ".json"}:
             continue
         text = path.read_text(encoding="utf-8")
-        replaced = text.replace("example-context", context_id)
+        replaced = text
+        for placeholder, value in replacements.items():
+            replaced = replaced.replace(placeholder, value)
         if replaced != text:
             path.write_text(replaced, encoding="utf-8", newline="\n")

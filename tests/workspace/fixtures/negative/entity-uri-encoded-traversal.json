@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "..",
+  "entity_type": "person",
+  "title": "Invalid encoded traversal entity",
+  "uri": "workctx://fictional-context/person/%2E%2e",
+  "aliases": [],
+  "status": "active",
+  "confidence": "high",
+  "tags": [],
+  "references": [],
+  "created_at": "2026-07-30T12:00:00Z",
+  "updated_at": "2026-07-30T12:00:00Z"
+}

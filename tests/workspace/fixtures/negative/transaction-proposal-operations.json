@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "TXP-20260730T120000Z-fixture",
+  "context_id": "fictional-context",
+  "base_revision": 0,
+  "actor": {
+    "type": "human",
+    "id": "fictional-operator"
+  },
+  "created_at": "2026-07-30T12:00:00Z",
+  "source_refs": [],
+  "operations": [],
+  "preconditions": []
+}

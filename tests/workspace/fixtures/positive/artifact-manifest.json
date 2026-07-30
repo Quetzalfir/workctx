@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "ART-20260730-fictional-note-01",
+  "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "original_name": "fictional-note.txt",
+  "media_type": "text/plain",
+  "source_type": "note",
+  "source_origin": "fixture://fictional-note",
+  "event_at": "2026-07-30T11:30:00Z",
+  "event_at_inferred": false,
+  "ingested_at": "2026-07-30T12:00:00Z",
+  "language": "en",
+  "participants": [
+    "PER-jordan-lee"
+  ],
+  "classification": "internal",
+  "status": "processed",
+  "preserved_path": "01_processed/fictional-note.txt",
+  "sidecars": [],
+  "duplicate_of": null,
+  "notes": "Fictional contract fixture."
+}
