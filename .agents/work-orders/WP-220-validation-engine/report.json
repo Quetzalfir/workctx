@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-220-validation-engine",
+  "status": "completed",
+  "summary": "Rebuilt validation into a read-only doc-03 integrity engine with typed-model document checks, ordered reference integrity, task and claim graph rules, structural and secret safety, strict mode, pluggable projection freshness, stable actionable diagnostics, and adversarial regression coverage.",
+  "base_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
+  "final_commit": "eedb5734c1c525308d969243e72174299923c34a",
+  "files_changed": [
+    "docs/reference/validation-diagnostics.md",
+    "src/workctx/validation/__init__.py",
+    "src/workctx/validation/diagnostics.py",
+    "src/workctx/validation/engine.py",
+    "src/workctx/validation/freshness.py",
+    "src/workctx/validation/report.py",
+    "src/workctx/validation/workspace.py",
+    "tests/validation_engine/__init__.py",
+    "tests/validation_engine/conftest.py",
+    "tests/validation_engine/test_documents_and_references.py",
+    "tests/validation_engine/test_freshness_and_diagnostics.py",
+    "tests/validation_engine/test_task_and_claim_rules.py",
+    ".agents/work-orders/WP-220-validation-engine/report.md",
+    ".agents/work-orders/WP-220-validation-engine/report.json"
+  ],
+  "behavior_implemented": [
+    "Preserved the consumed validation API and original report/issue fields while adding keyword-only strict mode, repair actions, advisories, and optional freshness probing.",
+    "Validated context, entity, task, artifact, observation, and claim documents through integrated runtime domain models and shared frontmatter parsing.",
+    "Built deterministic in-memory identity and relation indexes and enforced reference parse, boundary, D-018 vocabulary, and resolution order.",
+    "Validated workspace task hierarchy, normalized blocks/depends_on precedence, and detected cycles with an iterative graph algorithm.",
+    "Enforced half-open claim intervals, efficient current-overlap detection, supersession target existence, and supersession acyclicity.",
+    "Defined FreshnessProbe with a null implementation and sanitized stale, unknown, backlink-mismatch, and probe-failure diagnostics without importing adapters.",
+    "Hardened exact-case structure, UTF-8, unreadable paths, absolute and non-portable paths, symlink/junction boundaries, secret detection, and federated-search checks without writing workspace data.",
+    "Documented every diagnostic code with severity, cause, and repair action and enforced documentation/catalog synchronization in tests."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed."
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "221 files already formatted."
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 35 source files."
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "449 tests passed in 24.45 seconds."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "result": "Exit code 0; no whitespace errors."
+    },
+    {
+      "command": "PowerShell base-to-worktree allowed-path audit",
+      "status": "passed",
+      "result": "14 changed paths from the assigned base through reports; 0 outside contract allowed_paths."
+    },
+    {
+      "command": "git diff --exit-code -- <forbidden paths>",
+      "status": "passed",
+      "result": "Exit code 0; no forbidden tracked path changed."
+    },
+    {
+      "command": "uv run python -c <agent-report schema validation>",
+      "status": "passed",
+      "result": "WP-220 report.json validates against agent-report.schema.json."
+    }
+  ],
+  "assumptions": [
+    "Every exact claim subject plus predicate slot is single-valued in Phase 1; arrays carry intentional multi-values.",
+    "Claim validity intervals are half-open and missing bounds are open-ended.",
+    "Task relation cycles use prerequisite-to-dependent normalization, and reciprocal claim supersession fields normalize to one new-to-old edge.",
+    "Existing frozen CLI behavior distinguishes auxiliary plain Markdown from canonical Markdown by frontmatter or stable-ID filename; all canonical-zone YAML and JSON files are typed candidates.",
+    "Omitting a freshness probe is quiet for canonical-only validation; explicitly using NullFreshnessProbe reports unknown as an advisory."
+  ],
+  "decisions": [
+    "Use a two-pass read-only engine with in-memory indexes so reference and graph validation remain deterministic and adapter-independent.",
+    "Use integrated Pydantic domain models and workctx.domain.frontmatter at runtime; retain jsonschema only in development/report validation.",
+    "Use schema-path-aware reference extraction and validated JSON Pointer exceptions so arbitrary claim objects and locator paths are not misclassified.",
+    "Keep one executable diagnostic catalog as the source for emitted severities and repair actions, with an exact documentation table sync test."
+  ],
+  "deviations": [],
+  "security_considerations": [
+    "Validation never executes or mutates workspace content and refuses symlink/junction traversal and unreadable subtrees.",
+    "Secret and probe diagnostics are sanitized and never expose matched values or raw exception details; fixtures are fictional.",
+    "Context boundary checks precede vocabulary and resolution, preventing cross-context index disclosure.",
+    "Portable artifact and repository path checks cover traversal, absolute and drive-relative forms, UNC paths, NTFS alternate streams, reserved names, control characters, and resolution failures."
+  ],
+  "migration_considerations": [
+    "No persistent workspace, schema, or database migration is introduced.",
+    "New diagnostic codes and the optional ValidationIssue.repair_action field are additive; original CLI-consumed fields and properties remain available."
+  ],
+  "unresolved": [
+    "The integration lead must connect the WP-210 SQLite-backed freshness implementation behind FreshnessProbe; this branch intentionally ships no adapter import."
+  ],
+  "recommended_next_action": "Implementation lead review commit eedb5734c1c525308d969243e72174299923c34a, rerun the four required gates, connect the WP-210 freshness probe behind the protocol, and accept WP-220 if integration remains green."
+}
