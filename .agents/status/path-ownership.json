@@ -89,8 +89,8 @@
       ],
       "branch": "agent/WP-230-context-packs",
       "worktree": ".worktrees/WP-230-context-packs",
-      "status": "proposed",
-      "note": "Sequential: assignable only after WP-210 integrates; base_commit pinned at that point."
+      "status": "ready",
+      "note": "Base pinned to 0343911bfffe1faed359d743091f4e1e13039c22 after WP-210 integration."
     }
   ]
 }
