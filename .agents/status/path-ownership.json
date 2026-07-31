@@ -1,96 +1,104 @@
 {
   "schema_version": 1,
-  "wave": 2,
-  "baseline_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
+  "wave": 3,
+  "baseline_commit": "PENDING-WAVE3-BASELINE",
   "notes": [
-    "Wave 1 assignments are historical; see Git history of this file and the integration log.",
-    "WP-200, WP-210, and WP-220 run in parallel (wave-2a/2b); WP-230 is sequential after WP-210 integrates and its base_commit is pinned then.",
-    "98_state runtime-name ownership: WP-200 owns lock.json, staging/**, backups/; WP-210 owns index.sqlite3 and wal/shm/temp siblings. 99_meta/audit/ belongs to WP-300 (ADR 0010) and no Wave 2 order may claim it.",
-    "CLI command wiring for wave-2 engines (index rebuild, --strict, registry step 3, ref/context-pack commands) is lead integration work, not worker scope.",
+    "Wave 1 and 2 assignments are historical; see Git history of this file and the integration log.",
+    "Sequencing: WP-300 and WP-320 run in parallel now (disjoint). WP-310 and WP-330 start after WP-300 integrates (their base is pinned then) and may run in parallel with each other (disjoint).",
+    "WP-330 holds the ONLY worker grants on src/workctx/cli.py (one mcp serve sub-command), pyproject.toml, and .github/workflows/ci.yml (mcp extra enablement only) — no other Wave 3 order may touch them; the grants are narrow and reviewed against their stated limits.",
+    "99_meta/audit/** runtime ownership: WP-300 (ADR 0010 ledger). 00_inbox/01_processed runtime moves: WP-310 through WP-200/WP-300 APIs only.",
+    "CLI wiring for Wave 3 engines (inbox/artifact/proposal/transaction/agent commands) is lead integration work except WP-330's granted mcp serve.",
     "Each work order may write its own report.md and report.json inside its work-order directory."
   ],
   "frozen_paths": [
     "src/workctx/adapters/__init__.py",
-    "src/workctx/domain/**",
+    "src/workctx/adapters/filesystem/**",
+    "src/workctx/adapters/sqlite/**",
+    "src/workctx/domain/** (except WP-300's new transactions.py)",
     "src/workctx/models/**",
     "src/workctx/presentation/**",
-    "src/workctx/cli.py",
+    "src/workctx/retrieval/**",
+    "src/workctx/services/**",
+    "src/workctx/validation/**",
     "src/workctx/resources/**",
     "templates/**",
-    "schemas/** (existing files; WP-230 adds context-pack.schema.json only)",
+    "schemas/** (except WP-300's transaction-proposal and audit-event)",
     ".agents/plan/**",
     ".agents/templates/**",
     ".agents/skills/**",
     "AGENTS.md",
-    "docs/adr/**",
-    "pyproject.toml"
+    "CLAUDE.md",
+    "GEMINI.md",
+    "docs/adr/**"
   ],
   "frozen_interfaces": [
-    "workctx.services.contexts: initialize_context, load_context_config, resolve_context_root, slugify_context_id (WP-200 owns the file, signatures frozen)",
-    "workctx.validation.workspace: validate_workspace(root) -> ValidationReport; ValidationReport.ok/.errors/.warnings; ValidationIssue.severity/.code/.message/.path (WP-220 owns the file, consumed surface frozen)",
-    "workctx.domain.frontmatter: parse_frontmatter, split_frontmatter (lead-owned, frozen for all)",
-    "workctx.domain.references.WorkctxUri public API (stable since Wave 1)"
+    "All Wave 1/2 public APIs consumed as-is: WorkctxUri, services.contexts four functions, validate_workspace + report fields, SQLiteProjection queries/rebuild/readiness_trigger, retrieval resolve/related/trace/build_pack, filesystem store/lock/staging/registry",
+    "WP-300's apply result object becomes a frozen interface for WP-310/WP-330 at its integration (committed revision, applied targets, ledger event id/hash, projection status)"
   ],
   "assignments": [
     {
-      "work_order_id": "WP-200-canonical-store",
+      "work_order_id": "WP-300-transaction-engine",
       "mode": "write",
       "paths": [
-        "src/workctx/adapters/filesystem/**",
-        "src/workctx/services/contexts.py",
-        "tests/filesystem/**",
-        "docs/reference/canonical-store.md",
-        ".agents/work-orders/WP-200-canonical-store/report.md",
-        ".agents/work-orders/WP-200-canonical-store/report.json"
+        "src/workctx/domain/transactions.py",
+        "src/workctx/transactions/**",
+        "schemas/transaction-proposal.schema.json",
+        "schemas/audit-event.schema.json",
+        "tests/transactions/**",
+        "docs/reference/transactions.md",
+        ".agents/work-orders/WP-300-transaction-engine/report.md",
+        ".agents/work-orders/WP-300-transaction-engine/report.json"
       ],
-      "branch": "agent/WP-200-canonical-store",
-      "worktree": ".worktrees/WP-200-canonical-store",
+      "branch": "agent/WP-300-transaction-engine",
+      "worktree": ".worktrees/WP-300-transaction-engine",
       "status": "ready"
     },
     {
-      "work_order_id": "WP-210-sqlite-projections",
+      "work_order_id": "WP-320-agent-installers",
       "mode": "write",
       "paths": [
-        "src/workctx/adapters/sqlite/**",
-        "tests/projections/**",
-        "docs/reference/projections.md",
-        ".agents/work-orders/WP-210-sqlite-projections/report.md",
-        ".agents/work-orders/WP-210-sqlite-projections/report.json"
+        "src/workctx/adapters/agents/**",
+        "tests/agents_setup/**",
+        "docs/reference/agent-adapters.md",
+        ".agents/work-orders/WP-320-agent-installers/report.md",
+        ".agents/work-orders/WP-320-agent-installers/report.json"
       ],
-      "branch": "agent/WP-210-sqlite-projections",
-      "worktree": ".worktrees/WP-210-sqlite-projections",
+      "branch": "agent/WP-320-agent-installers",
+      "worktree": ".worktrees/WP-320-agent-installers",
       "status": "ready"
     },
     {
-      "work_order_id": "WP-220-validation-engine",
+      "work_order_id": "WP-310-inbox-lifecycle",
       "mode": "write",
       "paths": [
-        "src/workctx/validation/**",
-        "tests/validation_engine/**",
-        "tests/test_validation.py",
-        "docs/reference/validation-diagnostics.md",
-        ".agents/work-orders/WP-220-validation-engine/report.md",
-        ".agents/work-orders/WP-220-validation-engine/report.json"
+        "src/workctx/ingestion/**",
+        "tests/ingestion/**",
+        "docs/reference/inbox.md",
+        ".agents/work-orders/WP-310-inbox-lifecycle/report.md",
+        ".agents/work-orders/WP-310-inbox-lifecycle/report.json"
       ],
-      "branch": "agent/WP-220-validation-engine",
-      "worktree": ".worktrees/WP-220-validation-engine",
-      "status": "ready"
+      "branch": "agent/WP-310-inbox-lifecycle",
+      "worktree": ".worktrees/WP-310-inbox-lifecycle",
+      "status": "proposed",
+      "note": "Assignable after WP-300 integrates; base pinned then."
     },
     {
-      "work_order_id": "WP-230-context-packs",
+      "work_order_id": "WP-330-mcp-server",
       "mode": "write",
       "paths": [
-        "src/workctx/retrieval/**",
-        "schemas/context-pack.schema.json",
-        "tests/retrieval/**",
-        "docs/reference/context-packs.md",
-        ".agents/work-orders/WP-230-context-packs/report.md",
-        ".agents/work-orders/WP-230-context-packs/report.json"
+        "src/workctx/mcp/**",
+        "src/workctx/cli.py",
+        "pyproject.toml",
+        ".github/workflows/ci.yml",
+        "tests/mcp/**",
+        "docs/reference/mcp.md",
+        ".agents/work-orders/WP-330-mcp-server/report.md",
+        ".agents/work-orders/WP-330-mcp-server/report.json"
       ],
-      "branch": "agent/WP-230-context-packs",
-      "worktree": ".worktrees/WP-230-context-packs",
-      "status": "ready",
-      "note": "Base pinned to 0343911bfffe1faed359d743091f4e1e13039c22 after WP-210 integration."
+      "branch": "agent/WP-330-mcp-server",
+      "worktree": ".worktrees/WP-330-mcp-server",
+      "status": "proposed",
+      "note": "Assignable after WP-300 integrates; cli/pyproject/ci grants are narrow (mcp serve sub-command and mcp extra only)."
     }
   ]
 }

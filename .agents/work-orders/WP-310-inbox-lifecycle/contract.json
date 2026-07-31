@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "id": "WP-310-inbox-lifecycle",
+  "title": "Artifact and inbox lifecycle",
+  "status": "proposed",
+  "objective": "Evidence files are registered with immutable hashes and manifests, duplicates are detected by content and policy, suspicious artifacts are quarantined, and originals are archived only after a successful canonical transaction — the raw-evidence-retention invariant made executable.",
+  "business_value": "UC-001 starts here: without safe registration, quarantine, and archive-after-commit, evidence processing cannot be trusted (risks R-008, product invariant on raw evidence).",
+  "scope": [
+    "Implement src/workctx/ingestion/: artifact registration (SHA-256 content hash, media type, origin, event date, ingest date, status) writing artifact manifests per schemas/artifact-manifest.schema.json into 00_inbox/manifests/ through the WP-200 canonical store",
+    "Duplicate policy: same content hash is detected and refused or linked per the manifest status vocabulary; policy documented",
+    "Quarantine: suspected prompt-injection markers, executable payloads, oversized/unsupported types move to 00_inbox/quarantine/ with a manifest status and a location-only diagnostic (doc-08 evidence-safety controls; never execute or render content)",
+    "Archive-after-commit: an archive API that composes WP-300 — the original moves from 00_inbox/raw/ to 01_processed/ only when given a committed transaction receipt (revision + ledger event) referencing the artifact; no receipt, no move",
+    "Registration and archive are idempotent by content hash and receipt; interrupted moves are recoverable via the staging primitives",
+    "Typed application APIs (register, list_inbox, quarantine_info, archive_after) for CLI and MCP wiring by the lead; document the lifecycle in docs/reference/inbox.md"
+  ],
+  "non_goals": [
+    "No extraction, observation, or proposal generation (WP-410 owns the evidence-processing workflow; LLM work stays agent-side)",
+    "No CLI or MCP wiring (lead)",
+    "No changes to WP-300 engine, WP-200 primitives, or the artifact-manifest schema beyond consuming them — schema gaps are coordination requests",
+    "No network fetches; artifacts arrive as local files only",
+    "No new runtime dependencies"
+  ],
+  "dependencies": [
+    "WP-200",
+    "WP-220",
+    "WP-300"
+  ],
+  "base_commit": "PENDING-WP300-INTEGRATION",
+  "branch": "agent/WP-310-inbox-lifecycle",
+  "worktree": ".worktrees/WP-310-inbox-lifecycle",
+  "allowed_paths": [
+    "src/workctx/ingestion/**",
+    "tests/ingestion/**",
+    "docs/reference/inbox.md",
+    ".agents/work-orders/WP-310-inbox-lifecycle/report.md",
+    ".agents/work-orders/WP-310-inbox-lifecycle/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/retrieval/**",
+    "src/workctx/services/**",
+    "src/workctx/transactions/**",
+    "src/workctx/validation/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "schemas/**",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/filesystem/**",
+    "tests/projections/**",
+    "tests/validation_engine/**",
+    "tests/retrieval/**",
+    "tests/transactions/**",
+    "tests/agents_setup/**",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    ".agents/plan/initial/08-security-and-privacy.md",
+    "schemas/artifact-manifest.schema.json",
+    "docs/reference/canonical-store.md",
+    "docs/reference/transactions.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-310-inbox-lifecycle/context.md",
+    ".agents/work-orders/WP-310-inbox-lifecycle/acceptance.md"
+  ],
+  "context_refs": [
+    ".agents/plan/initial/01-product-scope.md",
+    ".agents/plan/initial/07-test-strategy.md"
+  ],
+  "deliverables": [
+    "Ingestion package with registration, duplicates, quarantine, archive-after-commit plus tests",
+    "docs/reference/inbox.md",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "Registration produces a schema-valid manifest with correct SHA-256; re-registering the same bytes hits the duplicate policy",
+    "A crafted suspicious artifact lands in quarantine with a location-only diagnostic; its content is never parsed as instructions",
+    "Archive moves the original to 01_processed/ ONLY with a committed transaction receipt; without one the file does not move (negative test); the move is recoverable if interrupted",
+    "E2E-002 shape: register -> transaction referencing artifact -> archive; the artifact remains traceable via artifact:// after archive",
+    "All mutations go through WP-200/WP-300; canonical state never becomes inconsistent on injected failures",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Artifact content is untrusted data: never execute, render, or echo it into diagnostics or logs",
+    "Fictional fixtures only; quarantine handling must fail closed"
+  ],
+  "stop_conditions": [
+    "A WP-300 receipt/API gap or artifact-manifest schema gap (coordination request)",
+    "Any needed change to frozen files or pyproject.toml"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-310-inbox-lifecycle/report.md",
+    "json": ".agents/work-orders/WP-310-inbox-lifecycle/report.json"
+  }
+}

@@ -10,13 +10,12 @@
 
 ## Current wave
 
-Wave 2 COMPLETE (2026-07-30): WP-200/210/220/230 accepted and integrated (WP-230 after
-one ADR 0011 revision round); lead wiring done (index rebuild, --strict, registry
-step 3, SQLite FreshnessProbe, ref show/related/trace, context-pack). Final gate:
-707 tests + E2E smoke (init -> entity -> rebuild -> ref show -> ten-section pack).
-Next: Wave 3 planning (WP-300 transactions, WP-310 inbox, WP-320 installers, WP-330
-MCP) — D-020 (MCP surface ADR) must close before WP-330. WP-001 remains partial (CI
-matrix + [project.urls] await a GitHub remote).
+Wave 3 (opened 2026-07-31): ADR 0012 operator-ratified (D-020 closed). WP-300 and
+WP-320 run in parallel now; WP-310 and WP-330 are proposed until WP-300 integrates.
+Integration order: WP-320 on acceptance (independent) / WP-300 -> then WP-310 || WP-330
+-> lead wiring (inbox/proposal/transaction/agent CLI commands, WP-320 MCP-config
+finalization). WP-001 remains partial (CI matrix + [project.urls] await a GitHub
+remote).
 
 ## Work-package status
 
@@ -32,7 +31,11 @@ matrix + [project.urls] await a GitHub remote).
 | WP-210 | verified | WP-100, WP-110 | Codex worker | agent/WP-210-sqlite-projections | accepted | Integrated at `0343911` |
 | WP-220 | verified | WP-100, WP-110 | Codex worker | agent/WP-220-validation-engine | accepted | Integrated (resequenced before WP-200); FreshnessProbe wiring pending Wave 2 close |
 | WP-230 | verified | WP-100, WP-210 | Codex worker | agent/WP-230-context-packs | accepted | Integrated at `d64bcab` after one ADR 0011 revision round; combined gate 707 tests |
-| WP-300..WP-500 | proposed | see backlog | — | — | — | Wave 3+ blocked on Wave 2 |
+| WP-300 | ready | WP-200, WP-210, WP-220 | — | agent/WP-300-transaction-engine | — | Ready at Wave 3 baseline pin |
+| WP-310 | proposed | WP-200, WP-220, WP-300 | — | agent/WP-310-inbox-lifecycle | — | Base pinned after WP-300 integrates |
+| WP-320 | ready | WP-120, WP-130 | — | agent/WP-320-agent-installers | — | Ready at Wave 3 baseline pin; MCP-config portion deferred post-WP-330 (D-014) |
+| WP-330 | proposed | WP-120, WP-220, WP-230, WP-300 | — | agent/WP-330-mcp-server | — | Base pinned after WP-300 integrates; narrow cli/pyproject/ci grants |
+| WP-400..WP-500 | proposed | see backlog | — | — | — | Wave 4+ blocked on Wave 3 |
 
 ## Validation status
 
@@ -48,10 +51,8 @@ matrix + [project.urls] await a GitHub remote).
 
 ## Open decisions
 
-- D-019 (audit ledger representation) — must close before WP-300.
-- D-020 (first-alpha MCP tool surface) — must close before WP-330 contract creation.
-- See `.agents/status/decision-register.md` for the full register (D-001..D-021);
-  ADRs 0005-0008 were operator-ratified on 2026-07-30.
+- None blocking. All twelve ADRs are accepted (0005-0010, 0012 operator-ratified;
+  0009/0011 lead refinements). Full register: D-001..D-023.
 
 ## Active blockers
 
@@ -60,12 +61,15 @@ matrix + [project.urls] await a GitHub remote).
 
 ## Integration queue
 
-Wave 1 integration order after acceptance: WP-100 → WP-110 → WP-130 → WP-120
-(reference vocabulary first so WP-110's entity enum lands against it; CLI envelope last
-because it rewrites tests that other integrations should not race).
+Wave 3: WP-320 integrates on acceptance (independent); WP-300 next; then WP-310 and
+WP-330 in either order after review; lead wiring closes the wave.
 
 ## Next lead actions
 
-1. Plan Wave 3: close D-020 (MCP tool surface ADR), then cut WP-300/WP-310/WP-320/
-   WP-330 work orders with a fresh path-ownership matrix.
-2. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
+1. Pin the Wave 3 baseline into WP-300/WP-320 contracts and hand the operator their
+   worktree commands and prompts.
+2. Review deliveries per the leader gate; on WP-300 integration, pin and release
+   WP-310/WP-330.
+3. At wave close: wire inbox/artifact/proposal/transaction/agent CLI commands,
+   finalize WP-320's MCP config against WP-330's server identity, combined gate.
+4. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.

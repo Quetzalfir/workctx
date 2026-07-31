@@ -1,6 +1,6 @@
 # ADR 0012: MCP tool surface for the first alpha
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-07-31
 
 ## Context

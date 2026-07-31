@@ -1,0 +1,125 @@
+{
+  "schema_version": 1,
+  "id": "WP-330-mcp-server",
+  "title": "MCP server implementing the ADR 0012 alpha surface",
+  "status": "proposed",
+  "objective": "workctx mcp serve exposes the exact ADR 0012 tool surface over stdio with the official MCP Python SDK: 11 read tools, 6 approval-gated mutation tools, read-only resources, structured errors reusing the CLI diagnostic codes, strict context scoping, and integration tests.",
+  "business_value": "MCP is the model-neutral boundary that lets any supported agent operate a context (UC-006); the surface is a versioned public contract from day one (risk R-017).",
+  "scope": [
+    "Implement src/workctx/mcp/: a stdio server bound to one context root, registering exactly the ADR 0012 tools with explicit input/output JSON Schemas carrying schema_version 1",
+    "Read tools (context_info, workspace_validate, search, ref_show, ref_related, ref_trace, context_pack, task_list, task_show, inbox_list, audit_summary) delegating to the integrated engines' public APIs; Wave 4 dependents (task enrichment, draft_save) return the structured NOT-IMPLEMENTED error per ADR 0012 sequencing",
+    "Mutation tools (artifact_register, proposal_validate, transaction_dry_run, transaction_apply, index_rebuild, draft_save) requiring approved: true and failing structurally without it; draft_save is NOT-IMPLEMENTED until WP-420",
+    "Structured errors: map engine failures to the CLI diagnostic codes and error categories; no raw tracebacks or secret-looking values cross the boundary",
+    "Read-only resources: canonical entities by workctx:// URI and the context configuration, serialized from canonical files",
+    "Context scoping: every tool call verifies the bound context; cross-context URIs are refused (denial tests per doc-07 MCP section); no tool can escape the context root",
+    "Wire workctx mcp serve [--context] as the single CLI entry point for the server (narrow, explicitly granted cli.py edit)",
+    "Enable the mcp extra for development: add the mcp dependency group wiring to pyproject.toml dev group or CI extras (narrow, explicitly granted; D-016 lifts when your code imports the SDK) and keep the runtime dependency optional (extra), with a clear unavailable-dependency error when the extra is absent",
+    "Document the surface, versioning policy, and client configuration in docs/reference/mcp.md"
+  ],
+  "non_goals": [
+    "No tools beyond ADR 0012; no MCP prompts; no external writes of any kind",
+    "No agent client configuration generation (WP-320's seam is finalized by the lead after you integrate)",
+    "No engine changes anywhere — a needed API gap is a coordination request",
+    "No transports beyond stdio in the alpha"
+  ],
+  "dependencies": [
+    "WP-120",
+    "WP-220",
+    "WP-230",
+    "WP-300"
+  ],
+  "base_commit": "PENDING-WP300-INTEGRATION",
+  "branch": "agent/WP-330-mcp-server",
+  "worktree": ".worktrees/WP-330-mcp-server",
+  "allowed_paths": [
+    "src/workctx/mcp/**",
+    "src/workctx/cli.py",
+    "pyproject.toml",
+    ".github/workflows/ci.yml",
+    "tests/mcp/**",
+    "docs/reference/mcp.md",
+    ".agents/work-orders/WP-330-mcp-server/report.md",
+    ".agents/work-orders/WP-330-mcp-server/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/retrieval/**",
+    "src/workctx/services/**",
+    "src/workctx/transactions/**",
+    "src/workctx/validation/**",
+    "src/workctx/ingestion/**",
+    "src/workctx/resources/**",
+    "schemas/**",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/filesystem/**",
+    "tests/projections/**",
+    "tests/validation_engine/**",
+    "tests/retrieval/**",
+    "tests/transactions/**",
+    "tests/agents_setup/**",
+    "tests/ingestion/**",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    "docs/adr/0012-mcp-tool-surface-alpha.md",
+    ".agents/plan/initial/02-architecture.md",
+    ".agents/plan/initial/07-test-strategy.md",
+    "docs/reference/transactions.md",
+    "docs/reference/context-packs.md",
+    ".agents/status/decision-register.md",
+    ".agents/work-orders/WP-330-mcp-server/context.md",
+    ".agents/work-orders/WP-330-mcp-server/acceptance.md"
+  ],
+  "context_refs": [
+    "docs/reference/cli-envelope.md",
+    "docs/reference/validation-diagnostics.md",
+    "docs/reference/projections.md"
+  ],
+  "deliverables": [
+    "MCP server package implementing the ADR 0012 surface with integration tests against the official SDK",
+    "workctx mcp serve CLI entry point; dev/CI wiring for the mcp extra",
+    "docs/reference/mcp.md",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "Tool discovery lists exactly the ADR 0012 surface with schema_version 1 input/output schemas",
+    "Each implemented read tool returns engine-faithful structured data on a fixture workspace; NOT-IMPLEMENTED tools return the structured placeholder, not absence",
+    "Every mutation tool fails structurally without approved: true and succeeds with it (transaction_apply verified end-to-end against a fixture proposal)",
+    "Cross-context URI and path-escape attempts are refused on every tool (denial tests)",
+    "Errors carry diagnostic codes; no tracebacks or secret-looking values in any tool result (negative test)",
+    "Server runs and shuts down cleanly over stdio in an SDK-client integration test; absent mcp extra yields the clear unavailable-dependency error",
+    "The full validation gate passes with the extra enabled in dev/CI",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "No external writes; no network beyond stdio; evidence and workspace content cross the boundary only through the engines' sanitized outputs",
+    "pyproject.toml and ci.yml edits are limited to enabling the mcp extra for dev/CI — any other change there is forbidden"
+  ],
+  "stop_conditions": [
+    "An engine API gap for an ADR 0012 tool (coordination request)",
+    "The mcp SDK pin (mcp[cli]>=2,<3) failing to resolve or breaking the gate on any supported platform",
+    "Any needed change to the ADR 0012 surface itself (that is an ADR revision, not a worker decision)"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-330-mcp-server/report.md",
+    "json": ".agents/work-orders/WP-330-mcp-server/report.json"
+  }
+}
