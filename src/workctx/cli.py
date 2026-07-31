@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import TYPE_CHECKING, Annotated, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from workctx.adapters.sqlite import SQLiteProjection
+    from workctx.retrieval.records import ResolutionResult
 
 import typer
 from pydantic import JsonValue, ValidationError
@@ -35,6 +41,8 @@ context_app = typer.Typer(help="Create, inspect, and validate isolated contexts.
 app.add_typer(context_app, name="context")
 index_app = typer.Typer(help="Manage rebuildable derived indexes.")
 app.add_typer(index_app, name="index")
+ref_app = typer.Typer(help="Resolve, traverse, and trace canonical references.")
+app.add_typer(ref_app, name="ref")
 
 
 @app.command()
@@ -274,6 +282,235 @@ def _validate_context(
         emit_success(result=result, context_id=report.context_id, warnings=warnings)
     else:
         _render_validation(report, serialized_issues)
+
+
+@ref_app.command("show")
+def ref_show(
+    uri: Annotated[str, typer.Argument(help="Canonical workctx://, artifact://, or repo:// URI.")],
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Resolve a canonical reference to its projected record."""
+    from workctx.retrieval import resolve
+
+    begin_command("ref.show", json_output=json_output)
+    reader = _projection_reader(context_path)
+    resolution = _retrieval_call(lambda: resolve(reader, uri))
+    result: dict[str, JsonValue] = {"resolution": _resolution_payload(resolution)}
+    if not resolution.found:
+        record_failure(
+            result=result,
+            context_id=reader.context_id,
+            errors=[CliDiagnostic(code="REF-NOT-FOUND", message="Reference did not resolve.")],
+        )
+        raise UserCorrectableError("Reference did not resolve.")
+    if json_output:
+        emit_success(result=result, context_id=reader.context_id)
+    else:
+        output_console.print(Text(f"{resolution.reference}: {resolution.status.value}"))
+
+
+@ref_app.command("related")
+def ref_related(
+    uri: Annotated[str, typer.Argument(help="Canonical workctx:// URI.")],
+    depth: Annotated[int, typer.Option("--depth", min=0, help="Traversal depth.")] = 1,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Traverse typed relations around a reference."""
+    from workctx.retrieval import related
+
+    begin_command("ref.related", json_output=json_output)
+    reader = _projection_reader(context_path)
+    outcome = _retrieval_call(lambda: related(reader, uri, depth=depth))
+    result: dict[str, JsonValue] = {
+        "focal": _resolution_payload(outcome.focal),
+        "depth": outcome.max_depth,
+        "direction": outcome.direction.value,
+        "nodes": [
+            {
+                "depth": node.depth,
+                "reference": node.reference,
+            }
+            for node in outcome.nodes
+        ],
+        "edges": [
+            {
+                "depth": edge.depth,
+                "direction": edge.direction.value,
+                "source": str(edge.edge.source_uri),
+                "relation": edge.edge.relation.value,
+                "target": edge.edge.target,
+            }
+            for edge in outcome.edges
+        ],
+    }
+    if json_output:
+        emit_success(result=result, context_id=reader.context_id)
+    else:
+        output_console.print(
+            Text(f"{len(outcome.nodes)} related nodes, {len(outcome.edges)} edges")
+        )
+
+
+@ref_app.command("trace")
+def ref_trace(
+    uri: Annotated[str, typer.Argument(help="Canonical workctx:// URI.")],
+    include_history: Annotated[
+        bool, typer.Option("--history", help="Include superseded claims.")
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Trace a reference through claims and observations to source locators."""
+    from workctx.retrieval import trace
+
+    begin_command("ref.trace", json_output=json_output)
+    reader = _projection_reader(context_path)
+    outcome = _retrieval_call(lambda: trace(reader, uri, include_history=include_history))
+    result: dict[str, JsonValue] = {
+        "focal": _resolution_payload(outcome.focal),
+        "claims": [
+            {
+                "id": claim.id,
+                "subject": str(claim.subject),
+                "predicate": claim.predicate,
+                "status": claim.status.value,
+            }
+            for claim in outcome.claims
+        ],
+        "observations": [
+            {
+                "id": traced.observation.id,
+                "source_ref": str(traced.source_ref),
+                "locator_type": traced.locator.type,
+                "referenced_by": list(traced.referenced_by),
+            }
+            for traced in outcome.observations
+        ],
+        "missing_observations": [
+            {
+                "reference": missing.reference,
+                "reason": missing.reason.value,
+                "referenced_by": list(missing.referenced_by),
+            }
+            for missing in outcome.missing_observations
+        ],
+    }
+    if json_output:
+        emit_success(result=result, context_id=reader.context_id)
+    else:
+        output_console.print(
+            Text(
+                f"{len(outcome.claims)} claims, {len(outcome.observations)} observations, "
+                f"{len(outcome.missing_observations)} missing"
+            )
+        )
+
+
+@app.command("context-pack")
+def context_pack(
+    uri: Annotated[str, typer.Argument(help="Focal canonical workctx:// URI.")],
+    budget: Annotated[int, typer.Option("--budget", min=0, help="Pack budget in units.")] = 12000,
+    query: Annotated[str | None, typer.Option("--query", help="Ranking query hint.")] = None,
+    include_history: Annotated[
+        bool, typer.Option("--history", help="Include superseded claim history.")
+    ] = False,
+    include_architecture: Annotated[
+        bool, typer.Option("--architecture", help="Include one-hop architecture entities.")
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Build a bounded, traceable context pack for a focal entity."""
+    import json as json_module
+
+    from workctx.retrieval import build_pack, serialize_context_pack
+
+    begin_command("context-pack", json_output=json_output)
+    reader = _projection_reader(context_path)
+    outcome = _retrieval_call(
+        lambda: build_pack(
+            reader,
+            uri,
+            budget=budget,
+            query=query,
+            include_history=include_history,
+            include_architecture=include_architecture,
+        )
+    )
+    if not outcome.built or outcome.pack is None:
+        message = sanitize_message(outcome.message or "Context pack could not be built.")
+        record_failure(
+            result={"reference": outcome.reference, "status": outcome.status.value},
+            context_id=reader.context_id,
+            errors=[CliDiagnostic(code="PACK-NOT-BUILT", message=message)],
+        )
+        raise UserCorrectableError(message)
+
+    pack_payload = cast(
+        "dict[str, JsonValue]", json_module.loads(serialize_context_pack(outcome.pack))
+    )
+    result: dict[str, JsonValue] = {"pack": pack_payload}
+    if json_output:
+        emit_success(result=result, context_id=reader.context_id)
+    else:
+        truncation = outcome.pack.sections.budget_and_truncation
+        output_console.print(
+            Text(
+                f"Pack for {outcome.reference}: {truncation.used_units}/"
+                f"{truncation.requested_units} units"
+            )
+        )
+
+
+def _projection_reader(context_path: Path | None) -> SQLiteProjection:
+    from workctx.adapters.sqlite import SQLiteProjection
+
+    root = resolve_cli_context(explicit_path=context_path)
+    return SQLiteProjection(root)
+
+
+def _retrieval_call[T](operation: Callable[[], T]) -> T:
+    try:
+        return operation()
+    except ValueError as exc:
+        raise UserCorrectableError(sanitize_message(str(exc))) from exc
+
+
+def _resolution_payload(resolution: ResolutionResult) -> dict[str, JsonValue]:
+    record = resolution.record
+    payload: dict[str, JsonValue] = {
+        "reference": resolution.reference,
+        "status": resolution.status.value,
+    }
+    if record is not None:
+        payload["record"] = {
+            "id": record.id,
+            "uri": str(record.uri),
+            "kind": type(record).__name__.removesuffix("Record").lower(),
+        }
+    return payload
 
 
 def _render_doctor(checks: list[DoctorCheck]) -> None:
