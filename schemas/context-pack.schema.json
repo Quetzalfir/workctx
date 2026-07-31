@@ -1,0 +1,462 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/context-pack.schema.json",
+  "title": "Deterministic context pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "context_id",
+    "focal_uri",
+    "source_updated_at",
+    "source_fingerprint",
+    "query",
+    "include_history",
+    "include_architecture",
+    "sections"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "context_id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "focal_uri": {
+      "$ref": "#/$defs/workctxUri"
+    },
+    "source_updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "query": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "include_history": {
+      "type": "boolean"
+    },
+    "include_architecture": {
+      "type": "boolean"
+    },
+    "sections": {
+      "$ref": "#/$defs/contextPackSections"
+    }
+  },
+  "$defs": {
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "rankingFactorInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "rankTotalInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10000
+    },
+    "workctxUri": {
+      "type": "string",
+      "pattern": "^workctx://[a-z0-9]+(?:-[a-z0-9]+)*/(?:evidence|person|team|project|system|service|module|flow|integration|decision|risk|question|task|claim|draft|investigation|incident|observation|artifact)/(?!(?:\\.|%2[eE]){1,2}$)(?!.*%(?:2F|5C))(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$"
+    },
+    "rankMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relation_semantics",
+        "recency",
+        "current_state",
+        "confidence",
+        "directness",
+        "query_match",
+        "entity_importance",
+        "source_quality",
+        "total"
+      ],
+      "properties": {
+        "relation_semantics": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "recency": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "current_state": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "confidence": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "directness": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "query_match": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "entity_importance": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "source_quality": {
+          "$ref": "#/$defs/rankingFactorInteger"
+        },
+        "total": {
+          "$ref": "#/$defs/rankTotalInteger"
+        }
+      }
+    },
+    "packItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "uri",
+        "title",
+        "summary",
+        "data",
+        "rank"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "evidence",
+            "person",
+            "team",
+            "project",
+            "system",
+            "service",
+            "module",
+            "flow",
+            "integration",
+            "decision",
+            "risk",
+            "question",
+            "task",
+            "claim",
+            "draft",
+            "investigation",
+            "incident",
+            "observation",
+            "artifact",
+            "relationship",
+            "dependency",
+            "interaction",
+            "status_history"
+          ]
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "allOf": [
+                {
+                  "$ref": "reference.schema.json#/properties/target"
+                },
+                {
+                  "if": {
+                    "pattern": "^workctx://"
+                  },
+                  "then": {
+                    "$ref": "#/$defs/workctxUri"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/rankMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "packSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "omitted_count"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packItem"
+          }
+        },
+        "omitted_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        }
+      }
+    },
+    "focalPackSection": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/packSection"
+        },
+        {
+          "properties": {
+            "items": {
+              "minItems": 1,
+              "maxItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "packSectionName": {
+      "enum": [
+        "focal_entity",
+        "claims_and_status_history",
+        "direct_relationships",
+        "source_observations",
+        "related_tasks_and_dependencies",
+        "people_and_interactions",
+        "decisions_risks_and_questions",
+        "contradictory_or_superseding_evidence",
+        "architecture_entities"
+      ]
+    },
+    "omittedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section",
+        "item_id",
+        "units",
+        "reason"
+      ],
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/packSectionName"
+        },
+        "item_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "units": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "budgetAndTruncation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_units",
+        "used_units",
+        "minimum_units",
+        "unit",
+        "truncated",
+        "within_budget",
+        "over_budget_by",
+        "omitted_count",
+        "omitted_items"
+      ],
+      "properties": {
+        "requested_units": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "used_units": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "minimum_units": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "unit": {
+          "type": "string",
+          "const": "approx_tokens_chars_div_4"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "within_budget": {
+          "type": "boolean"
+        },
+        "over_budget_by": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "omitted_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "omitted_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/omittedItem"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "truncated": {
+                "const": false
+              }
+            },
+            "required": [
+              "truncated"
+            ]
+          },
+          "then": {
+            "properties": {
+              "omitted_count": {
+                "const": 0
+              },
+              "omitted_items": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "truncated": {
+                "const": true
+              }
+            },
+            "required": [
+              "truncated"
+            ]
+          },
+          "then": {
+            "properties": {
+              "omitted_count": {
+                "minimum": 1
+              },
+              "omitted_items": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "within_budget": {
+                "const": true
+              }
+            },
+            "required": [
+              "within_budget"
+            ]
+          },
+          "then": {
+            "properties": {
+              "over_budget_by": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "within_budget": {
+                "const": false
+              }
+            },
+            "required": [
+              "within_budget"
+            ]
+          },
+          "then": {
+            "properties": {
+              "over_budget_by": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "contextPackSections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "focal_entity",
+        "claims_and_status_history",
+        "direct_relationships",
+        "source_observations",
+        "related_tasks_and_dependencies",
+        "people_and_interactions",
+        "decisions_risks_and_questions",
+        "contradictory_or_superseding_evidence",
+        "architecture_entities",
+        "budget_and_truncation"
+      ],
+      "properties": {
+        "focal_entity": {
+          "$ref": "#/$defs/focalPackSection"
+        },
+        "claims_and_status_history": {
+          "$ref": "#/$defs/packSection"
+        },
+        "direct_relationships": {
+          "$ref": "#/$defs/packSection"
+        },
+        "source_observations": {
+          "$ref": "#/$defs/packSection"
+        },
+        "related_tasks_and_dependencies": {
+          "$ref": "#/$defs/packSection"
+        },
+        "people_and_interactions": {
+          "$ref": "#/$defs/packSection"
+        },
+        "decisions_risks_and_questions": {
+          "$ref": "#/$defs/packSection"
+        },
+        "contradictory_or_superseding_evidence": {
+          "$ref": "#/$defs/packSection"
+        },
+        "architecture_entities": {
+          "$ref": "#/$defs/packSection"
+        },
+        "budget_and_truncation": {
+          "$ref": "#/$defs/budgetAndTruncation"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,101 @@
+"""Typed deterministic retrieval and context-pack application APIs."""
+
+from workctx.retrieval.builder import (
+    DEFAULT_BUDGET_UNITS,
+    PackBuildResult,
+    PackBuildStatus,
+    ProjectionChangedError,
+    build_pack,
+    estimate_pack_item_units,
+)
+from workctx.retrieval.graph import related
+from workctx.retrieval.models import (
+    BudgetAndTruncation,
+    ContextPack,
+    ContextPackSections,
+    OmittedItem,
+    PackItem,
+    PackItemKind,
+    PackSection,
+    PackSectionName,
+    RankMetadata,
+)
+from workctx.retrieval.protocols import ProjectionReader
+from workctx.retrieval.ranking import (
+    RANKING_FACTOR_WEIGHTS,
+    RankedCandidate,
+    RankingCandidate,
+    RankingFactors,
+    rank,
+    score_candidate,
+)
+from workctx.retrieval.records import (
+    ArtifactReferenceDescriptor,
+    EdgeDirection,
+    MissingObservation,
+    MissingObservationReason,
+    ReferenceKind,
+    RelatedNode,
+    RelatedResult,
+    RepoReferenceDescriptor,
+    ResolutionResult,
+    ResolutionStatus,
+    TracedObservation,
+    TraceResult,
+    TraversalDirection,
+    TraversedEdge,
+    WorkctxReferenceDescriptor,
+)
+from workctx.retrieval.references import (
+    ContextBoundaryError,
+    ResolvableReference,
+    resolve,
+)
+from workctx.retrieval.serialization import serialize_context_pack
+from workctx.retrieval.tracing import trace
+
+__all__ = [
+    "DEFAULT_BUDGET_UNITS",
+    "RANKING_FACTOR_WEIGHTS",
+    "ArtifactReferenceDescriptor",
+    "BudgetAndTruncation",
+    "ContextBoundaryError",
+    "ContextPack",
+    "ContextPackSections",
+    "EdgeDirection",
+    "MissingObservation",
+    "MissingObservationReason",
+    "OmittedItem",
+    "PackBuildResult",
+    "PackBuildStatus",
+    "PackItem",
+    "PackItemKind",
+    "PackSection",
+    "PackSectionName",
+    "ProjectionChangedError",
+    "ProjectionReader",
+    "RankMetadata",
+    "RankedCandidate",
+    "RankingCandidate",
+    "RankingFactors",
+    "ReferenceKind",
+    "RelatedNode",
+    "RelatedResult",
+    "RepoReferenceDescriptor",
+    "ResolutionResult",
+    "ResolutionStatus",
+    "ResolvableReference",
+    "TraceResult",
+    "TracedObservation",
+    "TraversalDirection",
+    "TraversedEdge",
+    "WorkctxReferenceDescriptor",
+    "build_pack",
+    "estimate_pack_item_units",
+    "rank",
+    "related",
+    "resolve",
+    "score_candidate",
+    "serialize_context_pack",
+    "trace",
+]
