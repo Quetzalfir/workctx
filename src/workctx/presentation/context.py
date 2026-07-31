@@ -29,5 +29,21 @@ def resolve_cli_context(
     try:
         return resolve_context_root(discovery_start or Path.cwd())
     except ContextNotFoundError as exc:
-        # WP-200 inserts the user-registry lookup between ancestor discovery and this failure.
+        active = _active_registry_context()
+        if active is not None:
+            return active
         raise ContextNotFoundError(_NOT_FOUND_MESSAGE) from exc
+
+
+def _active_registry_context() -> Path | None:
+    """Doc-04 resolution step 3: the active context from the user-level registry."""
+
+    from workctx.adapters.filesystem.registry import ContextRegistry, RegistryError
+
+    try:
+        active = ContextRegistry().get_active()
+        if active is None:
+            return None
+        return resolve_context_root(active)
+    except (RegistryError, ContextNotFoundError):
+        return None

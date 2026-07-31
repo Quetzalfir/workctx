@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-230-context-packs",
   "title": "Retrieval and context packs",
-  "status": "proposed",
+  "status": "ready",
   "objective": "Reference resolution, typed-relation traversal, source tracing, ranked retrieval, and budgeted context-pack assembly work over the SQLite projection and canonical files, serialized against a public context-pack schema.",
   "business_value": "Context packs are the product's core promise — a fresh agent session recovering precise, traceable operational context (UC-002, UC-004, the doc-00 success signal).",
   "scope": [
@@ -25,7 +25,7 @@
     "WP-100",
     "WP-210"
   ],
-  "base_commit": "PENDING-WP210-INTEGRATION",
+  "base_commit": "0343911bfffe1faed359d743091f4e1e13039c22",
   "branch": "agent/WP-230-context-packs",
   "worktree": ".worktrees/WP-230-context-packs",
   "allowed_paths": [
