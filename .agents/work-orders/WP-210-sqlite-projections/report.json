@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-210-sqlite-projections",
+  "status": "completed",
+  "summary": "Implemented the context-bound SQLite/FTS5 projection adapter with versioned full rebuilds, atomic replacement, typed queries, strict isolation, documented semantics, and 41 projection tests; the complete 392-test repository gate passes.",
+  "base_commit": "cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab",
+  "final_commit": "c23db02992b4e31eceb5dc8f6f1eaca2eb0e1de7",
+  "files_changed": [
+    "docs/reference/projections.md",
+    "src/workctx/adapters/sqlite/__init__.py",
+    "src/workctx/adapters/sqlite/models.py",
+    "src/workctx/adapters/sqlite/projection.py",
+    "src/workctx/adapters/sqlite/schema.py",
+    "tests/projections/__init__.py",
+    "tests/projections/support.py",
+    "tests/projections/test_isolation_and_swap.py",
+    "tests/projections/test_queries.py",
+    "tests/projections/test_rebuild.py",
+    ".agents/work-orders/WP-210-sqlite-projections/report.md",
+    ".agents/work-orders/WP-210-sqlite-projections/report.json"
+  ],
+  "behavior_implemented": [
+    "Added projection metadata and a versioned schema for entities, aliases, tags, typed edges, derived backlinks, observations, claims, tasks, and external-content FTS5.",
+    "Added explicit and compatibility-triggered full rebuilds with deterministic canonical scanning, sanitized document-level skips, integrity checks, temporary build, reader gating, and atomic replacement.",
+    "Added frozen typed records and context-bound query APIs for exact resolution, aliases, traversal, observation provenance, claim history, task filters, metadata, and ranked literal search.",
+    "Added UTC timestamp normalization, nested JSON and locator round trips, percent-encoded observation ID handling, and unicode61-aligned query tokenization.",
+    "Added fail-closed context guards and containment checks for canonical zones, local references, configuration, state, database, temporary files, and SQLite sidecars.",
+    "Added 41 projection tests covering all rebuild triggers, equivalence, malformed and duplicate documents, context denial, backlinks, FTS, concurrency, schema damage, sidecars, and symlink/path races."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "220 files already formatted."
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 35 source files."
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "392 passed in 24.56 seconds."
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "passed",
+      "result": "Exit code 0; no whitespace errors before the implementation commit."
+    }
+  ],
+  "assumptions": [
+    "Projection schema version 1 is the first adapter schema and future incompatibilities rebuild fully under ADR 0007.",
+    "Canonical Markdown and YAML remain the sole source of truth; the projection never modifies canonical inputs.",
+    "Cross-process writer serialization is supplied by the later WP-200/WP-300 integration boundary.",
+    "Incremental freshness policy remains WP-300 scope; this delivery provides explicit and compatibility-triggered full rebuilds."
+  ],
+  "decisions": [
+    "Use stdlib sqlite3 with DELETE journal mode for self-contained temporary builds and FTS5 unicode61 remove_diacritics 2 for full text.",
+    "Derive backlinks as a view over outbound edges so the two directions cannot drift.",
+    "Use short-lived private read-only connections and a process-local reader/swap gate; composite document lookup uses one connection snapshot.",
+    "Refuse unsafe, busy, orphaned, malformed, or symbolic-link SQLite sidecars instead of risking a new-main/stale-sidecar pairing.",
+    "Treat missing required tables, views, indexes, context guards, or FTS usability as an incompatible projection requiring full rebuild."
+  ],
+  "deviations": [
+    "No implementation scope or path deviation.",
+    "The frozen contract still contains status proposed and base_commit PENDING-WAVE2-BASELINE; the direct assignment and existing Wave 2 head cf9ebabf10d565bb0eef0d8f686ebada3cdd34ab were used without editing frozen contract files."
+  ],
+  "security_considerations": [
+    "All fixtures are fictional, and sanitized skip diagnostics never echo source content.",
+    "Context rows, structured references, queries, canonical zones, configuration, state, database, temporary files, and sidecars are constrained to the bound context and covered by denial tests.",
+    "Canonical inputs are parsed only through workctx.domain.frontmatter and the integrated domain models.",
+    "FTS5 absence and unsafe replacement conditions fail with typed errors while preserving the prior database or leaving no partial database."
+  ],
+  "migration_considerations": [
+    "Projection or workspace schema mismatch triggers full canonical rebuild; projection tables are never migrated in place.",
+    "Deleting index.sqlite3 and rebuilding restores equivalent typed query results."
+  ],
+  "unresolved": [
+    "Cross-process rebuild and canonical-write serialization remains for the filesystem/transaction integration; path revalidation and exact-identity cleanup bound, but cannot portably eliminate, every hostile concurrent rename interval.",
+    "Incremental projection freshness after canonical mutations remains WP-300 scope."
+  ],
+  "recommended_next_action": "Implementation lead: inspect commit c23db02992b4e31eceb5dc8f6f1eaca2eb0e1de7, validate these reports, rerun the full four-command gate, and integrate WP-210 before WP-230 begins."
+}
