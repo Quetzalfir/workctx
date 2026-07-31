@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-200-canonical-store",
+  "status": "completed",
+  "summary": "Implemented the ADR 0005/0009 deterministic serializer, typed zone-aware CanonicalStore, full ADR 0006 nonce-fenced lock and staged recovery primitives, and concurrency-safe user-level context registry with comprehensive failure-injection tests and documentation.",
+  "base_commit": "a066d87b6510cb97932021b25d7635f3c326bef5",
+  "final_commit": "d664f73cecc5e331b04b5fa594c5f729a9eb0e46",
+  "files_changed": [
+    "src/workctx/adapters/filesystem/__init__.py",
+    "src/workctx/adapters/filesystem/_paths.py",
+    "src/workctx/adapters/filesystem/lock.py",
+    "src/workctx/adapters/filesystem/registry.py",
+    "src/workctx/adapters/filesystem/serialization.py",
+    "src/workctx/adapters/filesystem/staging.py",
+    "src/workctx/adapters/filesystem/store.py",
+    "src/workctx/services/contexts.py",
+    "tests/filesystem/__init__.py",
+    "tests/filesystem/fixtures/canonical-entity.md",
+    "tests/filesystem/test_lock.py",
+    "tests/filesystem/test_registry.py",
+    "tests/filesystem/test_serialization.py",
+    "tests/filesystem/test_staging.py",
+    "tests/filesystem/test_store.py",
+    "docs/reference/canonical-store.md",
+    ".agents/work-orders/WP-200-canonical-store/report.md",
+    ".agents/work-orders/WP-200-canonical-store/report.json"
+  ],
+  "behavior_implemented": [
+    "Added byte-deterministic UTF-8/LF YAML, JSON, and Markdown serialization with declaration-order model fields, recursively sorted free-form mappings, ADR 0009 null/omit behavior, shared frontmatter parsing, golden bytes, and exact hand-edit detection.",
+    "Added a typed CanonicalStore for context configs, entities, tasks, and artifact manifests with explicit context-zone, suffix, identity, traversal, nested-context, symlink, and junction boundaries.",
+    "Implemented exclusive nonce lock acquisition, atomic heartbeat, stale takeover with preserved evidence, fencing, bounded PermissionError handling, and a crash-recoverable file-only mutation guard.",
+    "Implemented fsynced staged postimages and preimage backups, a durable ordered intent, exact hash and fence checks on every retry, completion and rollback recovery, audit-gated finalizers, and read-only recovery classification.",
+    "Added sorted and idempotent user registry APIs with explicit active selection, atomic persistence, duplicate-key rejection, crash-released advisory locking, and rejection of storage inside any context.",
+    "Routed the private context bootstrap writer through the canonical serializer without changing frozen public signatures and documented the complete WP-200-owned runtime layout."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "226 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 38 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "484 passed in 26.25s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/filesystem -q",
+      "status": "passed",
+      "result": "133 passed in 22.30s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/filesystem/test_lock.py -q",
+      "status": "passed",
+      "result": "29 passed in 6.32s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/filesystem/test_staging.py -q",
+      "status": "passed",
+      "result": "32 passed in 7.51s"
+    },
+    {
+      "command": ".venv\\Scripts\\python.exe -m pytest tests/filesystem/test_registry.py -q",
+      "status": "passed",
+      "result": "22 passed in 4.15s"
+    },
+    {
+      "command": "uv run python -c \"import json; from pathlib import Path; from jsonschema import Draft202012Validator; root = Path('.'); schema = json.loads((root / '.agents/plan/initial/agent-report.schema.json').read_text(encoding='utf-8')); report = json.loads((root / '.agents/work-orders/WP-200-canonical-store/report.json').read_text(encoding='utf-8')); Draft202012Validator(schema).validate(report); print('WP-200 report.json validates against agent-report.schema.json')\"",
+      "status": "passed",
+      "result": "WP-200 report.json validates against agent-report.schema.json"
+    }
+  ],
+  "assumptions": [
+    "The operator's explicit assignment authorized execution on the supplied ready branch at a066d87, a direct child of the contract-declared cf9ebab base.",
+    "The Codex-managed physical worktree was the assigned worktree because it used the required agent/WP-200-canonical-store branch.",
+    "Local NTFS semantics are covered directly; POSIX directory fsync remains best effort and SMB/NFS receive no stronger Phase 1 guarantee."
+  ],
+  "decisions": [
+    "Use unique Lamport bakery choosing/ticket files under owned 98_state/staging to serialize all lock.json mutations without a SQLite or third-party correctness dependency.",
+    "Retire persistently unremovable unique guard artifacts with per-artifact cancellation markers and reap guard-before-marker when availability returns.",
+    "Retain transaction-local preimage backups and reconstruct consumed postimages atomically so interrupted rollback remains resumable.",
+    "Keep a successful intent durable until the future WP-300 audit workflow invokes the appropriate verified finalizer.",
+    "Keep caller-supplied registry paths for isolated configurations and tests while enforcing that every such path resolves outside all context roots."
+  ],
+  "deviations": [
+    "The supplied branch started at a066d87 rather than the contract-declared cf9ebab; a066d87 is the lead-owned Wave 2 activation/status commit, and the worker implementation is isolated in d664f73 for review or cherry-pick.",
+    "The physical Codex-managed worktree path differs from the nominal .worktrees/WP-200-canonical-store path while the required branch was used.",
+    "No objective, architecture, frozen-signature, dependency, or worker-owned path deviation was made."
+  ],
+  "security_considerations": [
+    "Canonical, runtime, and registry paths fail closed on traversal, absolute paths, unsafe links, reparse points, nested contexts, cross-zone resolution, malformed state, and duplicate JSON keys.",
+    "Nonce fencing and exact preimage, postimage, and staged-source hashes are revalidated at commit-sensitive points and before every replacement retry.",
+    "Stale takeover preserves displaced lock evidence; recovery inspection is non-mutating and unsafe or dangling intent leaves are invalid rather than clean.",
+    "Fixtures are fictional; no secrets, network access, SQLite paths, CLI wiring, or external writes were introduced."
+  ],
+  "migration_considerations": [
+    "This is an additive schema-version-1 adapter and runtime layout with no canonical data migration.",
+    "Domain models, public schemas, CLI presentation, SQLite projections, and the audit representation remain unchanged.",
+    "98_state/backups remains reserved for the ADR 0007 migration flow and WP-200 creates no migration archives."
+  ],
+  "unresolved": [
+    "The lead should reconcile or explicitly accept the cf9ebab versus a066d87 administrative base boundary during integration; there are no implementation blockers."
+  ],
+  "recommended_next_action": "Lead review d664f73 and the report commit, resolve the administrative base boundary, re-run the full validation gate, and integrate WP-200 for WP-210/WP-300 consumers."
+}
