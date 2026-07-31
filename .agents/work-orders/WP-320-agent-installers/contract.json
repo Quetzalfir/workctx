@@ -25,7 +25,7 @@
     "WP-120",
     "WP-130"
   ],
-  "base_commit": "PENDING-WAVE3-BASELINE",
+  "base_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
   "branch": "agent/WP-320-agent-installers",
   "worktree": ".worktrees/WP-320-agent-installers",
   "allowed_paths": [

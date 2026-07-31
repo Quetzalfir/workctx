@@ -26,7 +26,7 @@
     "WP-210",
     "WP-220"
   ],
-  "base_commit": "PENDING-WAVE3-BASELINE",
+  "base_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
   "branch": "agent/WP-300-transaction-engine",
   "worktree": ".worktrees/WP-300-transaction-engine",
   "allowed_paths": [

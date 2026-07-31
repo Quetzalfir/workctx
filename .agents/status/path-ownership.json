@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "wave": 3,
-  "baseline_commit": "PENDING-WAVE3-BASELINE",
+  "baseline_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
   "notes": [
     "Wave 1 and 2 assignments are historical; see Git history of this file and the integration log.",
     "Sequencing: WP-300 and WP-320 run in parallel now (disjoint). WP-310 and WP-330 start after WP-300 integrates (their base is pinned then) and may run in parallel with each other (disjoint).",
