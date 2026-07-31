@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workctx.dev/schemas/context-pack.schema.json",
   "title": "Deterministic context pack",
+  "description": "Draft 2020-12 validation is necessary but not sufficient. Producer invariants outside this structural schema are: focal_uri belongs to context_id; used_units equals the documented cost of included items; minimum_units equals the compact focal-item cost; minimum_units does not exceed used_units; within_budget is true if and only if used_units <= requested_units; over_budget_by equals max(0, used_units - requested_units); budget_and_truncation.omitted_count equals the length of omitted_items; every section omitted_count equals the count of omission records naming that section and section counts sum to the total; omission identities, units, and order follow the documented deterministic budget algorithm; and ranking producers compute rank.total from the documented weighted factors. Pydantic enforces the relational context, budget, and omission-count invariants. Producer code enforces exact cost, omission, and rank calculations. Serialized rank.total is authoritative for consumers and is range-checked but not recomputed.",
   "type": "object",
   "additionalProperties": false,
   "required": [

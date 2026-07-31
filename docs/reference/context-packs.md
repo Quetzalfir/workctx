@@ -54,7 +54,9 @@ metadata; exception text and source content are not copied into the result.
 
 Every ranking factor is an integer from 0 through 100. The final score is the weighted
 sum `sum(factor * weight)`, from 0 through 10,000. There is no division after
-weighting.
+weighting. The built-in producer computes this relation before serialization. Once
+serialized, `rank.total` is authoritative for ordering: consumers range-check and use
+the serialized value rather than recomputing it from the explanatory factor vector.
 
 | Factor | Weight | Definition |
 | --- | ---: | --- |
@@ -209,10 +211,38 @@ assignments, bearer tokens, secret-named JSON fields, and private-key material. 
 durable source references and typed locator structure remain exact. Invalid authored
 references are exposed only through guarded metadata and a digest-based synthetic item ID.
 
+## Validation boundary
+
 The Pydantic contract and `schemas/context-pack.schema.json` are independently maintained
-per ADR 0008. Positive fixtures round-trip through both, and negative fixtures must be
-rejected by both. JSON Schema 2020-12 has no standard instance-data equality operator, so
-two relational invariants are additionally enforced by the typed application model:
-`focal_uri` belongs to `context_id`, and budget/count fields agree arithmetically with
-their related fields and arrays. Builders always construct and validate the model before
-serialization.
+under ADR 0008 and ADR 0011. Schema validation is necessary but not sufficient.
+Structural constraints expressible in standard JSON Schema Draft 2020-12 use negative
+fixtures that both the schema and model reject.
+
+The following relations are producer invariants because standard Draft 2020-12 cannot
+compare arbitrary sibling values, perform arithmetic, bind an array length to another
+property, or count array members by a discriminator:
+
+- `focal_uri` belongs to `context_id`;
+- `minimum_units <= used_units`;
+- `within_budget` equals `used_units <= requested_units`;
+- `over_budget_by` equals `max(0, used_units - requested_units)`;
+- `omitted_count` equals the number of `omitted_items`;
+- each section's `omitted_count` equals the number of omitted items naming that section,
+  and all section counts sum to the total.
+
+These relations are enforced by the Pydantic model and negatively tested with
+schema-valid producer-invariant fixtures. The builder additionally guarantees exact item
+cost accounting and deterministic omission order; removed item bodies are absent from a
+serialized pack, so a consumer cannot reconstruct those guarantees from the document
+alone.
+
+The weighted `rank.total` relation is also a producer invariant. Ranking and builder tests
+verify that producers compute it from the documented weights. The serialized total is
+authoritative for consumers and is intentionally not recomputed by the schema or Pydantic
+model.
+
+No reasonable standard representation preserves the current public contract while moving
+these relations into Draft 2020-12. Removing `context_id`, derived budget fields, omission
+counts, the factor vector, or the total could eliminate individual comparisons, but each
+would be a backward-incompatible representation redesign. Non-standard `$data` references
+and vendor keywords are prohibited by ADR 0011.

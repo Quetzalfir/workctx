@@ -9,13 +9,17 @@ from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 from referencing import Registry, Resource
 
+from workctx.retrieval import RANKING_FACTOR_WEIGHTS
 from workctx.retrieval.models import ContextPack, PackItemKind, PackSectionName
 
 ROOT = Path(__file__).parents[2]
 SCHEMA_ROOT = ROOT / "schemas"
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "context-pack"
 POSITIVE_FIXTURES = sorted((FIXTURE_ROOT / "positive").glob("*.json"))
-NEGATIVE_FIXTURES = sorted((FIXTURE_ROOT / "negative").glob("*.json"))
+STRUCTURAL_NEGATIVE_FIXTURES = sorted((FIXTURE_ROOT / "negative" / "structural").glob("*.json"))
+PRODUCER_INVARIANT_FIXTURES = sorted(
+    (FIXTURE_ROOT / "negative" / "producer-invariant").glob("*.json")
+)
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -46,7 +50,7 @@ def _budget(payload: dict[str, Any]) -> dict[str, Any]:
 
 def test_context_pack_fixture_sets_are_complete() -> None:
     assert {path.stem for path in POSITIVE_FIXTURES} == {"complete", "minimal"}
-    assert {path.stem for path in NEGATIVE_FIXTURES} == {
+    assert {path.stem for path in STRUCTURAL_NEGATIVE_FIXTURES} == {
         "extra-field",
         "fractional-budget",
         "inconsistent-truncation",
@@ -57,10 +61,37 @@ def test_context_pack_fixture_sets_are_complete() -> None:
         "numeric-string-budget",
         "wrong-schema-version",
     }
+    assert {path.stem for path in PRODUCER_INVARIANT_FIXTURES} == {
+        "focal-context-mismatch",
+        "minimum-exceeds-used",
+        "omitted-count-mismatch",
+        "over-budget-arithmetic-mismatch",
+        "section-omission-mismatch",
+        "within-budget-mismatch",
+    }
 
 
 def test_context_pack_schema_is_valid_draft_2020_12() -> None:
     Draft202012Validator.check_schema(SCHEMAS["context-pack.schema.json"])
+
+
+def test_schema_discloses_adr_0011_producer_invariants() -> None:
+    description = cast(str, SCHEMAS["context-pack.schema.json"]["description"])
+
+    for required_disclosure in (
+        "validation is necessary but not sufficient",
+        "focal_uri belongs to context_id",
+        "used_units equals the documented cost of included items",
+        "minimum_units does not exceed used_units",
+        "within_budget is true if and only if",
+        "over_budget_by equals",
+        "budget_and_truncation.omitted_count equals the length of omitted_items",
+        "every section omitted_count equals",
+        "omission identities, units, and order",
+        "ranking producers compute rank.total",
+        "rank.total is authoritative",
+    ):
+        assert required_disclosure in description
 
 
 def test_section_and_item_vocabularies_match_the_schema() -> None:
@@ -100,13 +131,24 @@ def test_positive_context_pack_fixtures_validate_and_round_trip(path: Path) -> N
     assert ContextPack.model_validate_json(pack.model_dump_json()) == pack
 
 
-@pytest.mark.parametrize("path", NEGATIVE_FIXTURES, ids=lambda path: path.stem)
-def test_negative_context_pack_fixtures_are_rejected_by_schema_and_model(
+@pytest.mark.parametrize("path", STRUCTURAL_NEGATIVE_FIXTURES, ids=lambda path: path.stem)
+def test_structural_negative_fixtures_are_rejected_by_schema_and_model(
     path: Path,
 ) -> None:
     payload = _load(path)
 
     assert list(VALIDATOR.iter_errors(payload))
+    with pytest.raises(ValidationError):
+        ContextPack.model_validate(payload)
+
+
+@pytest.mark.parametrize("path", PRODUCER_INVARIANT_FIXTURES, ids=lambda path: path.stem)
+def test_producer_invariant_fixtures_are_schema_valid_but_model_rejected(
+    path: Path,
+) -> None:
+    payload = _load(path)
+
+    VALIDATOR.validate(payload)
     with pytest.raises(ValidationError):
         ContextPack.model_validate(payload)
 
@@ -120,17 +162,6 @@ def test_integral_json_float_budget_normalizes_consistently() -> None:
 
     assert pack.sections.budget_and_truncation.requested_units == 16
     VALIDATOR.validate(pack.model_dump(mode="json"))
-
-
-def test_context_pack_model_rejects_cross_context_focal_uri() -> None:
-    payload = _load(FIXTURE_ROOT / "positive" / "minimal.json")
-    payload["focal_uri"] = "workctx://other-context/task/TASK-2026-014"
-
-    # JSON Schema 2020-12 cannot compare two arbitrary instance string values.
-    # The typed application model owns this cross-field security-boundary invariant.
-    VALIDATOR.validate(payload)
-    with pytest.raises(ValidationError, match="focal_uri must belong to context_id"):
-        ContextPack.model_validate(payload)
 
 
 @pytest.mark.parametrize("encoded_separator", ("%2F", "%5C"))
@@ -182,12 +213,37 @@ def test_rank_value_domains_are_aligned(factor: str, value: int) -> None:
         ContextPack.model_validate(payload)
 
 
-def test_budget_arithmetic_consistency_is_enforced_by_model() -> None:
+def test_positive_fixture_rank_total_matches_producer_formula() -> None:
     payload = _load(FIXTURE_ROOT / "positive" / "complete.json")
-    _budget(payload)["over_budget_by"] = 1
+    focal = cast(dict[str, Any], _sections(payload)["focal_entity"])
+    first_item = cast(dict[str, Any], cast(list[Any], focal["items"])[0])
+    rank = cast(dict[str, Any], first_item["rank"])
+    factor_values = {
+        "relation_semantics": cast(int, rank["relation_semantics"]),
+        "recency": cast(int, rank["recency"]),
+        "claim_state": cast(int, rank["current_state"]),
+        "confidence": cast(int, rank["confidence"]),
+        "directness": cast(int, rank["directness"]),
+        "query_match": cast(int, rank["query_match"]),
+        "entity_importance": cast(int, rank["entity_importance"]),
+        "source_quality": cast(int, rank["source_quality"]),
+    }
 
-    with pytest.raises(
-        ValidationError,
-        match="over_budget_by must equal used_units minus requested_units",
-    ):
-        ContextPack.model_validate(payload)
+    assert rank["total"] == sum(
+        factor_values[name] * weight for name, weight in RANKING_FACTOR_WEIGHTS.items()
+    )
+
+
+def test_serialized_rank_total_is_authoritative_for_consumers() -> None:
+    payload = _load(FIXTURE_ROOT / "positive" / "complete.json")
+    focal = cast(dict[str, Any], _sections(payload)["focal_entity"])
+    first_item = cast(dict[str, Any], cast(list[Any], focal["items"])[0])
+    rank = cast(dict[str, Any], first_item["rank"])
+    rank["total"] = 9_624
+
+    VALIDATOR.validate(payload)
+    pack = ContextPack.model_validate(payload)
+
+    serialized_rank = pack.sections.focal_entity.items[0].rank
+    assert serialized_rank is not None
+    assert serialized_rank.total == 9_624

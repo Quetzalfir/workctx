@@ -187,6 +187,19 @@ def test_weights_and_score_bounds_are_exact() -> None:
     assert minimum.total_score == 0
 
 
+def test_producer_total_is_the_weighted_factor_sum() -> None:
+    scored = score_candidate(_baseline(), reference_time=REFERENCE_TIME)
+
+    assert scored.total_score == sum(
+        factor * weight
+        for factor, weight in zip(
+            scored.factors.as_tuple(),
+            RANKING_FACTOR_WEIGHTS.values(),
+            strict=True,
+        )
+    )
+
+
 def test_rank_is_repeatable_and_uses_key_ascending_for_complete_ties() -> None:
     candidates = (
         replace(_baseline("bravo"), timestamp=None),
