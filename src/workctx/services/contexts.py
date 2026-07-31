@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from workctx.adapters.filesystem.serialization import dump_yaml_bytes
 from workctx.errors import ContextAlreadyExistsError, ContextNotFoundError, InvalidContextError
 from workctx.models.context import (
     CURRENT_SCHEMA_VERSION,
@@ -116,16 +117,7 @@ def initialize_context(
 
 
 def _write_context_config(root: Path, config: ContextConfig) -> None:
-    payload = config.model_dump(mode="json")
-    rendered = yaml.safe_dump(
-        payload,
-        sort_keys=False,
-        allow_unicode=True,
-        default_flow_style=False,
-        indent=2,
-        width=4096,
-    )
-    (root / _CONTEXT_FILE).write_text(rendered, encoding="utf-8", newline="\n")
+    (root / _CONTEXT_FILE).write_bytes(dump_yaml_bytes(config))
 
 
 def _utc_now() -> datetime:
