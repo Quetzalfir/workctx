@@ -2,45 +2,56 @@
 
 ## Decision
 
-`revision_requested`
+`accepted` (after one revision round)
 
-The blocker was the correct call — the worker refused to weaken ADR 0008 silently. The
-lead decision it asked for is now recorded as ADR 0011 (expressibility boundary): the
-inexpressible relations are **producer invariants**, enforced by Pydantic and negatively
-tested at model level; the JSON Schema stays standard Draft 2020-12 and must declare the
-producer-invariant list in its top-level description.
+Round 1 (`revision_requested`): the worker blocked correctly on ADR 0008's both-reject
+rule versus relations Draft 2020-12 cannot express. Lead resolution recorded as ADR 0011
+(structural vs producer-invariant tiers); a six-point bounded correction was returned on
+the same branch. Round 2: correction delivered and accepted.
 
-## Contract compliance (interim)
+## Contract compliance
 
-- Merge base `0343911` matches the pinned contract base (the branch's own frozen copy
-  predates the pin, as in prior orders — accepted). Delivery `3a1b65d`, report `a4ca100`.
-- Changed-path audit: clean; worker-reported gate: full suite green on the branch
-  (462 tests) including 70 retrieval tests. Final independent gate runs at acceptance.
+- Base `0343911` (pinned contract base); blocker delivery `3a1b65d`/`a4ca100`; correction
+  `bc80d47`, final report `0f5059a`. The worker merged the lead's `22694e9` (ADR 0011)
+  before correcting — post-merge correction diff verified to touch ONLY the bounded
+  scope: fixtures, contract tests, schema description, context-packs doc, reports.
+- Full-path audit across both rounds: all changes inside `allowed_paths`; no adapter,
+  domain, presentation, or foreign-schema edits.
 
-## Failed criterion and evidence
+## Diff review
 
-- Criterion: "Packs validate against context-pack.schema.json (positive and negative
-  fixtures per ADR 0008)". Evidence: focal-uri/context-id equality, budget arithmetic,
-  omitted-count equality, and rank-total relations are Pydantic-enforced but not
-  expressible in standard Draft 2020-12, so both-reject fixtures for them cannot exist.
+- Retrieval package: projection-backed resolution, typed traversal with depth control,
+  claim→observation→locator tracing, explainable deterministic ranking (per-factor unit
+  tests), budgeted ten-section packs with truncation metadata and pack fingerprints.
+- ADR 0011 applied precisely: 9 structural negative fixtures (rejected by schema AND
+  model) + 6 producer-invariant fixtures (model rejection asserted; schema acceptance
+  asserted — documenting the boundary); the schema's top-level description enumerates
+  every producer invariant; docs/reference/context-packs.md carries the same list with
+  the rank-total classified as a producer invariant (serialized value authoritative).
+- Per-constraint expressibility check documented in the report (no reasonable standard
+  representation exists for the six model-only relations — verified reasoning).
 
-## Required correction (bounded; scope otherwise unchanged)
+## Validation executed
 
-1. Read docs/adr/0011-schema-expressibility-boundary.md.
-2. Split negative fixtures into the two ADR 0011 tiers: structural fixtures keep
-   both-reject tests; producer-invariant fixtures assert model rejection only.
-3. Add the producer-invariant list to context-pack.schema.json's top-level description
-   and to docs/reference/context-packs.md (validation is necessary, not sufficient).
-4. Classify the rank-total relation per ADR 0011: producer invariant (the serialized
-   value is authoritative; consumers do not recompute it) — document that choice.
-5. Re-check whether any currently-inexpressible constraint has a reasonable standard
-   representation before classifying it (ADR 0011 requires this check; document the
-   outcome per constraint in the report).
-6. Rerun all validation commands; update report.md/report.json to status completed.
+| Command | Result | Notes |
+| --- | --- | --- |
+| report.json vs agent-report.schema.json | pass | validated by lead |
+| `uv run ruff check .` | pass | worker worktree, independent run |
+| `uv run ruff format --check .` | pass | 276 files |
+| `uv run mypy src` | pass | 58 source files, strict |
+| `uv run pytest` | pass | 707 passed (branch includes merged master) |
 
-Same branch and worktree continue. Commands that must pass: the four gate commands.
+## Findings
+
+- The blocker-then-revision loop worked exactly as the orchestration protocol intends:
+  no silent weakening, a recorded architecture decision, and a bounded correction.
+
+## Required revisions
+
+None outstanding.
 
 ## Integration notes
 
-- On acceptance: integrate, rerun combined gate, wire ref/context-pack CLI commands
-  (lead), close Wave 2.
+- Integrated as the final Wave 2 order. Remaining lead work at wave close: wire
+  ref show/related/trace and context-pack CLI commands over the retrieval APIs, then run
+  the wave-close combined gate.
