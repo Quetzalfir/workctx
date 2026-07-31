@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "context_id": "fictional-lab",
+  "focal_uri": "workctx://fictional-lab/task/TASK-2026-014",
+  "source_updated_at": "2026-07-30T19:00:00Z",
+  "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "query": "authentication migration",
+  "include_history": true,
+  "include_architecture": true,
+  "sections": {
+    "focal_entity": {
+      "items": [
+        {
+          "id": "TASK-2026-014",
+          "kind": "task",
+          "uri": "workctx://fictional-lab/task/TASK-2026-014",
+          "title": "Review the fictional authentication migration",
+          "summary": "The task is waiting for a fictional rollout decision.",
+          "data": {
+            "next_action": "Collect the rollout decision.",
+            "priority": "P1",
+            "status": "waiting"
+          },
+          "rank": {
+            "relation_semantics": 100,
+            "recency": 90,
+            "current_state": 100,
+            "confidence": 100,
+            "directness": 100,
+            "query_match": 88,
+            "entity_importance": 95,
+            "source_quality": 92,
+            "total": 9625
+          }
+        }
+      ],
+      "omitted_count": 0
+    },
+    "claims_and_status_history": {
+      "items": [
+        {
+          "id": "CLM-2026-00002",
+          "kind": "claim",
+          "uri": "workctx://fictional-lab/claim/CLM-2026-00002",
+          "title": "Current task status",
+          "summary": "The current status is waiting.",
+          "data": {
+            "confidence": "high",
+            "object": "waiting",
+            "predicate": "status",
+            "status": "current",
+            "supersedes": "CLM-2026-00001"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "direct_relationships": {
+      "items": [
+        {
+          "id": "TASK-2026-014:owned_by:PER-alex-rivera",
+          "kind": "relationship",
+          "uri": "workctx://fictional-lab/person/PER-alex-rivera",
+          "title": "Owned by Alex Rivera",
+          "summary": "Alex owns the fictional review task.",
+          "data": {
+            "confidence": "high",
+            "direction": "outbound",
+            "relation": "owned_by"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "source_observations": {
+      "items": [
+        {
+          "id": "EVD-20260730-auth-review-01#OBS-001",
+          "kind": "observation",
+          "uri": "workctx://fictional-lab/observation/EVD-20260730-auth-review-01%23OBS-001",
+          "title": "Gateway authentication delegation",
+          "summary": "The gateway delegates authentication to the identity service.",
+          "data": {
+            "confidence": "high",
+            "locator": {
+              "end_line": 7,
+              "start_line": 4,
+              "type": "line_range"
+            },
+            "source_ref": "artifact://sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "related_tasks_and_dependencies": {
+      "items": [
+        {
+          "id": "TASK-2026-014-ST01",
+          "kind": "dependency",
+          "uri": "workctx://fictional-lab/task/TASK-2026-014-ST01",
+          "title": "Confirm gateway configuration",
+          "summary": "This fictional subtask confirms the gateway configuration.",
+          "data": {
+            "relation": "parent_of",
+            "status": "active"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "people_and_interactions": {
+      "items": [
+        {
+          "id": "PER-alex-rivera",
+          "kind": "person",
+          "uri": "workctx://fictional-lab/person/PER-alex-rivera",
+          "title": "Alex Rivera",
+          "summary": "Alex coordinates the fictional migration.",
+          "data": {
+            "last_interaction": null,
+            "waiting_on": true
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "decisions_risks_and_questions": {
+      "items": [
+        {
+          "id": "DEC-2026-005",
+          "kind": "decision",
+          "uri": "workctx://fictional-lab/decision/DEC-2026-005",
+          "title": "Use delegated authentication",
+          "summary": "The fictional design delegates authentication to the identity service.",
+          "data": {
+            "status": "accepted"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "contradictory_or_superseding_evidence": {
+      "items": [
+        {
+          "id": "CLM-2026-00001",
+          "kind": "status_history",
+          "uri": "workctx://fictional-lab/claim/CLM-2026-00001",
+          "title": "Superseded active status",
+          "summary": "An earlier claim recorded the task as active.",
+          "data": {
+            "status": "superseded",
+            "superseded_by": "CLM-2026-00002"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "architecture_entities": {
+      "items": [
+        {
+          "id": "SYS-identity-service",
+          "kind": "system",
+          "uri": "workctx://fictional-lab/system/SYS-identity-service",
+          "title": "Identity Service",
+          "summary": "The identity service is the fictional authentication authority.",
+          "data": {
+            "hop": 1,
+            "relation": "mentions"
+          },
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "budget_and_truncation": {
+      "requested_units": 1200,
+      "used_units": 820,
+      "minimum_units": 64,
+      "unit": "approx_tokens_chars_div_4",
+      "truncated": false,
+      "within_budget": true,
+      "over_budget_by": 0,
+      "omitted_count": 0,
+      "omitted_items": []
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "context_id": "fictional-lab",
+  "focal_uri": "workctx://fictional-lab/task/TASK-2026-014",
+  "source_updated_at": "2026-07-30T19:00:00Z",
+  "source_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "query": null,
+  "include_history": false,
+  "include_architecture": false,
+  "sections": {
+    "focal_entity": {
+      "items": [
+        {
+          "id": "TASK-2026-014",
+          "kind": "task",
+          "uri": "workctx://fictional-lab/task/TASK-2026-014",
+          "title": "Fictional task",
+          "summary": "",
+          "data": {},
+          "rank": null
+        }
+      ],
+      "omitted_count": 0
+    },
+    "claims_and_status_history": {"items": [], "omitted_count": 0},
+    "direct_relationships": {"items": [], "omitted_count": 0},
+    "source_observations": {"items": [], "omitted_count": 0},
+    "related_tasks_and_dependencies": {"items": [], "omitted_count": 0},
+    "people_and_interactions": {"items": [], "omitted_count": 0},
+    "decisions_risks_and_questions": {"items": [], "omitted_count": 0},
+    "contradictory_or_superseding_evidence": {"items": [], "omitted_count": 0},
+    "architecture_entities": {"items": [], "omitted_count": 0},
+    "budget_and_truncation": {
+      "requested_units": -1,
+      "used_units": 50,
+      "minimum_units": 50,
+      "unit": "approx_tokens_chars_div_4",
+      "truncated": false,
+      "within_budget": true,
+      "over_budget_by": 0,
+      "omitted_count": 0,
+      "omitted_items": []
+    }
+  }
+}
