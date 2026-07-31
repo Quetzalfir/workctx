@@ -30,7 +30,7 @@ before WP-330 at Wave 3 planning.
 | WP-200 | verified | WP-100, WP-110 | Codex worker | agent/WP-200-canonical-store | accepted | Integrated; combined gate 623 tests |
 | WP-210 | verified | WP-100, WP-110 | Codex worker | agent/WP-210-sqlite-projections | accepted | Integrated at `0343911` |
 | WP-220 | verified | WP-100, WP-110 | Codex worker | agent/WP-220-validation-engine | accepted | Integrated (resequenced before WP-200); FreshnessProbe wiring pending Wave 2 close |
-| WP-230 | revision_requested | WP-100, WP-210 | Codex worker | agent/WP-230-context-packs | [review](../work-orders/WP-230-context-packs/leader-review.md) | Correct blocker on schema expressibility; ADR 0011 recorded; bounded fixture/doc revision returned to worker |
+| WP-230 | verified | WP-100, WP-210 | Codex worker | agent/WP-230-context-packs | accepted | Integrated at `d64bcab` after one ADR 0011 revision round; combined gate 707 tests |
 | WP-300..WP-500 | proposed | see backlog | — | — | — | Wave 3+ blocked on Wave 2 |
 
 ## Validation status

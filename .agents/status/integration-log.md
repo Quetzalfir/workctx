@@ -9,3 +9,4 @@
 | 2026-07-30 | WP-210-sqlite-projections | c7d6820 | 0343911 | ruff+format+mypy+pytest (392) | accepted+integrated | First Wave 2 integration |
 | 2026-07-30 | WP-220-validation-engine | 47205cc | 7b6e775 | ruff+format+mypy+pytest combined | accepted+integrated | Resequenced before WP-200 (disjoint, WP-200 undelivered) |
 | 2026-07-30 | WP-200-canonical-store | 33648d7 | facfa8d | ruff+format+mypy+pytest (623 combined) | accepted+integrated | Third Wave 2 integration |
+| 2026-07-30 | WP-230-context-packs | 0f5059a | d64bcab | ruff+format+mypy+pytest (707 combined) | accepted+integrated (1 revision round, ADR 0011) | Wave 2 delivery complete; ref/context-pack CLI wiring pending |
