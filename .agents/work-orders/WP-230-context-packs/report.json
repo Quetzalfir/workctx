@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-230-context-packs",
+  "status": "blocked",
+  "summary": "Implemented and fully validated deterministic projection-backed retrieval and ten-section context packs with 70 retrieval tests and a green 462-test repository gate; acceptance is blocked on an ADR 0008 decision for relational invariants that standard JSON Schema Draft 2020-12 cannot express while Pydantic currently enforces them.",
+  "base_commit": "0343911bfffe1faed359d743091f4e1e13039c22",
+  "final_commit": "3a1b65dc6ca32beb2fb95d155240541785cd540e",
+  "files_changed": [
+    "docs/reference/context-packs.md",
+    "schemas/context-pack.schema.json",
+    "src/workctx/retrieval/__init__.py",
+    "src/workctx/retrieval/builder.py",
+    "src/workctx/retrieval/graph.py",
+    "src/workctx/retrieval/models.py",
+    "src/workctx/retrieval/protocols.py",
+    "src/workctx/retrieval/ranking.py",
+    "src/workctx/retrieval/records.py",
+    "src/workctx/retrieval/references.py",
+    "src/workctx/retrieval/security.py",
+    "src/workctx/retrieval/serialization.py",
+    "src/workctx/retrieval/tracing.py",
+    "tests/retrieval/__init__.py",
+    "tests/retrieval/fixtures/context-pack/negative/extra-field.json",
+    "tests/retrieval/fixtures/context-pack/negative/fractional-budget.json",
+    "tests/retrieval/fixtures/context-pack/negative/inconsistent-truncation.json",
+    "tests/retrieval/fixtures/context-pack/negative/invalid-fingerprint.json",
+    "tests/retrieval/fixtures/context-pack/negative/invalid-uri.json",
+    "tests/retrieval/fixtures/context-pack/negative/missing-section.json",
+    "tests/retrieval/fixtures/context-pack/negative/negative-budget.json",
+    "tests/retrieval/fixtures/context-pack/negative/numeric-string-budget.json",
+    "tests/retrieval/fixtures/context-pack/negative/wrong-schema-version.json",
+    "tests/retrieval/fixtures/context-pack/positive/complete.json",
+    "tests/retrieval/fixtures/context-pack/positive/minimal.json",
+    "tests/retrieval/support.py",
+    "tests/retrieval/test_builder.py",
+    "tests/retrieval/test_context_pack_contract.py",
+    "tests/retrieval/test_graph_and_tracing.py",
+    "tests/retrieval/test_ranking.py",
+    "tests/retrieval/test_references.py",
+    "tests/retrieval/test_security.py",
+    ".agents/work-orders/WP-230-context-packs/report.md",
+    ".agents/work-orders/WP-230-context-packs/report.json"
+  ],
+  "behavior_implemented": [
+    "Added a frozen ProjectionReader protocol and deterministic structural resolution for workctx, artifact, and repository references with explicit not-found and context-boundary behavior.",
+    "Added stable typed breadth-first traversal with inbound/outbound direction, depth and relation filters, and cycle/duplicate suppression.",
+    "Added current/history source tracing from entities, tasks, and claims through observations to exact immutable source references and typed locators, including guarded missing-reference metadata.",
+    "Added the documented eight-factor integer ranking function with complete score tables, evidence-timestamp recency, first-resolvable source selection, literal query matching, and total/factor/key tie-breaking.",
+    "Added deterministic ten-section pack assembly, compact history with full evidence trace, optional architecture context, projection snapshot retry, and stable sorted-key serialization.",
+    "Added deterministic Unicode-character budget units, all-tier and within-tier truncation, minimal focal preservation, explicit overage, and complete omission metadata.",
+    "Added recursive secret-pattern guarding and digest-based synthetic IDs for invalid authored references.",
+    "Added a hand-maintained context-pack schema with positive/negative fixtures and 70 retrieval tests covering ranking factors, budget edges, tracing, isolation, determinism, schema contracts, and security."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "242 files already formatted."
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 46 source files."
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "462 passed in 36.45 seconds."
+    },
+    {
+      "command": "uv run pytest tests/retrieval -q",
+      "status": "passed",
+      "result": "70 passed in 12.39 seconds."
+    },
+    {
+      "command": "uv run pytest tests/test_plan_contracts.py -q",
+      "status": "passed",
+      "result": "4 passed in 0.08 seconds; blocked report contract validated."
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "passed",
+      "result": "Exit code 0; no whitespace errors before implementation commit."
+    }
+  ],
+  "assumptions": [
+    "Artifact and repository resolution is structural because WP-210 exposes no artifact-manifest availability query.",
+    "Source quality uses observation kind and locator precision; unavailable source-quality signals score zero and confidence remains a separate factor.",
+    "The first authored source observation that resolves supplies timestamp, kind, and locator for a claim or edge candidate.",
+    "Historical evidence remains traced even when full historical claim bodies are omitted.",
+    "Direct dated relationship observations are the available interaction evidence because the projection has no distinct interaction record.",
+    "Budget units count Unicode characters in compact sorted-key item JSON and exclude envelope, wrapper, and truncation-metadata costs."
+  ],
+  "decisions": [
+    "Use only WP-210 typed query APIs and keep retrieval independent from SQL, filesystem, CLI, MCP, embeddings, LLMs, randomness, and network services.",
+    "Use shared evidence reference time and integer factor/weight arithmetic for repeatable ranking.",
+    "Preserve the complete rank factor-vector tie-break through section ordering and budget removal.",
+    "Always trace historical claim evidence during pack assembly while controlling claim-body inclusion separately.",
+    "Keep a minimal focal identity even when the requested budget is smaller than the minimum valid pack."
+  ],
+  "deviations": [
+    "No implementation scope or allowed-path deviation.",
+    "The frozen contract remains proposed with base_commit PENDING-WP210-INTEGRATION; the direct assignment supplied integrated base 0343911bfffe1faed359d743091f4e1e13039c22 and frozen contract files were not edited.",
+    "ADR 0008 schema/model alignment remains unresolved rather than silently weakened."
+  ],
+  "security_considerations": [
+    "All fixtures are fictional and recursive guarding removes secret-named fields, credential assignments, bearer tokens, private-key material, and secret-looking invalid reference metadata.",
+    "Foreign Work Context references are refused before projection lookup and local retrieval stays inside the projection's bound context.",
+    "Missing authored reference text is represented by a digest-based synthetic item ID and guarded metadata, not copied into an identifier.",
+    "Validated durable source references and exact typed locators remain intact."
+  ],
+  "migration_considerations": [
+    "Context-pack schema version 1 is new and changes no canonical workspace schema, projection schema, generated view, or migration path."
+  ],
+  "unresolved": [
+    "ADR 0008 requires schema/model rejection alignment, but focal_uri-to-context_id equality cannot be expressed by standard Draft 2020-12 while Pydantic currently rejects mismatches.",
+    "Exact budget arithmetic, omitted-array/count equality, and per-section omission correspondence are enforced by Pydantic but cannot be expressed by standard Draft 2020-12.",
+    "The documented rank total is a weighted sum; deciding whether that relation is a producer invariant or serialized-contract invariant also requires the same ownership decision.",
+    "The lead must classify these relations as producer/retrieval invariants and align Pydantic accordingly, or approve a representation or schema-validation redesign."
+  ],
+  "recommended_next_action": "Implementation lead: review commit 3a1b65dc6ca32beb2fb95d155240541785cd540e, make and record the ADR 0008 ownership decision, then return WP-230 for the bounded model/schema/test adjustment and final acceptance review."
+}
