@@ -1,0 +1,1 @@
+"""SQLite projection tests."""
