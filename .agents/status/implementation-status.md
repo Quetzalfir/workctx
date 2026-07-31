@@ -10,12 +10,13 @@
 
 ## Current wave
 
-Wave 2 (opened 2026-07-30): WP-200, WP-210, WP-220 parallel; WP-230 sequential after
-WP-210. ADR 0010 (audit ledger) operator-ratified; lead pre-work landed
-(domain/frontmatter.py shared parser, adapters/ package marker, domain re-export
-consolidation). Wave 1 closed with 344 tests; suite now 351. WP-001 remains `partial`
-(CI matrix + [project.urls] await a GitHub remote). D-020 (MCP surface) must close
-before WP-330 at Wave 3 planning.
+Wave 2 COMPLETE (2026-07-30): WP-200/210/220/230 accepted and integrated (WP-230 after
+one ADR 0011 revision round); lead wiring done (index rebuild, --strict, registry
+step 3, SQLite FreshnessProbe, ref show/related/trace, context-pack). Final gate:
+707 tests + E2E smoke (init -> entity -> rebuild -> ref show -> ten-section pack).
+Next: Wave 3 planning (WP-300 transactions, WP-310 inbox, WP-320 installers, WP-330
+MCP) — D-020 (MCP surface ADR) must close before WP-330. WP-001 remains partial (CI
+matrix + [project.urls] await a GitHub remote).
 
 ## Work-package status
 
@@ -65,11 +66,6 @@ because it rewrites tests that other integrations should not race).
 
 ## Next lead actions
 
-1. Pin the Wave 2 baseline commit into WP-200/WP-210/WP-220 contracts (`proposed` ->
-   `ready`) and hand the operator their worktree commands and prompts.
-2. Review Wave 2 deliveries per the leader review gate; integration order:
-   WP-210 -> WP-200 -> WP-220, then pin and assign WP-230.
-3. At integration: wire index rebuild, --strict, registry step 3, and the SQLite
-   FreshnessProbe into the CLI/presentation layer; rerun combined gates.
-4. Close D-020 (MCP tool surface ADR) before Wave 3 planning.
-5. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
+1. Plan Wave 3: close D-020 (MCP tool surface ADR), then cut WP-300/WP-310/WP-320/
+   WP-330 work orders with a fresh path-ownership matrix.
+2. On first GitHub push: verify the CI matrix, add [project.urls], close WP-001.
