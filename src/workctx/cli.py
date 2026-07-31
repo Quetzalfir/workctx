@@ -33,6 +33,8 @@ app = typer.Typer(
 )
 context_app = typer.Typer(help="Create, inspect, and validate isolated contexts.")
 app.add_typer(context_app, name="context")
+index_app = typer.Typer(help="Manage rebuildable derived indexes.")
+app.add_typer(index_app, name="index")
 
 
 @app.command()
@@ -152,14 +154,16 @@ def context_validate(
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
     ] = None,
+    strict: Annotated[bool, typer.Option("--strict", help="Escalate warnings to errors.")] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit machine-readable JSON.")
     ] = False,
 ) -> None:
-    """Validate the initial workspace structure and safety checks."""
+    """Validate workspace integrity, references, and safety checks."""
     _validate_context(
         path=path,
         context_path=context_path,
+        strict=strict,
         json_output=json_output,
     )
 
@@ -171,6 +175,7 @@ def validate_alias(
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
     ] = None,
+    strict: Annotated[bool, typer.Option("--strict", help="Escalate warnings to errors.")] = False,
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit machine-readable JSON.")
     ] = False,
@@ -179,14 +184,73 @@ def validate_alias(
     _validate_context(
         path=path,
         context_path=context_path,
+        strict=strict,
         json_output=json_output,
     )
 
 
-def _validate_context(*, path: Path | None, context_path: Path | None, json_output: bool) -> None:
+@index_app.command("rebuild")
+def index_rebuild(
+    path: Annotated[Path | None, typer.Argument(help="Context root or path inside it.")] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Rebuild the SQLite/FTS projection from canonical files."""
+    from workctx.adapters.sqlite import SQLiteProjection
+
+    begin_command("index.rebuild", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path, positional_path=path)
+    report = SQLiteProjection(root).rebuild()
+    counts = report.counts
+    result: dict[str, JsonValue] = {
+        "root": str(root),
+        "trigger": report.trigger.value,
+        "counts": {
+            "entities": counts.entities,
+            "edges": counts.edges,
+            "observations": counts.observations,
+            "claims": counts.claims,
+            "tasks": counts.tasks,
+        },
+        "skipped": [
+            {
+                "path": sanitize_message(skipped.path),
+                "reason": skipped.reason.value,
+            }
+            for skipped in report.skipped_documents
+        ],
+    }
+    if json_output:
+        emit_success(result=result)
+    else:
+        output_console.print(
+            Text.assemble(
+                "Rebuilt projection at ",
+                str(root),
+                f": {counts.entities} entities, {counts.edges} edges, "
+                f"{counts.tasks} tasks, {len(report.skipped_documents)} skipped",
+            ),
+            soft_wrap=True,
+        )
+
+
+def _validate_context(
+    *, path: Path | None, context_path: Path | None, json_output: bool, strict: bool = False
+) -> None:
+    from workctx.adapters.sqlite.freshness import SqliteFreshnessProbe
+    from workctx.adapters.sqlite.projection import projection_database_path
+
     begin_command("context.validate", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path, positional_path=path)
-    report = validate_workspace(root)
+    # Freshness is only checked once a projection has been built: a workspace
+    # that never ran `index rebuild` should not warn about derived state.
+    probe = SqliteFreshnessProbe() if projection_database_path(root).is_file() else None
+    report = validate_workspace(root, strict=strict, freshness_probe=probe)
     serialized_issues = [_serialize_issue(issue) for issue in report.issues]
     warnings = [_diagnostic_from_issue(issue) for issue in report.warnings]
     errors = [_diagnostic_from_issue(issue) for issue in report.errors]

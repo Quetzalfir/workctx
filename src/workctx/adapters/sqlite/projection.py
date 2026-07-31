@@ -74,6 +74,18 @@ from workctx.services.contexts import load_context_config
 
 _DATABASE_NAME = "index.sqlite3"
 _INDEXED_ZONES = ("02_knowledge", "03_work")
+
+
+def projection_database_path(context_root: Path) -> Path:
+    """Location of the live projection database for a context root.
+
+    Lead integration helper: lets presentation code check for a built
+    projection without constructing (and thereby auto-rebuilding) the adapter.
+    """
+
+    return context_root / "98_state" / _DATABASE_NAME
+
+
 _REPLACE_ATTEMPTS = 100
 _REPLACE_RETRY_SECONDS = 0.01
 _LIVE_SIDECAR_SUFFIXES = ("-journal", "-wal", "-shm")
@@ -224,6 +236,16 @@ class SQLiteProjection:
 
         with self._gate.writer_lock:
             return self._rebuild_locked(RebuildTrigger.EXPLICIT, self._load_bound_config())
+
+    def readiness_trigger(self) -> RebuildTrigger | None:
+        """Report why a rebuild would run, without rebuilding.
+
+        Lead integration addition for read-only consumers (validation freshness
+        probes) that must never mutate derived state. ``None`` means the live
+        projection is present and compatible.
+        """
+
+        return self._readiness_trigger(self._load_bound_config())
 
     def metadata(self) -> ProjectionMetadata:
         self.ensure_ready()
