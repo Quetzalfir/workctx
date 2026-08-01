@@ -2,109 +2,148 @@
 
 ## Status
 
-`blocked`
+`completed`
 
 ## Summary
 
-WP-300 stopped before implementation because the integrated WP-200 public API cannot
-perform the audit-ledger write required by ADRs 0006 and 0010. A successful
-`StagedReplacement.apply()` deliberately leaves `98_state/staging/intent.json` durable
-until the audit event is written, but the only public arbitrary-byte write primitive,
-`atomic_replace_bytes()`, refuses every write while that intent exists. Directly appending
-the ledger is forbidden by the work order, and folding the ledger into the original intent
-would deviate from the specified replace-then-audit-then-finalize sequence. The required
-`99_meta/audit/` parent also cannot be created through a WP-200 public primitive.
+WP-300 is complete under ADRs 0006, 0010, and decision D-031. The delivery adds the
+typed transaction proposal and audit contracts, deterministic validation and dry-run,
+an atomic transaction engine built exclusively on public WP-200/WP-201 primitives, an
+ADR 0010 hash-chained audit ledger, idempotency and revision conflicts, durable
+projection staleness handling, and ledger-event-gated recovery.
 
-No implementation files were changed. The pinned baseline passes the complete validation
-gate with 707 tests.
+All six Round 2 corrections are included. A verified matching ledger event is the
+transaction commit point and recovery performs cleanup only; an eventless intent is
+rolled back from authenticated preimages and a retry must use the full authenticated
+`apply` path. The final repository gate passes with 938 tests.
 
 ## Base and final commits
 
-- Pinned base: `55bc43ae7b118f15f131ed04df60e8cbf42f3129`
-- Final implementation revision: `55bc43ae7b118f15f131ed04df60e8cbf42f3129`
-  (no implementation commit; stopped at the contractual primitive-gap condition)
+- Contract release base: `c35bff6085a2f9ba4b9c4c97989eeaae6fbb5be0`.
+- Required Round 2 master revision: `5b2c7f4840bf5da24b478c45bd19f3c6609e3c73`.
+- Effective implementation base after merging master:
+  `334b6492b72c7f32f4d9cf3e54dc96792677e29e`.
+- Final reviewed implementation commit:
+  `f5e55ff674bcbc063fdd2b901bad76b45dbcd10c`.
+- The report artifacts are committed after the implementation snapshot, so their
+  bookkeeping commit does not change the reported implementation tree.
 
 ## Files changed
 
+- `src/workctx/domain/transactions.py`
+- `src/workctx/transactions/__init__.py`
+- `src/workctx/transactions/engine.py`
+- `src/workctx/transactions/errors.py`
+- `src/workctx/transactions/ledger.py`
+- `src/workctx/transactions/models.py`
+- `schemas/transaction-proposal.schema.json`
+- `schemas/audit-event.schema.json`
+- `tests/workspace/fixtures/positive/transaction-proposal.json`
+- `tests/workspace/fixtures/positive/audit-event.json`
+- `tests/workspace/fixtures/negative/transaction-proposal-operations.json`
+- `tests/workspace/fixtures/negative/audit-event-hash.json`
+- `tests/transactions/__init__.py`
+- `tests/transactions/support.py`
+- `tests/transactions/test_contracts.py`
+- `tests/transactions/test_engine.py`
+- `tests/transactions/test_failures.py`
+- `tests/transactions/test_ledger.py`
+- `tests/transactions/test_path_security.py`
+- `tests/transactions/test_preflight_traversal.py`
+- `tests/transactions/test_recovery_crash_windows.py`
+- `tests/transactions/test_recovery_d031.py`
+- `tests/transactions/test_recovery_integrity.py`
+- `tests/transactions/test_results.py`
+- `docs/reference/transactions.md`
 - `.agents/work-orders/WP-300-transaction-engine/report.md`
 - `.agents/work-orders/WP-300-transaction-engine/report.json`
 
+All changed files are inside the amended `allowed_paths`. No frozen domain file,
+forbidden adapter, projection, validation, CLI, or MCP file was modified.
+
 ## Behavior implemented
 
-None. The worker did not implement a partial transaction engine because every apply path
-must obey the same audit and recovery protocol, and the contract explicitly requires a
-coordination request rather than an adapter workaround.
+- Closed Pydantic proposal/audit models and matching Draft 2020-12 schemas, including
+  strict context paths, durable references, lowercase suffixes, operation kinds,
+  preconditions, postconditions, approval, and the four granted fixtures.
+- Deterministic `validate` and `dry_run` with D-025 in-memory composition for final
+  artifact identities/manifests, evidence and embedded-observation references, task
+  dependencies/blockers, body references, collision detection, and an unchanged strict
+  post-apply WP-220 whole-workspace gate.
+- Atomic `apply` under the context lock using public staging/fenced-append primitives:
+  fence checks, write-ahead intent, ordered write/move/delete execution, postcondition
+  validation, audit append, intent finalization, and lock-safe cleanup.
+- ADR 0010 compact JSONL hash-chain creation and verification at
+  `99_meta/audit/ledger.jsonl`, including zero-revision genesis, tamper detection,
+  exact-replay idempotency, reused-ID conflicts, and ledger summaries.
+- Typed apply receipts containing committed revision, applied targets, audit event
+  ID/hash and references, plus projection freshness/staleness details for WP-310 and
+  WP-330.
+- Post-commit projection rebuild/invalidation handling that preserves a committed
+  transaction even when construction, fencing, rebuild, or invalidation fails.
+- D-031 recovery: full-ledger verification, exact intent/event matching anywhere in
+  the chain, cleanup-only completion after a verified event, eventless preimage
+  rollback only, recovery audit provenance through the reserved system actor, and
+  idempotent crash-window replay without a second event.
+- Periodic lock heartbeats and fence-loss normalization around unbounded apply and
+  recovery phases, including stager construction, ledger work, inspection,
+  finalization, and projection work.
+- Contractual failure injection for mid-sequence failure, takeover, ledger tampering,
+  projection failure after commit, recovery finalizer failure, long-running heartbeat,
+  move/delete rollback, and post-rollback-event replay.
 
 ## Validation executed
 
 | Command | Result | Notes |
 | --- | --- | --- |
 | `uv run ruff check .` | Passed | `All checks passed!` |
-| `uv run ruff format --check .` | Passed | `289 files already formatted` |
-| `uv run mypy src` | Passed | `Success: no issues found in 58 source files` |
-| `uv run pytest` | Passed | `707 passed in 81.51s` |
-| `uv run pytest tests/test_plan_contracts.py -q` | Passed | `4 passed in 0.09s`; final rerun: `4 passed in 0.08s` |
-| `git diff --cached --check` | Passed | Exit code 0; only the two allowed report paths are staged |
+| `uv run ruff format --check .` | Passed | `318 files already formatted` |
+| `uv run mypy src` | Passed | `Success: no issues found in 64 source files` |
+| `uv run pytest` | Passed | `938 passed in 246.85s (0:04:06)` |
+| `uv run python -c "import json; from pathlib import Path; from jsonschema import Draft202012Validator; root=Path('.agents'); schema=json.loads((root/'plan/initial/agent-report.schema.json').read_text(encoding='utf-8')); report=json.loads((root/'work-orders/WP-300-transaction-engine/report.json').read_text(encoding='utf-8')); Draft202012Validator(schema).validate(report); print('WP-300 report.json validates against agent-report.schema.json')"` | Passed | `WP-300 report.json validates against agent-report.schema.json` |
+| `uv run pytest tests/test_plan_contracts.py -q` | Passed | `4 passed` |
+| `git diff --check` | Passed | Exit code 0; no output. |
 
 ## Assumptions and decisions
 
-- ADR 0010 and `docs/reference/canonical-store.md` are interpreted literally: the audit
-  event is written after the canonical replacement sequence, while the intent remains
-  durable, and before intent finalization.
-- Including `ledger.jsonl` as the last target of the original intent was rejected as an
-  unapproved semantic deviation. It also does not provide the specified separate
-  post-apply audit step needed by recovery and rollback flows.
-- Direct `open`, `os.replace`, or directory creation in the transaction layer was rejected
-  because the assignment requires canonical writes to compose WP-200 public primitives.
+- The durable verified audit event is the commit point. Its presence selects cleanup
+  only; its absence selects preimage rollback only, regardless of the caller's requested
+  recovery strategy.
+- `RecoveryResult.strategy` preserves the requested strategy while its outcome reports
+  what D-031 actually performed; eventless `complete` therefore reports `rolled_back`.
+- A retry after an eventless rollback requires a new proposal/revision and runs through
+  the full authenticated `apply` pipeline.
+- D-025 preflight composes only transaction-touched state in memory. Untouched global
+  graph/cycle consistency remains the responsibility of the strict WP-220 post-apply
+  validation gate.
+- External durable-reference placeholders receive structural checks during preflight;
+  workspace-owned references receive composed existence/type/context checks.
 
 ## Contract deviations
 
-- No implementation scope or allowed-path deviation.
-- The worktree was absent at assignment time and was created on the required
-  `agent/WP-300-transaction-engine` branch from the pinned base.
-- The branch's frozen contract copy predates the lead's pin-only commit and still contains
-  `PENDING-WAVE3-BASELINE`; the direct assignment and lead checkout identify the pinned
-  base above. The contract file was not edited.
+None.
 
 ## Security and migration considerations
 
-- No canonical data, fixture data, credentials, or external systems were written.
-- Refusing a direct ledger append preserves the fence, durability, and audit-ordering
-  guarantees instead of weakening them silently.
-- No schema or migration change was made.
+- Canonical writes occur only through WP-200/WP-201 primitives while the fenced context
+  lock is held; the engine does not write canonical files directly.
+- Ledger and target path validation rejects traversal, control characters, Windows
+  device aliases, case/trailing/ADS aliases, and non-regular ledger targets.
+- Ledger events contain deterministic metadata and hashes, not raw evidence payloads or
+  secret values; diagnostics identify secret locations without echoing values.
+- Projection failure is explicitly non-transactional after commit and is durably marked
+  stale where possible; it never rolls back or erases the committed canonical result.
+- No migration is required. A new ledger starts at revision zero, and D-031 recovers
+  WP-201 intents without extending their durable format.
+- Tests used only fictional temporary workspaces. No external system or private
+  workspace was mutated.
 
 ## Unresolved issues
 
-1. `StagedReplacement.apply()` leaves the intent for post-audit finalization, while
-   `atomic_replace_bytes()` raises `RecoveryRequiredError` whenever that intent exists.
-   WP-200 exposes no fenced, fsynced, bounded-retry audit write that is legal in this
-   interval (`src/workctx/adapters/filesystem/staging.py:341`, `:394`, and `:907`).
-2. `99_meta/audit/` is intentionally absent, but both staged and single-file replacement
-   require the target parent to exist. WP-200 exposes no context-bound canonical directory
-   creation primitive (`src/workctx/adapters/filesystem/staging.py:718` and `:915`).
-3. The existing proposal vocabulary includes `move` and `delete_generated`, but
-   `StagedWrite` represents only byte postimages. WP-200 cannot express forward deletion or
-   atomic move; the lead must either narrow the WP-300 operation contract or extend WP-200.
-4. WP-220's public `validate_workspace()` reads the physical workspace and ignores staging;
-   it cannot validate a proposed multi-document overlay before replacement. The lead must
-   approve a scratch-context strategy or add a public overlay-validation API.
-5. WP-210 exposes no durable `mark_stale` API. After a post-commit rebuild failure, the old
-   compatible database can remain readiness-compatible even though WP-300 can report the
-   immediate result as stale.
-6. WP-300 must require ADR 0010 `prev_hash` and `event_hash` fields, but the always-run
-   positive fixture at `tests/workspace/fixtures/positive/audit-event.json` uses the old
-   `previous_event_hash: null` shape and lacks both required fields. The corresponding
-   transaction fixture also encodes the loose Wave 1 proposal shape. Those fixture paths
-   are forbidden, so a compliant schema tightening and a green full gate cannot coexist
-   without a lead-owned baseline update or an explicit path grant.
+None.
 
 ## Recommended next action
 
-Implementation lead: reopen WP-200 (and, if the contract requires durable candidate and
-projection state, WP-220/WP-210) for a bounded public-API addition. At minimum, provide one
-fenced audit-ledger write primitive that is valid while the matching intent remains active,
-supports first-use creation of `99_meta/audit/`, applies the ADR 0006 retry/fsync policy,
-and works for original-holder and successor-recovery finalization. Explicitly decide the
-`move`/`delete_generated` vocabulary, and update or grant ownership of the frozen Wave 1
-transaction/audit fixtures. Then rebase or recreate the WP-300 branch on the integrated
-dependency revision and return the work order for implementation.
+Implementation lead: inspect commit `f5e55ff674bcbc063fdd2b901bad76b45dbcd10c`,
+independently rerun the required gate, and integrate WP-300. WP-310 and WP-330 can then
+consume the exported apply/recovery result interfaces.
