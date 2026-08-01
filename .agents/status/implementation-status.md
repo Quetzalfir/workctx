@@ -31,8 +31,8 @@ remote).
 | WP-210 | verified | WP-100, WP-110 | Codex worker | agent/WP-210-sqlite-projections | accepted | Integrated at `0343911` |
 | WP-220 | verified | WP-100, WP-110 | Codex worker | agent/WP-220-validation-engine | accepted | Integrated (resequenced before WP-200); FreshnessProbe wiring pending Wave 2 close |
 | WP-230 | verified | WP-100, WP-210 | Codex worker | agent/WP-230-context-packs | accepted | Integrated at `d64bcab` after one ADR 0011 revision round; combined gate 707 tests |
-| WP-201 | ready | WP-200 | — | agent/WP-201-staging-extensions | — | D-024 insertion: staging move/delete + fenced append; unblocks WP-300 |
-| WP-300 | revision_requested | WP-200, WP-201, WP-210, WP-220 | Codex worker | agent/WP-300-transaction-engine | [review](../work-orders/WP-300-transaction-engine/leader-review.md) | Correct blocker on six dependency gaps (D-024/D-025); resumes after WP-201 |
+| WP-201 | verified | WP-200 | Codex worker | agent/WP-201-staging-extensions | accepted | Integrated; combined gate 777 tests; pre-existing tests untouched |
+| WP-300 | ready | WP-200, WP-201, WP-210, WP-220 | Codex worker | agent/WP-300-transaction-engine | [review](../work-orders/WP-300-transaction-engine/leader-review.md) | Released: WP-201 integrated; worker resumes on merged master |
 | WP-310 | proposed | WP-200, WP-220, WP-300 | — | agent/WP-310-inbox-lifecycle | — | Base pinned after WP-300 integrates |
 | WP-320 | revision_requested | WP-120, WP-130 | Codex worker | agent/WP-320-agent-installers | [review](../work-orders/WP-320-agent-installers/leader-review.md) | Correct blocker on five spec gaps (D-026..D-030 recorded); amended contract, worker recreates from new pin |
 | WP-330 | proposed | WP-120, WP-220, WP-230, WP-300 | — | agent/WP-330-mcp-server | — | Base pinned after WP-300 integrates; narrow cli/pyproject/ci grants |

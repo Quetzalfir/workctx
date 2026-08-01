@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-300-transaction-engine",
   "title": "Transaction engine and hash-chained audit ledger",
-  "status": "proposed",
+  "status": "ready",
   "objective": "Multi-entity canonical mutations happen only as validated atomic transactions: typed proposals, preconditions, dry-run, locked staged apply through the WP-200 primitives, hash-chained audit events per ADR 0010, idempotency, projection staleness handling, and recovery \u2014 with failure-injection tests.",
   "business_value": "This is the product's central trust mechanism (risk R-001): every ingestion, task, and drafting workflow mutates canonical state exclusively through this engine.",
   "scope": [
@@ -30,7 +30,7 @@
     "WP-210",
     "WP-220"
   ],
-  "base_commit": "PENDING-WP201-INTEGRATION",
+  "base_commit": "PENDING-FINAL-PIN",
   "branch": "agent/WP-300-transaction-engine",
   "worktree": ".worktrees/WP-300-transaction-engine",
   "allowed_paths": [

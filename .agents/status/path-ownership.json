@@ -48,7 +48,7 @@
       ],
       "branch": "agent/WP-201-staging-extensions",
       "worktree": ".worktrees/WP-201-staging-extensions",
-      "status": "ready",
+      "status": "verified",
       "note": "Bounded WP-200 follow-up closing the WP-300 primitive gaps (D-024); parallel with WP-320, disjoint."
     },
     {
@@ -70,8 +70,8 @@
       ],
       "branch": "agent/WP-300-transaction-engine",
       "worktree": ".worktrees/WP-300-transaction-engine",
-      "status": "proposed",
-      "note": "Blocked round accepted (D-024); re-pinned and released after WP-201 integrates. Fixture grants added to its contract."
+      "status": "ready",
+      "note": "Released after WP-201 integration; worker resumes by merging master into its existing worktree."
     },
     {
       "work_order_id": "WP-320-agent-installers",
