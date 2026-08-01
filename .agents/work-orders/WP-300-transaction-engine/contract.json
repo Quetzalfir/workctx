@@ -30,7 +30,7 @@
     "WP-210",
     "WP-220"
   ],
-  "base_commit": "PENDING-FINAL-PIN",
+  "base_commit": "c35bff6085a2f9ba4b9c4c97989eeaae6fbb5be0",
   "branch": "agent/WP-300-transaction-engine",
   "worktree": ".worktrees/WP-300-transaction-engine",
   "allowed_paths": [
