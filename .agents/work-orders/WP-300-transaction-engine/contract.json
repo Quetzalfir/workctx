@@ -3,30 +3,34 @@
   "id": "WP-300-transaction-engine",
   "title": "Transaction engine and hash-chained audit ledger",
   "status": "ready",
-  "objective": "Multi-entity canonical mutations happen only as validated atomic transactions: typed proposals, preconditions, dry-run, locked staged apply through the WP-200 primitives, hash-chained audit events per ADR 0010, idempotency, projection staleness handling, and recovery — with failure-injection tests.",
+  "objective": "Multi-entity canonical mutations happen only as validated atomic transactions: typed proposals, preconditions, dry-run, locked staged apply through the WP-200 primitives, hash-chained audit events per ADR 0010, idempotency, projection staleness handling, and recovery \u2014 with failure-injection tests.",
   "business_value": "This is the product's central trust mechanism (risk R-001): every ingestion, task, and drafting workflow mutates canonical state exclusively through this engine.",
   "scope": [
     "Implement typed transaction-proposal domain models in src/workctx/domain/transactions.py (TXP id family, base context revision, actor/agent metadata, source references, ordered operations, pre/postconditions) aligned with schemas/transaction-proposal.schema.json, which you own and must tighten from its deliberately loose Wave 1 shape (ADR 0008 positive/negative fixtures; ADR 0011 tiers where relations are inexpressible)",
-    "Implement the engine in src/workctx/transactions/: proposal validation (structural via domain models + reference/precondition checks via the WP-220 engine's public API), deterministic dry-run reporting exact intended changes, and apply composing ONLY the WP-200 public primitives (ContextLock with fencing, staged replacement with intent journal, bounded retries) per the ADR 0006 sequence",
+    "Implement the engine in src/workctx/transactions/: proposal validation (structural via domain models + reference/precondition checks via the WP-220 engine's public API), deterministic dry-run reporting exact intended changes, and apply composing ONLY the WP-200/WP-201 public primitives (ContextLock with fencing; staged replace/move/delete with intent journal and bounded retries; the fenced append primitive for the ledger) per the ADR 0006 sequence",
     "Implement the ADR 0010 audit ledger: append-only 99_meta/audit/ledger.jsonl with prev_hash/event_hash chain over ADR 0005 canonical serialization, written inside the lock after the replace sequence and before intent finalize; tighten schemas/audit-event.schema.json accordingly (event/prev hash fields, actor, operations, content hashes) with fixtures; provide chain verification and an audit_summary read API",
-    "Idempotency: applying the same proposal twice (same proposal id + base revision) is detected and refused with a recoverable conflict; interrupted applies are detectable and completable/rollbackable via the WP-200 recovery inspection API — failure-injection tests required (ADR 0006 acceptance)",
-    "Projection staleness: after a committed apply, mark/refresh the SQLite projection through its public rebuild/readiness APIs; a projection failure after canonical commit must not erase the transaction — it reports stale derived state with repair instructions (exit-band 6 semantics at the API level)",
+    "Update the four Wave 1 workspace fixtures for transaction-proposal and audit-event (explicitly granted paths) so they validate against your tightened schemas; all other tests/workspace content stays untouched",
+    "Idempotency: applying the same proposal twice (same proposal id + base revision) is detected and refused with a recoverable conflict; interrupted applies are detectable and completable/rollbackable via the WP-200 recovery inspection API \u2014 failure-injection tests required (ADR 0006 acceptance)",
+    "Projection staleness: after a committed apply, mark/refresh the SQLite projection through its public rebuild/readiness APIs; a projection failure after canonical commit must not erase the transaction \u2014 it reports stale derived state with repair instructions (exit-band 6 semantics at the API level)",
     "Context revision: define and maintain the base-revision token the preconditions check (document the representation in docs/reference/transactions.md); stale-revision proposals are refused with conflict semantics",
-    "Expose typed application APIs (validate_proposal, dry_run, apply, audit_summary, verify_ledger) for CLI and MCP wiring by the lead"
+    "Expose typed application APIs (validate_proposal, dry_run, apply, audit_summary, verify_ledger) for CLI and MCP wiring by the lead",
+    "Preconditions (D-025): compose them inside the engine \u2014 per-document validation through the domain models plus reference/existence checks through the projection query APIs over the staged in-memory set; full workspace validation via validate_workspace runs post-apply as the postcondition gate. No WP-220 changes.",
+    "Post-commit projection failure: call SQLiteProjection.invalidate() (lead-added durable mark-stale) and report stale derived state with repair instructions"
   ],
   "non_goals": [
     "No CLI or MCP wiring (lead wires proposal/transaction commands and the ADR 0012 tools)",
     "No artifact/inbox lifecycle (WP-310 composes your apply for archive-after-commit)",
-    "No changes to WP-200 primitives — a missing primitive capability is a coordination request to the lead, not a cross-package edit",
+    "No changes to WP-200 primitives \u2014 a missing primitive capability is a coordination request to the lead, not a cross-package edit",
     "No external writes of any kind; no LLM involvement (deterministic engine only)",
     "No new runtime dependencies"
   ],
   "dependencies": [
     "WP-200",
+    "WP-201",
     "WP-210",
     "WP-220"
   ],
-  "base_commit": "PENDING-WAVE3-BASELINE",
+  "base_commit": "c35bff6085a2f9ba4b9c4c97989eeaae6fbb5be0",
   "branch": "agent/WP-300-transaction-engine",
   "worktree": ".worktrees/WP-300-transaction-engine",
   "allowed_paths": [
@@ -36,6 +40,10 @@
     "schemas/audit-event.schema.json",
     "tests/transactions/**",
     "docs/reference/transactions.md",
+    "tests/workspace/fixtures/positive/transaction-proposal.json",
+    "tests/workspace/fixtures/positive/audit-event.json",
+    "tests/workspace/fixtures/negative/transaction-proposal-operations.json",
+    "tests/workspace/fixtures/negative/audit-event-hash.json",
     ".agents/work-orders/WP-300-transaction-engine/report.md",
     ".agents/work-orders/WP-300-transaction-engine/report.json"
   ],
@@ -71,7 +79,6 @@
     "schemas/artifact-manifest.schema.json",
     "templates/**",
     "tests/domain/**",
-    "tests/workspace/**",
     "tests/cli/**",
     "tests/filesystem/**",
     "tests/projections/**",
@@ -95,6 +102,7 @@
     "docs/adr/0011-schema-expressibility-boundary.md",
     "docs/reference/canonical-store.md",
     ".agents/status/decision-register.md",
+    "docs/reference/canonical-store.md",
     ".agents/work-orders/WP-300-transaction-engine/context.md",
     ".agents/work-orders/WP-300-transaction-engine/acceptance.md"
   ],

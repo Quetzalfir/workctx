@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-201-staging-extensions",
+  "status": "completed",
+  "summary": "Extended schema-v1 staged operations with typed preimage-preserving move/delete recovery and a fenced, fsynced, atomic line append primitive, with comprehensive failure-injection coverage and documentation.",
+  "base_commit": "0f99073e926bcbe5b8405895bac0bc3a80edc409",
+  "final_commit": "abbbb0c007f553f88ce6afa72f378ffb2fc04a7c",
+  "files_changed": [
+    "src/workctx/adapters/filesystem/staging.py",
+    "src/workctx/adapters/filesystem/__init__.py",
+    "tests/filesystem/test_staging_extensions.py",
+    "docs/reference/canonical-store.md",
+    ".agents/work-orders/WP-201-staging-extensions/report.md",
+    ".agents/work-orders/WP-201-staging-extensions/report.json"
+  ],
+  "behavior_implemented": [
+    "Added typed StagedMove, StagedDelete, and IntentTargetKind APIs while preserving existing replacement signatures, behavior, and five-field schema-version-1 intent bytes.",
+    "Added ordered atomic move and delete application with retained preimages, same-volume and path-collision enforcement, bounded PermissionError retries, per-attempt path/hash validation, and nonce fencing.",
+    "Extended inspection, successor completion, reverse rollback, resumable inverse operations, and audit finalizers across replace, move, delete, and mixed intents.",
+    "Added atomic_append_line_bytes with complete-line validation, safe parent creation, valid-active-intent support, malformed-intent rejection, copy-on-write fsync and replacement, per-retry drift/path/fence checks, and hard-link-safe semantics.",
+    "Documented the extended intent vocabulary, recovery state machine, append sequencing, runtime layout, performance consequence, and cooperative-writer race boundary.",
+    "Added 68 focused tests covering per-kind and mixed failure recovery, inverse retries, finalizer conflicts, takeover fencing, path substitution, malformed state, successor flows, torn append staging, fsync, and hard links without modifying pre-existing tests."
+  ],
+  "tests": [
+    {
+      "command": "uv run pytest tests/filesystem -q (baseline)",
+      "status": "passed",
+      "result": "133 passed in 21.36s before worker changes"
+    },
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "295 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 58 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "777 passed in 80.04s"
+    },
+    {
+      "command": "uv run pytest tests/filesystem -q",
+      "status": "passed",
+      "result": "201 passed in 30.56s"
+    },
+    {
+      "command": "uv run pytest tests/filesystem/test_staging.py tests/filesystem/test_staging_extensions.py -q",
+      "status": "passed",
+      "result": "100 passed in 19.23s"
+    },
+    {
+      "command": "uv run pytest tests/filesystem/test_staging_extensions.py -q",
+      "status": "passed",
+      "result": "68 passed in 13.64s"
+    },
+    {
+      "command": "uv run python -c \"import json; from pathlib import Path; from jsonschema import Draft202012Validator; root = Path('.'); schema = json.loads((root / '.agents/plan/initial/agent-report.schema.json').read_text(encoding='utf-8')); report = json.loads((root / '.agents/work-orders/WP-201-staging-extensions/report.json').read_text(encoding='utf-8')); Draft202012Validator(schema).validate(report)\"",
+      "status": "passed",
+      "result": "WP-201 report.json validates against agent-report.schema.json"
+    },
+    {
+      "command": "uv run pytest tests/test_plan_contracts.py -q",
+      "status": "passed",
+      "result": "4 passed in 0.07s after report creation"
+    }
+  ],
+  "assumptions": [
+    "The lead-owned 0f99073 activation commit is the intended WP-201 baseline despite the PENDING-WP201-BASELINE contract placeholder.",
+    "Local NTFS behavior is exercised directly; POSIX directory fsync remains best effort and SMB/NFS receive no stronger Phase 1 guarantee.",
+    "Cooperating writers obey the exclusive context lock; no portable atomic no-clobber guarantee is claimed against a process that creates a move destination inside the final check-to-replace race window."
+  ],
+  "decisions": [
+    "Keep intent schema version 1, interpret an absent kind as replace, emit pure replacements in the exact legacy five-field shape, and use strict extended shapes only for move/delete.",
+    "Use copy-on-write atomic line append to comply with ADR 0006 canonical-write rules, prevent torn canonical lines, and avoid mutating out-of-bound hard-linked inodes; accept linear ledger-size cost under ADR 0010 Phase 1.",
+    "Reject all plain-path collisions across replace targets, delete targets, and both move endpoints after NFC normalization and case folding.",
+    "Reject symlink or junction parent chains for move, delete, and append, and revalidate endpoints on every retry before the final nonce fence.",
+    "Validate but do not reject a structurally valid active intent during append, allowing both original and successor holders while malformed or unsafe intent state fails closed."
+  ],
+  "deviations": [
+    "The contract base remains PENDING-WP201-BASELINE; the operator-pinned integrated base used by the worker is 0f99073e926bcbe5b8405895bac0bc3a80edc409.",
+    "The assigned worktree and branch were absent at session start and were created from the pinned base before any edit.",
+    "The required WP-300 blocker report is absent from the pinned tree and was read without mutation from agent/WP-300-transaction-engine at its reported worker revision.",
+    "No objective, architecture, dependency, public replacement behavior, or allowed-path deviation was made."
+  ],
+  "security_considerations": [
+    "New endpoints fail closed on traversal, absolute and wrong-zone paths, nested contexts, symlink/junction parents, retry-time link substitution, malformed intents, and target/source drift.",
+    "Nonce fencing is last before every move, delete, restore, and append commit attempt, and delete absence is accepted only after fencing the current holder.",
+    "Preimages remain in fsynced transaction backups until verified finalization; invalid parent state cannot discard rollback assets.",
+    "Copy-on-write append prevents a context hard link from mutating an inode reachable outside the context boundary.",
+    "Fixtures are fictional and no secrets, private data, network services, SQLite paths, or external writes were introduced."
+  ],
+  "migration_considerations": [
+    "The intent extension remains schema version 1 and legacy replacement records round-trip byte-for-byte, so no canonical data migration is required.",
+    "No domain model, public schema, CLI, SQLite projection, audit-event format, dependency, or runtime backup ownership changed."
+  ],
+  "unresolved": [
+    "The lead should replace or explicitly accept the PENDING-WP201-BASELINE administrative placeholder during integration; there is no implementation blocker.",
+    "Atomic no-clobber against a non-cooperating process inside the final absence-check race remains outside the documented ADR 0006 Phase 1 guarantee."
+  ],
+  "recommended_next_action": "Lead review abbbb0c007f553f88ce6afa72f378ffb2fc04a7c and the report commit, rerun the full gate independently, integrate WP-201, and resume WP-300 against the new filesystem APIs."
+}

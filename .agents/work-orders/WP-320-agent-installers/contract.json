@@ -3,7 +3,7 @@
   "id": "WP-320-agent-installers",
   "title": "Agent installers and session bootstrap",
   "status": "ready",
-  "objective": "workctx can detect Codex, Claude Code, and Gemini CLI, generate project-scoped instruction and skill adapters from canonical sources with drift-detecting manifests, report status, repair and uninstall safely, and open a context in a selected agent — all as typed APIs, without touching user credentials.",
+  "objective": "workctx can detect Codex, Claude Code, and Gemini CLI, generate project-scoped instruction and skill adapters from canonical sources with drift-detecting manifests, report status, repair and uninstall safely, and open a context in a selected agent \u2014 all as typed APIs, without touching user credentials.",
   "business_value": "Agent interoperability is a Phase 1 definition-of-done pillar: one canonical rule set serving three agent clients without duplication or drift (risks R-005).",
   "scope": [
     "Implement src/workctx/adapters/agents/: client detection (executables on PATH plus client-native project markers) for codex, claude, and gemini with a typed capability report",
@@ -12,12 +12,17 @@
     "status/repair/uninstall APIs: status reports drift by comparing manifest hashes to canonical sources; repair regenerates only stale files; uninstall removes only manifest-listed generated files",
     "Session bootstrap: an open_context API that launches the selected detected client in a context root (subprocess spawn, no credential handling); failure when the client is missing is a clear unavailable-dependency error",
     "Respect the registry: generated adapters record the skill side-effect classes from .agents/skills/registry.yaml as advisory metadata where the client format allows comments/frontmatter the canonical contract permits",
-    "Document the adapter strategy per client in docs/reference/agent-adapters.md"
+    "Document the adapter strategy per client in docs/reference/agent-adapters.md",
+    "D-026: extend the manifest schema (explicit grant) with a per-entry mode \u2014 generated (existing) or native-verified (canonical path + hash, no generated file) \u2014 with ADR 0008 positive/negative fixtures; Codex uses native-verified entries for skills it reads directly from .agents/skills, generating only what its native behavior actually requires",
+    "D-027: create the packaged agent kit (src/workctx/resources/agent_kit/: canonical skills, registry.yaml, bridge templates) with a deterministic sync script (scripts/sync_agent_kit.py) and a byte-equality test against .agents/ sources (D-011 pattern); the installer reads repo .agents/ when present, else the packaged kit",
+    "D-028: missing bridges in target projects are generated from packaged templates as manifest-recorded entries; existing user bridges are NEVER modified \u2014 status reports divergence instead",
+    "D-029: Gemini uses .gemini/ with the native form you select and document; client-version probing against a declared supported-range table, failing safely on unsupported versions",
+    "D-030: backups live in project-local .workctx/backups/<timestamp>/, manifest-listed, retained until uninstall"
   ],
   "non_goals": [
-    "No MCP configuration generation — that portion is explicitly deferred until WP-330 defines the server identity (D-014); ship the seam (manifest field reserved) and a NOT-IMPLEMENTED status entry",
+    "No MCP configuration generation \u2014 that portion is explicitly deferred until WP-330 defines the server identity (D-014); ship the seam (manifest field reserved) and a NOT-IMPLEMENTED status entry",
     "No CLI wiring (lead wires agent detect/install/status/open after integration)",
-    "No changes to canonical skills, the frontmatter schema, or the WP-130 manifest schema — you consume them; a manifest-spec gap is a coordination request",
+    "No changes to canonical skills or the frontmatter schema; the manifest schema is amendable ONLY per the D-026 grant with fixtures",
     "No credential reading, storage, or configuration of any kind (hard security boundary)",
     "No new runtime dependencies"
   ],
@@ -25,17 +30,23 @@
     "WP-120",
     "WP-130"
   ],
-  "base_commit": "PENDING-WAVE3-BASELINE",
+  "base_commit": "74762a4f402d0c9ae387ceb897b0635e7b1d29c5",
   "branch": "agent/WP-320-agent-installers",
   "worktree": ".worktrees/WP-320-agent-installers",
   "allowed_paths": [
     "src/workctx/adapters/agents/**",
     "tests/agents_setup/**",
     "docs/reference/agent-adapters.md",
+    "schemas/skill-adapter-manifest.schema.json",
+    "docs/reference/skill-adapters.md",
+    "src/workctx/resources/agent_kit/**",
+    "scripts/sync_agent_kit.py",
     ".agents/work-orders/WP-320-agent-installers/report.md",
     ".agents/work-orders/WP-320-agent-installers/report.json"
   ],
   "forbidden_paths": [
+    "schemas/** (except skill-adapter-manifest.schema.json, explicitly granted)",
+    "src/workctx/resources/context_template/**",
     "src/workctx/adapters/__init__.py",
     "src/workctx/adapters/filesystem/**",
     "src/workctx/adapters/sqlite/**",
@@ -47,8 +58,6 @@
     "src/workctx/transactions/**",
     "src/workctx/validation/**",
     "src/workctx/cli.py",
-    "src/workctx/resources/**",
-    "schemas/**",
     "templates/**",
     ".agents/plan/**",
     ".agents/templates/**",
@@ -67,6 +76,7 @@
     "schemas/skill-adapter-manifest.schema.json",
     ".agents/skills/registry.yaml",
     ".agents/status/decision-register.md",
+    "docs/adr/0011-schema-expressibility-boundary.md",
     ".agents/work-orders/WP-320-agent-installers/context.md",
     ".agents/work-orders/WP-320-agent-installers/acceptance.md"
   ],
@@ -76,7 +86,7 @@
     "docs/adr/0012-mcp-tool-surface-alpha.md"
   ],
   "deliverables": [
-    "Agents adapter package: detect, generate, status, repair, uninstall, open — with manifest-driven drift detection and tests in isolated fake home/project directories",
+    "Agents adapter package: detect, generate, status, repair, uninstall, open \u2014 with manifest-driven drift detection and tests in isolated fake home/project directories",
     "docs/reference/agent-adapters.md",
     "Worker report.md and report.json"
   ],
