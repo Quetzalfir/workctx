@@ -4,15 +4,15 @@
   "baseline_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
   "notes": [
     "Wave 1 and 2 assignments are historical; see Git history of this file and the integration log.",
+    "D-024 insertion: WP-201 (filesystem staging extensions) runs before WP-300 resumes; the Wave 2 filesystem freeze is lifted for WP-201 only.",
     "Sequencing: WP-300 and WP-320 run in parallel now (disjoint). WP-310 and WP-330 start after WP-300 integrates (their base is pinned then) and may run in parallel with each other (disjoint).",
-    "WP-330 holds the ONLY worker grants on src/workctx/cli.py (one mcp serve sub-command), pyproject.toml, and .github/workflows/ci.yml (mcp extra enablement only) — no other Wave 3 order may touch them; the grants are narrow and reviewed against their stated limits.",
+    "WP-330 holds the ONLY worker grants on src/workctx/cli.py (one mcp serve sub-command), pyproject.toml, and .github/workflows/ci.yml (mcp extra enablement only) \u2014 no other Wave 3 order may touch them; the grants are narrow and reviewed against their stated limits.",
     "99_meta/audit/** runtime ownership: WP-300 (ADR 0010 ledger). 00_inbox/01_processed runtime moves: WP-310 through WP-200/WP-300 APIs only.",
     "CLI wiring for Wave 3 engines (inbox/artifact/proposal/transaction/agent commands) is lead integration work except WP-330's granted mcp serve.",
     "Each work order may write its own report.md and report.json inside its work-order directory."
   ],
   "frozen_paths": [
     "src/workctx/adapters/__init__.py",
-    "src/workctx/adapters/filesystem/**",
     "src/workctx/adapters/sqlite/**",
     "src/workctx/domain/** (except WP-300's new transactions.py)",
     "src/workctx/models/**",
@@ -37,6 +37,21 @@
   ],
   "assignments": [
     {
+      "work_order_id": "WP-201-staging-extensions",
+      "mode": "write",
+      "paths": [
+        "src/workctx/adapters/filesystem/**",
+        "tests/filesystem/**",
+        "docs/reference/canonical-store.md",
+        ".agents/work-orders/WP-201-staging-extensions/report.md",
+        ".agents/work-orders/WP-201-staging-extensions/report.json"
+      ],
+      "branch": "agent/WP-201-staging-extensions",
+      "worktree": ".worktrees/WP-201-staging-extensions",
+      "status": "ready",
+      "note": "Bounded WP-200 follow-up closing the WP-300 primitive gaps (D-024); parallel with WP-320, disjoint."
+    },
+    {
       "work_order_id": "WP-300-transaction-engine",
       "mode": "write",
       "paths": [
@@ -47,11 +62,16 @@
         "tests/transactions/**",
         "docs/reference/transactions.md",
         ".agents/work-orders/WP-300-transaction-engine/report.md",
-        ".agents/work-orders/WP-300-transaction-engine/report.json"
+        ".agents/work-orders/WP-300-transaction-engine/report.json",
+        "tests/workspace/fixtures/positive/transaction-proposal.json",
+        "tests/workspace/fixtures/positive/audit-event.json",
+        "tests/workspace/fixtures/negative/transaction-proposal-operations.json",
+        "tests/workspace/fixtures/negative/audit-event-hash.json"
       ],
       "branch": "agent/WP-300-transaction-engine",
       "worktree": ".worktrees/WP-300-transaction-engine",
-      "status": "ready"
+      "status": "proposed",
+      "note": "Blocked round accepted (D-024); re-pinned and released after WP-201 integrates. Fixture grants added to its contract."
     },
     {
       "work_order_id": "WP-320-agent-installers",

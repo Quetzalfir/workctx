@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "id": "WP-201-staging-extensions",
+  "title": "Staging primitives extension: moves, deletes, and fenced ledger append",
+  "status": "ready",
+  "objective": "The WP-200 staging protocol supports the full transaction operation vocabulary (move, delete_generated) with the same recovery guarantees as replaces, and provides a fenced, fsynced, bounded-retry append primitive with parent-directory creation for the ADR 0010 ledger — unblocking WP-300.",
+  "business_value": "WP-300 correctly blocked on these contractual gaps: the transaction engine cannot honor the schema's operation vocabulary or the ADR 0010 append sequencing without them (see the WP-300 blocker report).",
+  "scope": [
+    "Extend the intent/staging model in src/workctx/adapters/filesystem/staging.py so intent targets carry an operation kind: replace (existing behavior, unchanged), move (source path + destination, preimage-preserving, atomic per ADR 0006 semantics), and delete (preimage-preserving removal); recovery inspection, completion, and rollback must cover all three kinds with the same failure-injection rigor as the existing replace tests",
+    "Add a fenced append primitive: append bytes as one durable line-oriented write to a target file under the held lock (nonce fence verified immediately before the write), fsynced, bounded-retry on Windows PermissionError, creating missing parent directories inside the context root; designed for 99_meta/audit/ledger.jsonl but path-agnostic within the boundary",
+    "The append primitive must be usable while a prepared intent for the same transaction remains active, and must not disturb intent finalize semantics (ADR 0010: ledger append happens after the replace sequence, before intent removal)",
+    "Preserve every existing public API and behavior byte-for-byte: all current tests/filesystem tests pass unmodified; intent.json remains backward-readable or its version field is bumped with a clear error for old records (document the choice)",
+    "Update docs/reference/canonical-store.md for the extended vocabulary and the append primitive"
+  ],
+  "non_goals": [
+    "No transaction engine logic (WP-300 composes these primitives)",
+    "No ledger format or hash-chain semantics (WP-300 owns ADR 0010 implementation)",
+    "No changes outside the filesystem adapter, its tests, and its reference doc",
+    "No new runtime dependencies"
+  ],
+  "dependencies": [
+    "WP-200"
+  ],
+  "base_commit": "PENDING-WP201-BASELINE",
+  "branch": "agent/WP-201-staging-extensions",
+  "worktree": ".worktrees/WP-201-staging-extensions",
+  "allowed_paths": [
+    "src/workctx/adapters/filesystem/**",
+    "tests/filesystem/**",
+    "docs/reference/canonical-store.md",
+    ".agents/work-orders/WP-201-staging-extensions/report.md",
+    ".agents/work-orders/WP-201-staging-extensions/report.json"
+  ],
+  "forbidden_paths": [
+    "src/workctx/adapters/__init__.py",
+    "src/workctx/adapters/sqlite/**",
+    "src/workctx/adapters/agents/**",
+    "src/workctx/domain/**",
+    "src/workctx/models/**",
+    "src/workctx/presentation/**",
+    "src/workctx/retrieval/**",
+    "src/workctx/services/**",
+    "src/workctx/transactions/**",
+    "src/workctx/validation/**",
+    "src/workctx/cli.py",
+    "src/workctx/resources/**",
+    "schemas/**",
+    "templates/**",
+    "tests/domain/**",
+    "tests/workspace/**",
+    "tests/cli/**",
+    "tests/projections/**",
+    "tests/validation_engine/**",
+    "tests/retrieval/**",
+    "tests/transactions/**",
+    "tests/agents_setup/**",
+    ".agents/plan/**",
+    ".agents/templates/**",
+    ".agents/status/**",
+    ".agents/skills/**",
+    "AGENTS.md",
+    "docs/adr/**",
+    "pyproject.toml"
+  ],
+  "required_reading": [
+    "AGENTS.md",
+    "docs/adr/0006-context-locking-and-atomic-writes.md",
+    "docs/adr/0010-audit-ledger-representation.md",
+    "docs/reference/canonical-store.md",
+    ".agents/work-orders/WP-300-transaction-engine/report.md",
+    ".agents/work-orders/WP-201-staging-extensions/context.md",
+    ".agents/work-orders/WP-201-staging-extensions/acceptance.md"
+  ],
+  "context_refs": [
+    "schemas/transaction-proposal.schema.json",
+    ".agents/status/decision-register.md"
+  ],
+  "deliverables": [
+    "Extended staging with move/delete target kinds and full recovery coverage",
+    "Fenced append primitive with parent-dir creation",
+    "Updated docs/reference/canonical-store.md",
+    "Worker report.md and report.json"
+  ],
+  "acceptance_criteria": [
+    "Move and delete targets apply atomically, roll back from preimages, and are reported correctly by recovery inspection after injected mid-sequence failures (per kind and mixed-kind sequences)",
+    "Fenced append: nonce mismatch aborts without writing; missing parent directories are created inside the boundary only; injected PermissionError retries then surfaces a recoverable error; appended lines are durable (fsynced) and complete (no torn lines under injected failure)",
+    "Append while a prepared intent is active works and finalize semantics are unchanged",
+    "All pre-existing tests/filesystem tests pass unmodified",
+    "Path-boundary enforcement covers move destinations and append targets (escape attempts refused)",
+    "The full validation gate passes"
+  ],
+  "validation_commands": [
+    "uv run ruff check .",
+    "uv run ruff format --check .",
+    "uv run mypy src",
+    "uv run pytest"
+  ],
+  "security_constraints": [
+    "Fictional fixtures only; primitives never write outside the context root",
+    "Delete preimages are retained for rollback, honoring raw-evidence retention expectations of callers"
+  ],
+  "stop_conditions": [
+    "Backward compatibility for existing staging consumers cannot be preserved",
+    "Any needed change to frozen files or ADR semantics"
+  ],
+  "report_paths": {
+    "markdown": ".agents/work-orders/WP-201-staging-extensions/report.md",
+    "json": ".agents/work-orders/WP-201-staging-extensions/report.json"
+  }
+}

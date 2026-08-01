@@ -247,6 +247,24 @@ class SQLiteProjection:
 
         return self._readiness_trigger(self._load_bound_config())
 
+    def invalidate(self) -> None:
+        """Durably mark the live projection stale without rebuilding.
+
+        Lead integration addition for WP-300: after a canonical commit whose
+        projection refresh failed, the engine marks derived state stale so the
+        next ``ensure_ready`` performs a full rebuild and ``readiness_trigger``
+        reports the pending rebuild. Removing the database is the ADR 0007
+        rebuild-not-migrate path; sidecars are cleaned with it.
+        """
+
+        with self._gate.writer_lock:
+            for suffix in ("", *_LIVE_SIDECAR_SUFFIXES):
+                candidate = self._database_path.with_name(self._database_path.name + suffix)
+                try:
+                    candidate.unlink(missing_ok=True)
+                except OSError:
+                    continue
+
     def metadata(self) -> ProjectionMetadata:
         self.ensure_ready()
         metadata = self._read_metadata()
