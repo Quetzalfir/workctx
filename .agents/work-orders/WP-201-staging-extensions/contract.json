@@ -21,7 +21,7 @@
   "dependencies": [
     "WP-200"
   ],
-  "base_commit": "PENDING-WP201-BASELINE",
+  "base_commit": "0f99073e926bcbe5b8405895bac0bc3a80edc409",
   "branch": "agent/WP-201-staging-extensions",
   "worktree": ".worktrees/WP-201-staging-extensions",
   "allowed_paths": [
