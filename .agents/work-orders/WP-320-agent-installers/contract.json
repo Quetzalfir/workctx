@@ -30,7 +30,7 @@
     "WP-120",
     "WP-130"
   ],
-  "base_commit": "PENDING-WP320-REPIN",
+  "base_commit": "74762a4f402d0c9ae387ceb897b0635e7b1d29c5",
   "branch": "agent/WP-320-agent-installers",
   "worktree": ".worktrees/WP-320-agent-installers",
   "allowed_paths": [
