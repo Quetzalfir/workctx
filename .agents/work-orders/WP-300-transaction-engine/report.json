@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-300-transaction-engine",
+  "status": "blocked",
+  "summary": "WP-300 stopped before implementation because WP-200 exposes no fenced, durable audit-ledger write that can run after canonical replacement while the intent remains active and before finalization; direct writes and semantic deviations are forbidden. The unchanged pinned baseline passes all four validation commands with 707 tests.",
+  "base_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
+  "final_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
+  "files_changed": [
+    ".agents/work-orders/WP-300-transaction-engine/report.md",
+    ".agents/work-orders/WP-300-transaction-engine/report.json"
+  ],
+  "behavior_implemented": [],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "289 files already formatted."
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 58 source files."
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "707 passed in 81.51 seconds."
+    },
+    {
+      "command": "uv run pytest tests/test_plan_contracts.py -q",
+      "status": "passed",
+      "result": "4 passed in 0.09 seconds; final rerun passed with 4 tests in 0.08 seconds."
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "passed",
+      "result": "Exit code 0; only the two allowed report paths are staged."
+    }
+  ],
+  "assumptions": [
+    "ADR 0010 and the canonical-store reference require a distinct audit write after canonical replacement while the intent remains durable and before finalization.",
+    "Folding the ledger into the original intent or writing it directly would be an unapproved deviation from the mandatory protocol.",
+    "The direct assignment and lead checkout establish 55bc43ae7b118f15f131ed04df60e8cbf42f3129 as the base even though the branch's frozen contract copy predates the pin-only commit."
+  ],
+  "decisions": [
+    "Stopped at the explicit WP-200 primitive-gap condition without implementing a partial engine.",
+    "Kept every repository change within the two allowed WP-300 report paths."
+  ],
+  "deviations": [
+    "No implementation scope or allowed-path deviation.",
+    "The missing mandated worktree was created on agent/WP-300-transaction-engine from the pinned base; the frozen contract was not edited."
+  ],
+  "security_considerations": [
+    "No canonical data, fixture data, secrets, or external systems were written.",
+    "The worker refused a direct ledger append so fence, durability, and ordering guarantees were not silently weakened."
+  ],
+  "migration_considerations": [
+    "No schema, canonical workspace, projection, or migration change was made."
+  ],
+  "unresolved": [
+    "WP-200 has no public fenced, fsynced, bounded-retry audit write permitted while the matching intent remains active.",
+    "WP-200 has no public primitive to create the intentionally absent 99_meta/audit directory under the held context lock.",
+    "WP-200 byte-postimage staging cannot express the existing move and delete_generated operation vocabulary.",
+    "WP-220 cannot validate an in-memory or staged multi-document proposal overlay through its public API.",
+    "WP-210 has no durable mark-stale API after a post-commit rebuild failure.",
+    "The forbidden Wave 1 positive transaction/audit fixtures encode the loose schemas and cannot pass the required ADR 0010 tightening without a lead-owned baseline update or explicit path grant."
+  ],
+  "recommended_next_action": "Implementation lead: add a bounded WP-200 public audit-write capability valid between apply and finalization, including first-use audit-directory creation and original/successor recovery semantics; decide move/delete support and any WP-220/WP-210 additions; update or grant ownership of the frozen Wave 1 transaction/audit fixtures; then rebase or recreate WP-300 and return it for implementation."
+}
