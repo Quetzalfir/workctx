@@ -1,6 +1,44 @@
 # Leader review: `WP-300-transaction-engine`
 
-## Decision
+## Round 2 decision (2026-08-01)
+
+`revision_requested` — blocker accepted; resolved by design decision D-031, no new
+cross-package work.
+
+The worker verified correctly that the WP-201 intent record carries no proposal digest,
+actor, sources, or condition digests, so an eventless recovery COMPLETE cannot
+authenticate what it completes. Lead resolution (D-031): recovery is ledger-event-gated.
+The ADR 0010 append — which happens strictly after every replace and before intent
+finalize — is the commit point:
+
+- intent + matching verified ledger event => all replaces are necessarily applied =>
+  recovery performs cleanup/finalize only (no writes to authenticate);
+- intent without a ledger event => the transaction never committed => rollback ONLY,
+  from WP-201's hash-verified preimages; a retry goes through the full authenticated
+  apply path with fresh validation, actor, and conditions.
+
+Forward-completion of staged replaces never occurs during recovery, eliminating the
+authentication, postcondition-bypass, and provenance-misstatement vectors wholesale.
+
+Required corrections (bounded, same branch/worktree):
+
+1. Implement D-031 recovery policy; document it in docs/reference/transactions.md.
+2. Reject mismatched transaction_id selectors in active recovery (defect).
+3. Recovery provenance: model rollback/cleanup events within YOUR audit-event schema so
+   its producer-invariant description stays truthful (you own the schema; fix the
+   description, add fixtures).
+4. Close the enumerated D-025 preflight traversal omissions (evidence extras, embedded
+   observation references/identities, task raw-ID dependencies/blockers, URI blockers,
+   body references); where a carrier is only checkable post-apply, document the split
+   explicitly in transactions.md.
+5. Add the missing focused tests: recovery crash/failure branches per case and
+   long-duration heartbeat behavior.
+6. Rerun the gate; update report.md/report.json to completed.
+
+Round 2 evidence reviewed: 867 tests passing on the branch including 90 transaction
+tests; partial implementation uncommitted at the worker’s discretion.
+
+## Round 1 decision (2026-07-31)
 
 `revision_requested` (blocker accepted; contract amended; resumes after WP-201)
 
