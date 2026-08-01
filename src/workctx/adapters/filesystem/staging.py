@@ -37,6 +37,7 @@ _CANONICAL_TARGET_PREFIXES = (
 _ROOT_TARGETS = ("context.yaml",)
 
 ReplaceFunction = Callable[[Path, Path], None]
+UnlinkFunction = Callable[[Path], None]
 SleepFunction = Callable[[float], None]
 BeforeAttemptFunction = Callable[[], None]
 
@@ -55,6 +56,10 @@ class RecoverableReplaceError(StagingError):
 
 class InvalidIntentError(StagingError):
     """Raised when an on-disk intent is malformed or unsafe."""
+
+
+def _system_unlink(path: Path) -> None:
+    path.unlink()
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,51 +91,95 @@ class StagedWrite:
 
 
 @dataclass(frozen=True, slots=True)
+class StagedMove:
+    """One atomic move from an existing source to a missing destination."""
+
+    source: str | Path
+    destination: str | Path
+
+
+@dataclass(frozen=True, slots=True)
+class StagedDelete:
+    """One preimage-preserving removal of an existing canonical file."""
+
+    target: str | Path
+
+
+class IntentTargetKind(StrEnum):
+    """Operation kinds supported by a staged intent target."""
+
+    REPLACE = "replace"
+    MOVE = "move"
+    DELETE = "delete"
+
+
+@dataclass(frozen=True, slots=True)
 class IntentTarget:
     """One ordered postimage and its rollback preimage in a durable intent."""
 
     target: str
-    staged: str
-    content_hash: str
+    staged: str | None
+    content_hash: str | None
     backup: str | None
     preimage_hash: str | None
+    kind: IntentTargetKind = IntentTargetKind.REPLACE
+    destination: str | None = None
 
-    def to_dict(self) -> dict[str, str | None]:
-        return {
+    def __post_init__(self) -> None:
+        _validate_intent_target_fields(self)
+
+    def to_dict(self) -> dict[str, object]:
+        result: dict[str, object] = {
             "target": self.target,
             "staged": self.staged,
             "content_hash": self.content_hash,
             "backup": self.backup,
             "preimage_hash": self.preimage_hash,
         }
+        if self.kind is not IntentTargetKind.REPLACE:
+            result["kind"] = self.kind.value
+            result["destination"] = self.destination
+        return result
 
     @classmethod
     def from_dict(cls, value: object) -> Self:
-        if not isinstance(value, dict) or set(value) != {
+        legacy_fields = {
             "target",
             "staged",
             "content_hash",
             "backup",
             "preimage_hash",
-        }:
+        }
+        extended_fields = legacy_fields | {"kind", "destination"}
+        if not isinstance(value, dict):
+            raise ValueError("Intent target has an invalid object shape")
+        fields = set(value)
+        if fields != legacy_fields and fields != extended_fields:
             raise ValueError("Intent target has an invalid object shape")
         target = _required_string(value["target"], "target")
-        staged = _required_string(value["staged"], "staged")
-        content_hash = _required_string(value["content_hash"], "content_hash")
-        if _CONTENT_HASH.fullmatch(content_hash) is None:
-            raise ValueError("Intent target content_hash is invalid")
+        staged = _optional_string(value["staged"], "staged")
+        content_hash = _optional_hash(value["content_hash"], "content_hash")
         backup = _optional_string(value["backup"], "backup")
-        preimage_hash = _optional_string(value["preimage_hash"], "preimage_hash")
-        if preimage_hash is not None and _CONTENT_HASH.fullmatch(preimage_hash) is None:
-            raise ValueError("Intent target preimage_hash is invalid")
-        if (backup is None) != (preimage_hash is None):
-            raise ValueError("Intent target backup and preimage_hash must both be null or present")
+        preimage_hash = _optional_hash(value["preimage_hash"], "preimage_hash")
+        if "kind" in value:
+            try:
+                kind = IntentTargetKind(value["kind"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Intent target kind is invalid") from exc
+            if kind is IntentTargetKind.REPLACE:
+                raise ValueError("Replacement intent targets must use the legacy object shape")
+            destination = _optional_string(value["destination"], "destination")
+        else:
+            kind = IntentTargetKind.REPLACE
+            destination = None
         return cls(
             target=target,
             staged=staged,
             content_hash=content_hash,
             backup=backup,
             preimage_hash=preimage_hash,
+            kind=kind,
+            destination=destination,
         )
 
 
@@ -196,9 +245,41 @@ class TargetRecoveryState(StrEnum):
 @dataclass(frozen=True, slots=True)
 class TargetInspection:
     target: str
-    expected_hash: str
+    expected_hash: str | None
     preimage_hash: str | None
     current_hash: str | None
+    staged_hash: str | None
+    backup_hash: str | None
+    state: TargetRecoveryState
+    kind: IntentTargetKind = IntentTargetKind.REPLACE
+    destination: str | None = None
+    destination_hash: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedOperation:
+    kind: IntentTargetKind
+    target_path: Path
+    target: str
+    content: bytes | None = None
+    destination_path: Path | None = None
+    destination: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ValidatedIntentTarget:
+    intent: IntentTarget
+    target_path: Path
+    staged_path: Path | None
+    backup_path: Path | None
+    destination_path: Path | None
+    transaction_dir: Path
+
+
+@dataclass(frozen=True, slots=True)
+class _OperationSnapshot:
+    current_hash: str | None
+    destination_hash: str | None
     staged_hash: str | None
     backup_hash: str | None
     state: TargetRecoveryState
@@ -238,7 +319,7 @@ class RecoveryInspection:
 
 
 class StagedReplacement:
-    """Prepare and atomically replace an ordered set of canonical files."""
+    """Prepare and atomically apply an ordered set of canonical file operations."""
 
     def __init__(
         self,
@@ -246,11 +327,13 @@ class StagedReplacement:
         *,
         retry_policy: ReplaceRetryPolicy = DEFAULT_RETRY_POLICY,
         replace_function: ReplaceFunction = os.replace,
+        unlink_function: UnlinkFunction = _system_unlink,
         sleep_function: SleepFunction = time.sleep,
     ) -> None:
         self.context_root = canonical_context_root(context_root)
         self.retry_policy = retry_policy
         self._replace_function = replace_function
+        self._unlink_function = unlink_function
         self._sleep_function = sleep_function
         self._staging_root = resolve_context_path(
             self.context_root,
@@ -267,11 +350,11 @@ class StagedReplacement:
         self,
         transaction_id: str,
         nonce: str,
-        writes: Iterable[StagedWrite],
+        writes: Iterable[StagedWrite | StagedMove | StagedDelete],
         *,
         lock: ContextLock,
     ) -> IntentRecord:
-        """Fsync all postimages, fence, then durably publish ``intent.json``."""
+        """Fsync recovery assets, fence, then durably publish ``intent.json``."""
 
         if not transaction_id:
             raise ValueError("transaction_id must not be empty")
@@ -282,10 +365,10 @@ class StagedReplacement:
         if self._intent_path.exists():
             raise RecoveryRequiredError("A staged-write intent already requires recovery")
 
-        ordered_writes = tuple(writes)
-        if not ordered_writes:
+        ordered_operations = tuple(writes)
+        if not ordered_operations:
             raise ValueError("At least one staged write is required")
-        resolved = self._resolve_writes(ordered_writes)
+        resolved = self._resolve_operations(ordered_operations)
         stage_id = f"txn-{secrets.token_hex(12)}"
         transaction_dir = resolve_context_path(
             self.context_root,
@@ -297,8 +380,12 @@ class StagedReplacement:
         targets: list[IntentTarget] = []
         published = False
         try:
-            for index, (write, target_path, target_relative) in enumerate(resolved):
-                preimage = _read_optional_regular_file(target_path)
+            for index, operation in enumerate(resolved):
+                preimage = _read_optional_regular_file(operation.target_path)
+                if operation.kind is not IntentTargetKind.REPLACE and preimage is None:
+                    raise RecoveryRequiredError(
+                        f"Operation source disappeared during prepare: {operation.target}"
+                    )
                 backup_path: Path | None = None
                 backup_relative: str | None = None
                 preimage_hash: str | None = None
@@ -310,22 +397,33 @@ class StagedReplacement:
                         raise StagingError("A staged preimage failed hash verification")
                     backup_relative = backup_path.relative_to(self.context_root).as_posix()
 
-                staged_path = transaction_dir / f"{index:08d}.stage"
-                _write_fsynced(staged_path, write.content, exclusive=True)
-                expected_hash = _hash_bytes(write.content)
-                if _hash_regular_file(staged_path) != expected_hash:
-                    raise StagingError("A staged postimage failed hash verification")
-                staged_relative = staged_path.relative_to(self.context_root).as_posix()
+                staged_relative: str | None = None
+                expected_hash: str | None = None
+                if operation.kind is IntentTargetKind.REPLACE:
+                    if operation.content is None:  # pragma: no cover - resolved invariant
+                        raise AssertionError("A replacement must carry content")
+                    staged_path = transaction_dir / f"{index:08d}.stage"
+                    _write_fsynced(staged_path, operation.content, exclusive=True)
+                    expected_hash = _hash_bytes(operation.content)
+                    if _hash_regular_file(staged_path) != expected_hash:
+                        raise StagingError("A staged postimage failed hash verification")
+                    staged_relative = staged_path.relative_to(self.context_root).as_posix()
+                elif operation.kind is IntentTargetKind.MOVE:
+                    expected_hash = preimage_hash
                 targets.append(
                     IntentTarget(
-                        target=target_relative,
+                        target=operation.target,
                         staged=staged_relative,
                         content_hash=expected_hash,
                         backup=backup_relative,
                         preimage_hash=preimage_hash,
+                        kind=operation.kind,
+                        destination=operation.destination,
                     )
                 )
-                _require_same_volume(self._staging_root, target_path.parent)
+                _require_same_volume(self._staging_root, operation.target_path.parent)
+                if operation.destination_path is not None:
+                    _require_same_volume(self._staging_root, operation.destination_path.parent)
             _fsync_directory(transaction_dir)
             _fsync_directory(transaction_dir.parent)
 
@@ -431,15 +529,30 @@ class StagedReplacement:
         if intent.transaction_id != transaction_id:
             raise InvalidIntentError("The durable intent belongs to another transaction")
         validated = self._validated_intent_paths(intent)
-        for intent_target, target_path, staged_path, backup_path in validated:
-            self._verify_backup(intent_target, backup_path)
-            if _hash_optional_regular_file(target_path) != intent_target.preimage_hash:
+        for operation in validated:
+            intent_target = operation.intent
+            if intent_target.kind is not IntentTargetKind.REPLACE:
+                self._require_operation_parents(operation)
+            self._verify_backup(intent_target, operation.backup_path)
+            if _hash_optional_regular_file(operation.target_path) != intent_target.preimage_hash:
                 raise RecoveryRequiredError(
                     f"Target has not reached its recorded preimage: {intent_target.target}"
                 )
-            if _hash_optional_regular_file(staged_path) != intent_target.content_hash:
+            if (
+                intent_target.kind is IntentTargetKind.REPLACE
+                and operation.staged_path is not None
+                and _hash_optional_regular_file(operation.staged_path) != intent_target.content_hash
+            ):
                 raise RecoveryRequiredError(
                     f"Postimage is unavailable after rollback: {intent_target.target}"
+                )
+            if (
+                intent_target.kind is IntentTargetKind.MOVE
+                and operation.destination_path is not None
+                and _hash_optional_regular_file(operation.destination_path) is not None
+            ):
+                raise RecoveryRequiredError(
+                    f"Move destination remains after rollback: {intent_target.destination}"
                 )
         _verify_lock(self.context_root, lock, expected_nonce=None)
         self._remove_intent_and_staging(validated)
@@ -455,8 +568,26 @@ class StagedReplacement:
         if intent.transaction_id != transaction_id:
             raise InvalidIntentError("The durable intent belongs to another transaction")
         validated = self._validated_intent_paths(intent)
-        for intent_target, target_path, _staged_path, _backup_path in validated:
-            if _hash_optional_regular_file(target_path) != intent_target.content_hash:
+        for operation in validated:
+            intent_target = operation.intent
+            if intent_target.kind is not IntentTargetKind.REPLACE:
+                self._require_operation_parents(operation)
+            current_hash = _hash_optional_regular_file(operation.target_path)
+            destination_hash = (
+                _hash_optional_regular_file(operation.destination_path)
+                if operation.destination_path is not None
+                else None
+            )
+            applied = (
+                current_hash == intent_target.content_hash
+                if intent_target.kind is IntentTargetKind.REPLACE
+                else current_hash is None
+                and (
+                    intent_target.kind is IntentTargetKind.DELETE
+                    or destination_hash == intent_target.content_hash
+                )
+            )
+            if not applied:
                 raise RecoveryRequiredError(
                     f"Target has not reached its recorded postimage: {intent_target.target}"
                 )
@@ -466,14 +597,12 @@ class StagedReplacement:
 
     def _remove_intent_and_staging(
         self,
-        validated: tuple[tuple[IntentTarget, Path, Path, Path | None], ...],
+        validated: tuple[_ValidatedIntentTarget, ...],
     ) -> None:
         self._intent_path.unlink()
         _fsync_directory(self._staging_root)
 
-        transaction_dirs = {
-            staged_path.parent for _target, _path, staged_path, _backup_path in validated
-        }
+        transaction_dirs = {operation.transaction_dir for operation in validated}
         for transaction_dir in transaction_dirs:
             _remove_owned_directory(transaction_dir)
 
@@ -503,46 +632,33 @@ class StagedReplacement:
                 error=str(exc),
             )
 
-        active_dirs = {
-            staged_path.parent.name for _target, _path, staged_path, _backup_path in validated
-        }
+        active_dirs = {operation.transaction_dir.name for operation in validated}
         orphan_staging = self._orphan_transaction_dirs(active=active_dirs)
         inspections: list[TargetInspection] = []
-        for intent_target, target_path, staged_path, backup_path in validated:
-            parent_usable = _target_parent_is_usable(self._staging_root, target_path.parent)
+        for operation in validated:
+            intent_target = operation.intent
             try:
-                current_hash = _hash_optional_regular_file(target_path)
-                staged_hash = _hash_optional_regular_file(staged_path)
-                backup_hash = (
-                    _hash_optional_regular_file(backup_path) if backup_path is not None else None
+                snapshot = self._snapshot_operation(operation, require_parents=True)
+            except (InvalidIntentError, RecoveryRequiredError, ContextBoundaryError, OSError):
+                snapshot = _OperationSnapshot(
+                    current_hash=None,
+                    destination_hash=None,
+                    staged_hash=None,
+                    backup_hash=None,
+                    state=TargetRecoveryState.CONFLICT,
                 )
-            except (ContextBoundaryError, OSError):
-                current_hash = None
-                staged_hash = None
-                backup_hash = None
-            backup_valid = (
-                intent_target.preimage_hash is None or backup_hash == intent_target.preimage_hash
-            )
-            if not parent_usable or not backup_valid:
-                state = TargetRecoveryState.CONFLICT
-            elif current_hash == intent_target.content_hash:
-                state = TargetRecoveryState.POSTIMAGE_PRESENT
-            elif (
-                current_hash == intent_target.preimage_hash
-                and staged_hash == intent_target.content_hash
-            ):
-                state = TargetRecoveryState.STAGED_POSTIMAGE_AVAILABLE
-            else:
-                state = TargetRecoveryState.CONFLICT
             inspections.append(
                 TargetInspection(
                     target=intent_target.target,
                     expected_hash=intent_target.content_hash,
                     preimage_hash=intent_target.preimage_hash,
-                    current_hash=current_hash,
-                    staged_hash=staged_hash,
-                    backup_hash=backup_hash,
-                    state=state,
+                    current_hash=snapshot.current_hash,
+                    staged_hash=snapshot.staged_hash,
+                    backup_hash=snapshot.backup_hash,
+                    state=snapshot.state,
+                    kind=intent_target.kind,
+                    destination=intent_target.destination,
+                    destination_hash=snapshot.destination_hash,
                 )
             )
 
@@ -559,76 +675,98 @@ class StagedReplacement:
 
     def _apply_validated(
         self,
-        validated: tuple[tuple[IntentTarget, Path, Path, Path | None], ...],
+        validated: tuple[_ValidatedIntentTarget, ...],
         *,
         lock: ContextLock,
         expected_nonce: str | None,
     ) -> None:
-        for intent_target, target_path, staged_path, backup_path in validated:
-            if not _target_parent_is_usable(self._staging_root, target_path.parent):
+        for operation in validated:
+            snapshot = self._snapshot_operation(operation, require_parents=True)
+            if snapshot.state is TargetRecoveryState.CONFLICT:
+                if operation.intent.kind is IntentTargetKind.REPLACE:
+                    raise RecoveryRequiredError(
+                        f"Target differs from both recorded images: {operation.intent.target}"
+                    )
                 raise RecoveryRequiredError(
-                    f"Target parent is unavailable for {intent_target.target}"
-                )
-            current_hash = _hash_optional_regular_file(target_path)
-            self._verify_backup(intent_target, backup_path)
-            if current_hash == intent_target.content_hash:
-                continue
-            if current_hash != intent_target.preimage_hash:
-                raise RecoveryRequiredError(
-                    f"Target differs from both recorded images: {intent_target.target}"
-                )
-            if _hash_optional_regular_file(staged_path) != intent_target.content_hash:
-                raise InvalidIntentError(
-                    f"Staged postimage is unavailable for target {intent_target.target}"
+                    f"Target differs from its recorded operation state: {operation.intent.target}"
                 )
 
         _verify_lock(self.context_root, lock, expected_nonce=expected_nonce)
-        for intent_target, target_path, staged_path, _backup_path in validated:
-            current_hash = _hash_optional_regular_file(target_path)
-            if current_hash == intent_target.content_hash:
+        for operation in validated:
+            intent_target = operation.intent
+            snapshot = self._snapshot_operation(operation, require_parents=True)
+            if snapshot.state is TargetRecoveryState.POSTIMAGE_PRESENT:
                 continue
-            if current_hash != intent_target.preimage_hash:
+            if snapshot.state is not TargetRecoveryState.STAGED_POSTIMAGE_AVAILABLE:
                 raise RecoveryRequiredError(
-                    f"Target changed during replacement: {intent_target.target}"
+                    f"Target changed during staged operation: {intent_target.target}"
                 )
-            if _hash_optional_regular_file(staged_path) != intent_target.content_hash:
-                raise InvalidIntentError(
-                    f"Staged postimage is unavailable for target {intent_target.target}"
+            if intent_target.kind is IntentTargetKind.REPLACE:
+                if operation.staged_path is None or intent_target.content_hash is None:
+                    raise InvalidIntentError("Replacement intent is missing its postimage")
+                self._replace_with_retry(
+                    operation.staged_path,
+                    operation.target_path,
+                    lock=lock,
+                    expected_nonce=expected_nonce,
+                    expected_source_hash=intent_target.content_hash,
+                    expected_target_hash=intent_target.preimage_hash,
                 )
-            self._replace_with_retry(
-                staged_path,
-                target_path,
-                lock=lock,
-                expected_nonce=expected_nonce,
-                expected_source_hash=intent_target.content_hash,
-                expected_target_hash=intent_target.preimage_hash,
-            )
-            _fsync_directory(target_path.parent)
+            elif intent_target.kind is IntentTargetKind.MOVE:
+                if operation.destination_path is None or intent_target.content_hash is None:
+                    raise InvalidIntentError("Move intent is missing its destination")
+                self._replace_with_retry(
+                    operation.target_path,
+                    operation.destination_path,
+                    lock=lock,
+                    expected_nonce=expected_nonce,
+                    expected_source_hash=intent_target.content_hash,
+                    expected_target_hash=None,
+                    revalidate_paths=True,
+                )
+            else:
+                if intent_target.preimage_hash is None:
+                    raise InvalidIntentError("Delete intent is missing its preimage")
+
+                def verify_delete_attempt() -> None:
+                    _verify_lock(self.context_root, lock, expected_nonce=expected_nonce)
+
+                delete_path = operation.target_path
+
+                def validate_delete_path(path: Path = delete_path) -> None:
+                    _revalidate_owned_file(
+                        self.context_root,
+                        path,
+                        allow_missing=True,
+                    )
+
+                _unlink_with_retry(
+                    operation.target_path,
+                    expected_hash=intent_target.preimage_hash,
+                    policy=self.retry_policy,
+                    unlink_function=self._unlink_function,
+                    sleep_function=self._sleep_function,
+                    before_validation=validate_delete_path,
+                    before_attempt=verify_delete_attempt,
+                )
+            self._fsync_operation_parents(operation)
 
     def _rollback_validated(
         self,
-        validated: tuple[tuple[IntentTarget, Path, Path, Path | None], ...],
+        validated: tuple[_ValidatedIntentTarget, ...],
         *,
         lock: ContextLock,
         expected_nonce: str | None,
     ) -> None:
-        for intent_target, target_path, staged_path, backup_path in validated:
-            if not _target_parent_is_usable(self._staging_root, target_path.parent):
+        for operation in validated:
+            snapshot = self._snapshot_operation(operation, require_parents=True)
+            if snapshot.state is TargetRecoveryState.CONFLICT:
+                if operation.intent.kind is IntentTargetKind.REPLACE:
+                    raise RecoveryRequiredError(
+                        f"Target differs from both recorded images: {operation.intent.target}"
+                    )
                 raise RecoveryRequiredError(
-                    f"Target parent is unavailable for {intent_target.target}"
-                )
-            current_hash = _hash_optional_regular_file(target_path)
-            self._verify_backup(intent_target, backup_path)
-            if current_hash not in {intent_target.content_hash, intent_target.preimage_hash}:
-                raise RecoveryRequiredError(
-                    f"Target differs from both recorded images: {intent_target.target}"
-                )
-            if (
-                current_hash == intent_target.preimage_hash
-                and _hash_optional_regular_file(staged_path) != intent_target.content_hash
-            ):
-                raise InvalidIntentError(
-                    f"Staged postimage is unavailable for target {intent_target.target}"
+                    f"Target differs from its recorded operation state: {operation.intent.target}"
                 )
 
         _verify_lock(self.context_root, lock, expected_nonce=expected_nonce)
@@ -636,60 +774,205 @@ class StagedReplacement:
         def verify_fence_attempt() -> None:
             _verify_lock(self.context_root, lock, expected_nonce=expected_nonce)
 
-        for intent_target, target_path, staged_path, backup_path in reversed(validated):
-            current_hash = _hash_optional_regular_file(target_path)
-            if current_hash == intent_target.preimage_hash:
+        for operation in reversed(validated):
+            intent_target = operation.intent
+            snapshot = self._snapshot_operation(operation, require_parents=True)
+            if snapshot.state is TargetRecoveryState.STAGED_POSTIMAGE_AVAILABLE:
                 continue
-            if current_hash != intent_target.content_hash:
+            if snapshot.state is not TargetRecoveryState.POSTIMAGE_PRESENT:
                 raise RecoveryRequiredError(
                     f"Target changed during rollback: {intent_target.target}"
                 )
-
-            staged_hash = _hash_optional_regular_file(staged_path)
-            if staged_hash != intent_target.content_hash:
-                postimage = _read_regular_file(target_path)
-                if _hash_bytes(postimage) != intent_target.content_hash:
-                    raise RecoveryRequiredError(
-                        f"Target changed during rollback: {intent_target.target}"
+            if intent_target.kind is IntentTargetKind.REPLACE:
+                if operation.staged_path is None or intent_target.content_hash is None:
+                    raise InvalidIntentError("Replacement intent is missing its postimage")
+                if snapshot.staged_hash != intent_target.content_hash:
+                    postimage = _read_regular_file(operation.target_path)
+                    if _hash_bytes(postimage) != intent_target.content_hash:
+                        raise RecoveryRequiredError(
+                            f"Target changed during rollback: {intent_target.target}"
+                        )
+                    self._publish_rebuilt_postimage(
+                        operation.staged_path,
+                        postimage,
+                        expected_hash=intent_target.content_hash,
+                        lock=lock,
+                        expected_nonce=expected_nonce,
                     )
-                self._publish_rebuilt_postimage(
-                    staged_path,
-                    postimage,
-                    expected_hash=intent_target.content_hash,
+                if intent_target.preimage_hash is None:
+                    _unlink_with_retry(
+                        operation.target_path,
+                        expected_hash=intent_target.content_hash,
+                        policy=self.retry_policy,
+                        unlink_function=self._unlink_function,
+                        sleep_function=self._sleep_function,
+                        before_attempt=verify_fence_attempt,
+                    )
+                else:
+                    if operation.backup_path is None:
+                        raise InvalidIntentError(
+                            f"Preimage backup is unavailable for target {intent_target.target}"
+                        )
+                    self._restore_backup(
+                        operation,
+                        expected_target_hash=intent_target.content_hash,
+                        lock=lock,
+                        expected_nonce=expected_nonce,
+                    )
+            elif intent_target.kind is IntentTargetKind.MOVE:
+                if operation.destination_path is None or intent_target.content_hash is None:
+                    raise InvalidIntentError("Move intent is missing its destination")
+                self._replace_with_retry(
+                    operation.destination_path,
+                    operation.target_path,
                     lock=lock,
                     expected_nonce=expected_nonce,
-                )
-
-            if intent_target.preimage_hash is None:
-                _unlink_with_retry(
-                    target_path,
-                    expected_hash=intent_target.content_hash,
-                    policy=self.retry_policy,
-                    sleep_function=self._sleep_function,
-                    before_attempt=verify_fence_attempt,
+                    expected_source_hash=intent_target.content_hash,
+                    expected_target_hash=None,
+                    revalidate_paths=True,
                 )
             else:
-                if backup_path is None:
+                if operation.backup_path is None or intent_target.preimage_hash is None:
                     raise InvalidIntentError(
                         f"Preimage backup is unavailable for target {intent_target.target}"
                     )
-                preimage = _read_regular_file(backup_path)
-                if _hash_bytes(preimage) != intent_target.preimage_hash:
-                    raise InvalidIntentError(
-                        f"Preimage backup is unavailable for target {intent_target.target}"
-                    )
-                rollback_path = staged_path.with_suffix(".rollback")
-                _reject_unsafe_file(rollback_path, allow_missing=True)
-                _write_fsynced(rollback_path, preimage, exclusive=False)
-                self._replace_with_retry(
-                    rollback_path,
-                    target_path,
+                self._restore_backup(
+                    operation,
+                    expected_target_hash=None,
                     lock=lock,
                     expected_nonce=expected_nonce,
-                    expected_source_hash=intent_target.preimage_hash,
-                    expected_target_hash=intent_target.content_hash,
                 )
-            _fsync_directory(target_path.parent)
+            self._fsync_operation_parents(operation)
+
+    def _snapshot_operation(
+        self,
+        operation: _ValidatedIntentTarget,
+        *,
+        require_parents: bool,
+    ) -> _OperationSnapshot:
+        intent_target = operation.intent
+        if require_parents:
+            self._require_operation_parents(operation)
+        current_hash = _hash_optional_regular_file(operation.target_path)
+        destination_hash = (
+            _hash_optional_regular_file(operation.destination_path)
+            if operation.destination_path is not None
+            else None
+        )
+        staged_hash = (
+            _hash_optional_regular_file(operation.staged_path)
+            if operation.staged_path is not None
+            else None
+        )
+        backup_hash = (
+            _hash_optional_regular_file(operation.backup_path)
+            if operation.backup_path is not None
+            else None
+        )
+        self._verify_backup(intent_target, operation.backup_path)
+        if intent_target.kind is IntentTargetKind.REPLACE:
+            if current_hash == intent_target.content_hash:
+                state = TargetRecoveryState.POSTIMAGE_PRESENT
+            elif current_hash == intent_target.preimage_hash:
+                if staged_hash != intent_target.content_hash:
+                    raise InvalidIntentError(
+                        f"Staged postimage is unavailable for target {intent_target.target}"
+                    )
+                state = TargetRecoveryState.STAGED_POSTIMAGE_AVAILABLE
+            else:
+                state = TargetRecoveryState.CONFLICT
+        elif intent_target.kind is IntentTargetKind.MOVE:
+            if current_hash is None and destination_hash == intent_target.content_hash:
+                state = TargetRecoveryState.POSTIMAGE_PRESENT
+            elif current_hash == intent_target.preimage_hash and destination_hash is None:
+                state = TargetRecoveryState.STAGED_POSTIMAGE_AVAILABLE
+            else:
+                state = TargetRecoveryState.CONFLICT
+        elif current_hash is None:
+            state = TargetRecoveryState.POSTIMAGE_PRESENT
+        elif current_hash == intent_target.preimage_hash:
+            state = TargetRecoveryState.STAGED_POSTIMAGE_AVAILABLE
+        else:
+            state = TargetRecoveryState.CONFLICT
+        return _OperationSnapshot(
+            current_hash=current_hash,
+            destination_hash=destination_hash,
+            staged_hash=staged_hash,
+            backup_hash=backup_hash,
+            state=state,
+        )
+
+    def _require_operation_parents(self, operation: _ValidatedIntentTarget) -> None:
+        intent_target = operation.intent
+        if intent_target.kind is not IntentTargetKind.REPLACE:
+            try:
+                _revalidate_owned_file(
+                    self.context_root,
+                    operation.target_path,
+                    allow_missing=True,
+                )
+            except (ContextBoundaryError, OSError) as exc:
+                raise RecoveryRequiredError(
+                    f"Target parent is unavailable for {intent_target.target}"
+                ) from exc
+            if operation.destination_path is not None:
+                try:
+                    _revalidate_owned_file(
+                        self.context_root,
+                        operation.destination_path,
+                        allow_missing=True,
+                    )
+                except (ContextBoundaryError, OSError) as exc:
+                    raise RecoveryRequiredError(
+                        f"Move destination parent is unavailable for {intent_target.destination}"
+                    ) from exc
+        if not _target_parent_is_usable(self._staging_root, operation.target_path.parent):
+            raise RecoveryRequiredError(f"Target parent is unavailable for {intent_target.target}")
+        if operation.destination_path is not None and not _target_parent_is_usable(
+            self._staging_root, operation.destination_path.parent
+        ):
+            raise RecoveryRequiredError(
+                f"Move destination parent is unavailable for {intent_target.destination}"
+            )
+
+    def _fsync_operation_parents(self, operation: _ValidatedIntentTarget) -> None:
+        _fsync_directory(operation.target_path.parent)
+        if (
+            operation.destination_path is not None
+            and operation.destination_path.parent != operation.target_path.parent
+        ):
+            _fsync_directory(operation.destination_path.parent)
+
+    def _restore_backup(
+        self,
+        operation: _ValidatedIntentTarget,
+        *,
+        expected_target_hash: str | None,
+        lock: ContextLock,
+        expected_nonce: str | None,
+    ) -> None:
+        intent_target = operation.intent
+        if operation.backup_path is None or intent_target.preimage_hash is None:
+            raise InvalidIntentError(
+                f"Preimage backup is unavailable for target {intent_target.target}"
+            )
+        preimage = _read_regular_file(operation.backup_path)
+        if _hash_bytes(preimage) != intent_target.preimage_hash:
+            raise InvalidIntentError(
+                f"Preimage backup is unavailable for target {intent_target.target}"
+            )
+        rollback_path = operation.backup_path.with_suffix(".rollback")
+        _reject_unsafe_file(rollback_path, allow_missing=True)
+        _write_fsynced(rollback_path, preimage, exclusive=False)
+        self._replace_with_retry(
+            rollback_path,
+            operation.target_path,
+            lock=lock,
+            expected_nonce=expected_nonce,
+            expected_source_hash=intent_target.preimage_hash,
+            expected_target_hash=expected_target_hash,
+            revalidate_paths=intent_target.kind is not IntentTargetKind.REPLACE,
+        )
 
     @staticmethod
     def _verify_backup(intent_target: IntentTarget, backup_path: Path | None) -> None:
@@ -705,25 +988,81 @@ class StagedReplacement:
                 f"Preimage backup is unavailable for target {intent_target.target}"
             )
 
-    def _resolve_writes(
+    def _resolve_operations(
         self,
-        writes: tuple[StagedWrite, ...],
-    ) -> tuple[tuple[StagedWrite, Path, str], ...]:
-        resolved: list[tuple[StagedWrite, Path, str]] = []
+        writes: tuple[StagedWrite | StagedMove | StagedDelete, ...],
+    ) -> tuple[_ResolvedOperation, ...]:
+        resolved: list[_ResolvedOperation] = []
         collision_keys: set[str] = set()
-        for write in writes:
-            if not isinstance(write.content, bytes):
-                raise TypeError("Staged content must be bytes")
-            target_path = _resolve_target(self.context_root, write.target)
-            if not target_path.parent.is_dir():
-                raise StagingError(f"Target parent directory does not exist: {write.target}")
-            _reject_unsafe_file(target_path, allow_missing=True)
-            target_relative = target_path.relative_to(self.context_root).as_posix()
-            collision_key = unicodedata.normalize("NFC", target_relative).casefold()
+        legacy_writes_only = all(isinstance(write, StagedWrite) for write in writes)
+
+        def claim(path: str, *, replacement: bool = False) -> None:
+            collision_key = unicodedata.normalize("NFC", path).casefold()
             if collision_key in collision_keys:
-                raise StagingError(f"Duplicate staged target: {target_relative}")
+                if replacement:
+                    raise StagingError(f"Duplicate staged target: {path}")
+                raise StagingError(f"Duplicate staged operation path: {path}")
             collision_keys.add(collision_key)
-            resolved.append((write, target_path, target_relative))
+
+        for write in writes:
+            if isinstance(write, StagedWrite):
+                if not isinstance(write.content, bytes):
+                    raise TypeError("Staged content must be bytes")
+                target_path = _resolve_target(self.context_root, write.target)
+                if not target_path.parent.is_dir():
+                    raise StagingError(f"Target parent directory does not exist: {write.target}")
+                _reject_unsafe_file(target_path, allow_missing=True)
+                target = target_path.relative_to(self.context_root).as_posix()
+                claim(target, replacement=legacy_writes_only)
+                resolved.append(
+                    _ResolvedOperation(
+                        kind=IntentTargetKind.REPLACE,
+                        target_path=target_path,
+                        target=target,
+                        content=write.content,
+                    )
+                )
+            elif isinstance(write, StagedMove):
+                source_path = _resolve_target(self.context_root, write.source)
+                destination_path = _resolve_target(self.context_root, write.destination)
+                if not source_path.parent.is_dir() or not destination_path.parent.is_dir():
+                    raise StagingError("Move source and destination parents must exist")
+                _reject_unsafe_file(source_path, allow_missing=False)
+                _reject_unsafe_file(destination_path, allow_missing=True)
+                _require_plain_parent_chain(self.context_root, source_path)
+                _require_plain_parent_chain(self.context_root, destination_path)
+                if destination_path.exists():
+                    raise StagingError(f"Move destination already exists: {write.destination}")
+                source = source_path.relative_to(self.context_root).as_posix()
+                destination = destination_path.relative_to(self.context_root).as_posix()
+                claim(source)
+                claim(destination)
+                resolved.append(
+                    _ResolvedOperation(
+                        kind=IntentTargetKind.MOVE,
+                        target_path=source_path,
+                        target=source,
+                        destination_path=destination_path,
+                        destination=destination,
+                    )
+                )
+            elif isinstance(write, StagedDelete):
+                target_path = _resolve_target(self.context_root, write.target)
+                if not target_path.parent.is_dir():
+                    raise StagingError(f"Target parent directory does not exist: {write.target}")
+                _reject_unsafe_file(target_path, allow_missing=False)
+                _require_plain_parent_chain(self.context_root, target_path)
+                target = target_path.relative_to(self.context_root).as_posix()
+                claim(target)
+                resolved.append(
+                    _ResolvedOperation(
+                        kind=IntentTargetKind.DELETE,
+                        target_path=target_path,
+                        target=target,
+                    )
+                )
+            else:
+                raise TypeError("Staged operations must be writes, moves, or deletes")
         return tuple(resolved)
 
     def _publish_intent(self, intent: IntentRecord, transaction_dir: Path) -> None:
@@ -754,35 +1093,37 @@ class StagedReplacement:
     def _validated_intent_paths(
         self,
         intent: IntentRecord,
-    ) -> tuple[tuple[IntentTarget, Path, Path, Path | None], ...]:
+    ) -> tuple[_ValidatedIntentTarget, ...]:
         collision_keys: set[str] = set()
         staged_paths: set[str] = set()
         backup_paths: set[str] = set()
         transaction_dir: Path | None = None
-        validated: list[tuple[IntentTarget, Path, Path, Path | None]] = []
+        validated: list[_ValidatedIntentTarget] = []
         for index, item in enumerate(intent.targets):
             target_path = _resolve_target(self.context_root, item.target)
             canonical_target = target_path.relative_to(self.context_root).as_posix()
             if item.target != canonical_target:
                 raise InvalidIntentError("Intent target path is not canonical")
-            staged_path = resolve_context_path(
-                self.context_root,
-                item.staged,
-                allowed_prefixes=("98_state/staging/transactions",),
-            )
-            relative_staged = PurePosixPath(item.staged)
-            if (
-                len(relative_staged.parts) != 5
-                or _TRANSACTION_DIRECTORY.fullmatch(relative_staged.parts[3]) is None
-                or relative_staged.name != f"{index:08d}.stage"
-                or item.staged != staged_path.relative_to(self.context_root).as_posix()
-            ):
-                raise InvalidIntentError("Intent staged path does not use the owned layout")
-            if transaction_dir is None:
-                transaction_dir = staged_path.parent
-            elif staged_path.parent != transaction_dir:
-                raise InvalidIntentError("Intent postimages span multiple staging directories")
+            staged_path: Path | None = None
+            staged_parent: Path | None = None
+            stage_name = f"{index:08d}.stage"
+            if item.staged is not None:
+                staged_path = resolve_context_path(
+                    self.context_root,
+                    item.staged,
+                    allowed_prefixes=("98_state/staging/transactions",),
+                )
+                relative_staged = PurePosixPath(item.staged)
+                if (
+                    len(relative_staged.parts) != 5
+                    or _TRANSACTION_DIRECTORY.fullmatch(relative_staged.parts[3]) is None
+                    or relative_staged.name != stage_name
+                    or item.staged != staged_path.relative_to(self.context_root).as_posix()
+                ):
+                    raise InvalidIntentError("Intent staged path does not use the owned layout")
+                staged_parent = staged_path.parent
             backup_path: Path | None = None
+            backup_parent: Path | None = None
             if item.backup is not None:
                 backup_path = resolve_context_path(
                     self.context_root,
@@ -792,26 +1133,56 @@ class StagedReplacement:
                 relative_backup = PurePosixPath(item.backup)
                 if (
                     len(relative_backup.parts) != 5
-                    or relative_backup.parts[3] != relative_staged.parts[3]
+                    or _TRANSACTION_DIRECTORY.fullmatch(relative_backup.parts[3]) is None
                     or relative_backup.name != f"{index:08d}.backup"
-                    or backup_path.parent != staged_path.parent
                     or item.backup != backup_path.relative_to(self.context_root).as_posix()
                 ):
                     raise InvalidIntentError("Intent backup path does not use the owned layout")
-            collision_key = unicodedata.normalize("NFC", item.target).casefold()
-            if collision_key in collision_keys:
-                raise InvalidIntentError("Intent contains duplicate target paths")
-            collision_keys.add(collision_key)
-            staged_key = unicodedata.normalize("NFC", item.staged).casefold()
-            if staged_key in staged_paths or staged_key in backup_paths:
-                raise InvalidIntentError("Intent contains duplicate staged paths")
-            staged_paths.add(staged_key)
+                backup_parent = backup_path.parent
+            owned_parent = staged_parent or backup_parent
+            if owned_parent is None:  # pragma: no cover - target-shape validation invariant
+                raise InvalidIntentError("Intent target has no owned recovery asset")
+            if staged_parent is not None and backup_parent not in {None, staged_parent}:
+                raise InvalidIntentError("Intent recovery assets span staging directories")
+            if transaction_dir is None:
+                transaction_dir = owned_parent
+            elif owned_parent != transaction_dir:
+                raise InvalidIntentError("Intent targets span multiple staging directories")
+
+            destination_path: Path | None = None
+            claimed_paths = [item.target]
+            if item.destination is not None:
+                destination_path = _resolve_target(self.context_root, item.destination)
+                canonical_destination = destination_path.relative_to(self.context_root).as_posix()
+                if item.destination != canonical_destination:
+                    raise InvalidIntentError("Intent move destination path is not canonical")
+                claimed_paths.append(item.destination)
+            for claimed_path in claimed_paths:
+                collision_key = unicodedata.normalize("NFC", claimed_path).casefold()
+                if collision_key in collision_keys:
+                    raise InvalidIntentError("Intent contains duplicate operation paths")
+                collision_keys.add(collision_key)
+
+            if item.staged is not None:
+                staged_key = unicodedata.normalize("NFC", item.staged).casefold()
+                if staged_key in staged_paths or staged_key in backup_paths:
+                    raise InvalidIntentError("Intent contains duplicate staged paths")
+                staged_paths.add(staged_key)
             if item.backup is not None:
                 backup_key = unicodedata.normalize("NFC", item.backup).casefold()
                 if backup_key in backup_paths or backup_key in staged_paths:
                     raise InvalidIntentError("Intent contains duplicate backup paths")
                 backup_paths.add(backup_key)
-            validated.append((item, target_path, staged_path, backup_path))
+            validated.append(
+                _ValidatedIntentTarget(
+                    intent=item,
+                    target_path=target_path,
+                    staged_path=staged_path,
+                    backup_path=backup_path,
+                    destination_path=destination_path,
+                    transaction_dir=owned_parent,
+                )
+            )
         return tuple(validated)
 
     def _replace_with_retry(
@@ -823,10 +1194,17 @@ class StagedReplacement:
         expected_nonce: str | None,
         expected_source_hash: str,
         expected_target_hash: str | None,
+        revalidate_paths: bool = False,
     ) -> None:
         def verify_attempt() -> None:
+            if revalidate_paths:
+                _revalidate_owned_file(self.context_root, source, allow_missing=False)
+                _revalidate_owned_file(self.context_root, target, allow_missing=True)
             _require_source_hash(source, expected_source_hash)
             _require_target_hash(target, expected_target_hash)
+            if revalidate_paths:
+                _revalidate_owned_file(self.context_root, source, allow_missing=False)
+                _revalidate_owned_file(self.context_root, target, allow_missing=True)
             _verify_lock(self.context_root, lock, expected_nonce=expected_nonce)
 
         _replace_with_retry(
@@ -941,6 +1319,77 @@ def atomic_replace_bytes(
             temp_path.unlink()
 
 
+def atomic_append_line_bytes(
+    context_root: Path,
+    target: str | Path,
+    line: bytes,
+    *,
+    nonce: str,
+    lock: ContextLock,
+    retry_policy: ReplaceRetryPolicy = DEFAULT_RETRY_POLICY,
+    replace_function: ReplaceFunction = os.replace,
+    sleep_function: SleepFunction = time.sleep,
+) -> None:
+    """Durably append one complete LF-terminated line under a verified lock fence."""
+
+    if _NONCE.fullmatch(nonce) is None:
+        raise ValueError("nonce must be a lowercase 128-bit hexadecimal value")
+    if not isinstance(line, bytes):
+        raise TypeError("Appended line must be bytes")
+    if not line or not line.endswith(b"\n") or line.count(b"\n") != 1 or b"\r" in line:
+        raise ValueError("Appended bytes must contain exactly one LF-terminated line")
+
+    root = canonical_context_root(context_root)
+    target_path = _resolve_target(root, target)
+    target_relative = target_path.relative_to(root).as_posix()
+    _verify_lock(root, lock, expected_nonce=nonce)
+    _validate_active_intent_if_present(root)
+    staging_root = _ensure_runtime_directories(root)
+    _ensure_target_parent_directories(
+        root,
+        target_relative,
+        lock=lock,
+        expected_nonce=nonce,
+    )
+    target_path = _resolve_target(root, target_relative)
+    _revalidate_owned_file(root, target_path, allow_missing=True)
+    _require_same_volume(staging_root, target_path.parent)
+    preimage = _read_optional_regular_file(target_path)
+    if preimage is not None and preimage and not preimage.endswith(b"\n"):
+        raise RecoveryRequiredError("Append target has an incomplete final line")
+    expected_target_hash = _hash_bytes(preimage) if preimage is not None else None
+    postimage = (preimage or b"") + line
+    expected_source_hash = _hash_bytes(postimage)
+    temp_path = staging_root / f"append-{secrets.token_hex(12)}.stage"
+    try:
+        _verify_lock(root, lock, expected_nonce=nonce)
+        _write_fsynced(temp_path, postimage, exclusive=True)
+        if _hash_regular_file(temp_path) != expected_source_hash:
+            raise StagingError("An appended postimage failed hash verification")
+
+        def verify_attempt() -> None:
+            _revalidate_owned_file(root, temp_path, allow_missing=False)
+            _revalidate_owned_file(root, target_path, allow_missing=True)
+            _require_source_hash(temp_path, expected_source_hash)
+            _require_target_hash(target_path, expected_target_hash)
+            _revalidate_owned_file(root, temp_path, allow_missing=False)
+            _revalidate_owned_file(root, target_path, allow_missing=True)
+            _verify_lock(root, lock, expected_nonce=nonce)
+
+        _replace_with_retry(
+            temp_path,
+            target_path,
+            replace_function=replace_function,
+            policy=retry_policy,
+            sleep_function=sleep_function,
+            before_attempt=verify_attempt,
+        )
+        _fsync_directory(target_path.parent)
+    finally:
+        with suppress(FileNotFoundError):
+            temp_path.unlink()
+
+
 def inspect_recovery(context_root: Path) -> RecoveryInspection:
     """Convenience wrapper for read-only recovery inspection."""
 
@@ -954,6 +1403,42 @@ def _resolve_target(root: Path, target: str | Path) -> Path:
         allowed_prefixes=_CANONICAL_TARGET_PREFIXES,
         allowed_root_files=_ROOT_TARGETS,
     )
+
+
+def _validate_active_intent_if_present(root: Path) -> None:
+    stager = StagedReplacement(root)
+    _reject_unsafe_file(stager._intent_path, allow_missing=True)
+    if stager._intent_path.exists():
+        stager._load_intent()
+
+
+def _revalidate_owned_file(root: Path, path: Path, *, allow_missing: bool) -> None:
+    try:
+        relative = path.relative_to(root).as_posix()
+    except ValueError as exc:  # pragma: no cover - internal path invariant
+        raise ContextBoundaryError(f"Owned path escapes the context root: {path}") from exc
+    if relative == "98_state/staging" or relative.startswith("98_state/staging/"):
+        resolved = resolve_context_path(
+            root,
+            relative,
+            allowed_prefixes=("98_state/staging",),
+        )
+    else:
+        resolved = _resolve_target(root, relative)
+    if resolved != path:
+        raise ContextBoundaryError(f"Owned path changed during resolution: {relative}")
+    _require_plain_parent_chain(root, path)
+    _reject_unsafe_file(path, allow_missing=allow_missing)
+
+
+def _require_plain_parent_chain(root: Path, path: Path) -> None:
+    current = root
+    for part in path.relative_to(root).parts[:-1]:
+        current /= part
+        if current.is_symlink() or _is_junction(current):
+            raise ContextBoundaryError(f"File parent must not be a symlink or junction: {current}")
+        if not current.is_dir():
+            raise ContextBoundaryError(f"File parent must be a directory: {current}")
 
 
 def _ensure_runtime_directories(root: Path) -> Path:
@@ -976,15 +1461,49 @@ def _ensure_runtime_directories(root: Path) -> Path:
     return staging
 
 
+def _ensure_target_parent_directories(
+    root: Path,
+    target: str,
+    *,
+    lock: ContextLock,
+    expected_nonce: str,
+) -> None:
+    target_path = _resolve_target(root, target)
+    current = root
+    for part in target_path.relative_to(root).parts[:-1]:
+        current /= part
+        relative = current.relative_to(root).as_posix()
+        resolved = _resolve_target(root, relative)
+        if resolved != current:
+            raise ContextBoundaryError(f"Append parent changed during resolution: {relative}")
+        if current.exists() or current.is_symlink() or _is_junction(current):
+            _require_plain_directory(current)
+            continue
+        _verify_lock(root, lock, expected_nonce=expected_nonce)
+        try:
+            current.mkdir()
+        except FileExistsError:
+            _require_plain_directory(current)
+        else:
+            _fsync_directory(current.parent)
+        _require_plain_directory(current)
+        if _resolve_target(root, relative) != current:
+            raise ContextBoundaryError(f"Append parent changed during creation: {relative}")
+
+
 def _require_plain_directory(path: Path) -> None:
-    if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
+    if path.is_symlink() or _is_junction(path):
         raise ContextBoundaryError(f"Runtime directory must not be a symlink or junction: {path}")
     if not path.is_dir():
         raise ContextBoundaryError(f"Runtime path must be a directory: {path}")
 
 
+def _is_junction(path: Path) -> bool:
+    return hasattr(path, "is_junction") and path.is_junction()
+
+
 def _reject_unsafe_file(path: Path, *, allow_missing: bool) -> None:
-    if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
+    if path.is_symlink() or _is_junction(path):
         raise ContextBoundaryError(f"File must not be a symlink or junction: {path}")
     if path.exists() and not path.is_file():
         raise ContextBoundaryError(f"Path must be a regular file: {path}")
@@ -1100,16 +1619,26 @@ def _unlink_with_retry(
     *,
     expected_hash: str,
     policy: ReplaceRetryPolicy,
+    unlink_function: UnlinkFunction = _system_unlink,
     sleep_function: SleepFunction,
+    before_validation: BeforeAttemptFunction | None = None,
     before_attempt: BeforeAttemptFunction | None = None,
 ) -> None:
     delay = policy.initial_delay_seconds
     for attempt in range(policy.max_attempts):
-        _require_target_hash(target, expected_hash)
+        if before_validation is not None:
+            before_validation()
+        current_hash = _hash_optional_regular_file(target)
+        if before_validation is not None:
+            before_validation()
         if before_attempt is not None:
             before_attempt()
+        if current_hash is None:
+            return
+        if current_hash != expected_hash:
+            raise RecoveryRequiredError(f"Target changed during atomic replacement: {target.name}")
         try:
-            target.unlink()
+            unlink_function(target)
             return
         except FileNotFoundError:
             return
@@ -1149,6 +1678,38 @@ def _optional_string(value: object, field_name: str) -> str | None:
     if value is None:
         return None
     return _required_string(value, field_name)
+
+
+def _optional_hash(value: object, field_name: str) -> str | None:
+    result = _optional_string(value, field_name)
+    if result is not None and _CONTENT_HASH.fullmatch(result) is None:
+        raise ValueError(f"Intent target {field_name} is invalid")
+    return result
+
+
+def _validate_intent_target_fields(target: IntentTarget) -> None:
+    _required_string(target.target, "target")
+    content_hash = _optional_hash(target.content_hash, "content_hash")
+    preimage_hash = _optional_hash(target.preimage_hash, "preimage_hash")
+    backup = _optional_string(target.backup, "backup")
+    staged = _optional_string(target.staged, "staged")
+    destination = _optional_string(target.destination, "destination")
+    if not isinstance(target.kind, IntentTargetKind):
+        raise ValueError("Intent target kind is invalid")
+    if (backup is None) != (preimage_hash is None):
+        raise ValueError("Intent target backup and preimage_hash must both be null or present")
+    if target.kind is IntentTargetKind.REPLACE:
+        if staged is None or content_hash is None or destination is not None:
+            raise ValueError("Replacement intent target fields are invalid")
+        return
+    if backup is None or preimage_hash is None or staged is not None:
+        raise ValueError("Move and delete intents require one preimage backup")
+    if target.kind is IntentTargetKind.MOVE:
+        if destination is None or content_hash != preimage_hash:
+            raise ValueError("Move intent target fields are invalid")
+        return
+    if destination is not None or content_hash is not None:
+        raise ValueError("Delete intent target fields are invalid")
 
 
 def _reject_duplicate_object_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -103,41 +103,73 @@ and commit fencing by an old holder fail without changing its successor's lock.
 The protocol is designed for local NTFS, APFS, and ext4 filesystems. Phase 1 adds no stronger
 guarantee for SMB or NFS.
 
-## Staged replacement and intent lifecycle
+## Staged operations and intent lifecycle
 
-`StagedReplacement.prepare(transaction_id, nonce, writes, lock=holder)` performs these steps:
+`StagedReplacement.prepare(transaction_id, nonce, writes, lock=holder)` accepts an ordered
+mixture of `StagedWrite`, `StagedMove`, and `StagedDelete` values. The class name and parameter
+name remain unchanged for compatibility. Preparation performs these steps:
 
-1. validate unique, context-bound targets and same-volume parents;
-2. snapshot, flush, fsync, and hash every existing preimage into a transaction-local backup;
-3. write, flush, fsync, and hash every complete postimage in the same transaction directory;
-4. verify that the supplied `ContextLock` belongs to the context and owns the intent nonce;
-5. fsync and publish the fixed write-ahead `intent.json` before any target replacement.
+1. validate context-bound paths and reject any case-folded or Unicode-normalized collision
+   among replacement targets, move sources and destinations, and delete targets;
+2. require every move source and delete target to exist as a regular file, require every move
+   destination to be absent, and require all operation parents to exist on the staging volume;
+3. snapshot, flush, fsync, hash, and retain each existing preimage in the transaction directory;
+4. write, flush, fsync, and hash a staged postimage for every replacement; moves use the source
+   itself as the forward postimage and deletes have no postimage file;
+5. verify that the supplied `ContextLock` belongs to the context and owns the intent nonce;
+6. fsync and publish the fixed write-ahead `intent.json` before applying any operation.
 
-`apply(intent, lock=holder)` reloads the durable intent, verifies all preimages, postimages,
-and backups, fences immediately before the first target replacement, and replaces targets in
-recorded order. A target changed after prepare is never silently overwritten. Each
-`PermissionError` is retried up to ten total attempts with delays of 0.01 through 2.56 seconds
-(5.11 seconds total). Before every attempt, the adapter reverifies the same lock holder plus
-the source and target hashes; takeover or byte drift aborts the retry. On exhaustion,
-`RecoverableReplaceError` preserves the intent and remaining recovery assets. Other replacement
-failures do the same.
+Intent records remain at `schema_version: 1`. A target object containing exactly the original
+five fields (`target`, `staged`, `content_hash`, `backup`, and `preimage_hash`) is always read as
+a replacement, and new replacement records continue to use that legacy shape. Move and delete
+records use the strict extended shape:
 
-`rollback` restores recorded preimages in reverse target order. It recreates any postimage
-consumed by an earlier `os.replace` before restoring or removing the target, so an interrupted
-rollback remains resumable and a rolled-back intent can still be completed. `complete_recovery`
-and `rollback_recovery` are deliberately separate APIs: they allow a successor lock holder to
-resolve an old-nonce intent while ordinary `apply` and `rollback` remain bound to the original
-intent nonce. The transaction layer chooses the repair direction and records the durable audit
-decision; this adapter only supplies the verified filesystem primitives.
+| Kind | `target` meaning | `staged` | `content_hash` | `backup` / `preimage_hash` | `destination` |
+| --- | --- | --- | --- | --- | --- |
+| legacy replace | destination file | required | required postimage hash | both present for an existing file, otherwise both null | field absent |
+| `move` | source file | null | equal to the source preimage hash | both required | required and initially absent |
+| `delete` | file to remove | null | null | both required | null |
+
+The extended shape must contain both `kind` and `destination`; an extended record claiming
+`kind: replace`, an unknown kind, an incomplete field pair, or any other shape is invalid. This
+keeps old version-1 intents readable without weakening validation of newly introduced kinds.
+
+`apply(intent, lock=holder)` reloads the durable intent, verifies all current files and recovery
+assets, fences before mutation, and processes operations in recorded order. A replacement moves
+its staged postimage over the target; a move atomically replaces its absent destination with the
+source; and a delete removes its source while retaining the preimage backup. A destination that
+exists while its move source remains pending is a conflict. Operation parents are
+directory-fsynced after mutation, including both distinct parents of a move.
+
+Destination refusal is enforced at prepare and immediately before every retry under the
+exclusive context-writer lock. As with ADR 0006's documented fence window, Phase 1 does not
+promise atomic no-clobber behavior against a non-cooperating process that creates a destination
+between the final absence check and `os.replace`.
+
+Every `PermissionError` from replacement, move, or deletion is retried up to ten total attempts
+with delays of 0.01 through 2.56 seconds (5.11 seconds total). Before every attempt, the adapter
+reverifies the applicable source and destination state and the same lock holder; takeover or
+byte drift aborts the retry. On exhaustion, `RecoverableReplaceError` preserves `intent.json`
+and every remaining recovery asset. Other operation failures do the same.
+
+`rollback` processes operations in reverse order. Replacements restore their preimages and
+recreate a consumed staged postimage when necessary; moves atomically return the destination to
+the original source; and deletes restore a copy of the retained backup. These inverse operations
+leave the forward assets available, so an interrupted rollback remains resumable and an intent
+that has been rolled back can still be completed. `complete_recovery` and `rollback_recovery`
+are deliberately separate APIs: they allow a successor lock holder to resolve an old-nonce
+intent while ordinary `apply` and `rollback` remain bound to the original intent nonce. The
+transaction layer chooses the repair direction and records the durable audit decision; this
+adapter only supplies the verified filesystem primitives.
 
 A successful `apply` deliberately leaves `intent.json`. ADRs 0006 and 0010 require the future
 transaction layer to fence again, durably append the audit event, and only then call the
 matching finalizer. `finalize_after_audit` is original-nonce-bound;
 `finalize_recovery_after_audit` finalizes a successor's completed recovery; and
 `finalize_rollback_after_audit` verifies every restored preimage and retained postimage before
-cleanup. Finalization removes and directory-fsyncs the intent first, then removes transaction
-staging. A cleanup interruption therefore leaves an orphan directory rather than an intent
-that points to deleted recovery data.
+cleanup; for a move it also requires the destination to be absent. Finalization removes and
+directory-fsyncs the intent first, then removes transaction staging. A cleanup interruption
+therefore leaves an orphan directory rather than an intent that points to deleted recovery data.
 
 `inspect_recovery` is read-only and reports:
 
@@ -145,14 +177,60 @@ that points to deleted recovery data.
 | --- | --- |
 | `clean` | No intent; any listed transaction directories are harmless orphans. |
 | `invalid_intent` | The intent is malformed, unsafe, or unsupported. |
-| `prepared` | No target has its postimage and every staged postimage is available. |
-| `partially_applied` | Some target bytes match their postimages and the rest remain staged. |
-| `fully_replaced_awaiting_audit` | All target bytes match, but audit/finalization is pending. |
-| `recovery_conflict` | A target differs from both images, or a required postimage or preimage backup is invalid. |
+| `prepared` | Every operation is in its recorded preimage state and all required recovery assets are valid. |
+| `partially_applied` | Some operations have reached their postimage state and the rest remain recoverably pending. |
+| `fully_replaced_awaiting_audit` | Every operation is applied, but audit/finalization is pending; the legacy state name is retained for compatibility. |
+| `recovery_conflict` | A source, destination, staged postimage, or backup differs from every valid state, or an operation parent is unavailable. |
 
-Inspection reports current, staged-postimage, and preimage-backup hashes. It does not claim
-whether byte-identical target content was historically replaced. WP-300 owns transaction and
-audit semantics and chooses whether the adapter completes or rolls back a recoverable intent.
+Per-target inspection includes the operation kind, optional move destination and destination
+hash, current source hash, staged-postimage hash, and preimage-backup hash. The target-level
+state name `staged_postimage_available` is also retained for compatibility and means that any
+operation kind is recoverably pending. Inspection does not claim whether byte-identical content
+was historically replaced or moved. WP-300 owns transaction and audit semantics and chooses
+whether the adapter completes or rolls back a recoverable intent.
+
+## Atomic line append
+
+`atomic_append_line_bytes(context_root, target, line, nonce=..., lock=...)` provides the durable
+write slot required by ADR 0010 without implementing JSON, hash-chain, or ledger-idempotency
+semantics. `line` must be non-empty `bytes` containing exactly one final LF and no other LF or
+carriage return. An existing non-empty target must already end in LF; an incomplete final line
+raises `RecoveryRequiredError` instead of being hidden by another append.
+
+The append is copy-on-write. The adapter snapshots the existing regular file, assembles the
+complete old-bytes-plus-line postimage, writes and fsyncs it to a unique same-volume
+`98_state/staging/append-<random>.stage`, and verifies its hash. Immediately before every atomic
+replacement attempt it rechecks the staged hash, the target preimage hash and path safety, then
+verifies the supplied lock nonce as the final fence. `PermissionError` uses the same bounded
+retry schedule as staged operations; exhaustion raises `RecoverableReplaceError` and leaves the
+canonical target byte-identical. A successful replacement is followed by a best-effort
+directory fsync of the target parent. Consequently readers see either the complete previous
+file or the complete additional line, never an injected partial-line write.
+
+Following ADR 0006's canonical-write rule means each append copies the current file and is
+linear in its size. Phase 1 accepts that cost while ADR 0010 defers rotation until ledger size
+becomes a measured problem; the replacement also prevents a context hard link from mutating an
+inode reachable outside the context boundary.
+
+Missing target parents are created one component at a time only after an initial fence. Each
+component is kept inside a permitted canonical zone, rejects files, symlinks, junctions, and
+nested context boundaries, is re-resolved after creation, and has its parent directory fsynced.
+The same plain-parent-chain checks run before every retry. Traversal, absolute, drive-relative,
+wrong-zone, nested-context, and link-substitution attempts fail closed.
+
+Unlike `atomic_replace_bytes`, the append primitive deliberately permits a structurally valid
+active `intent.json`, including an old-nonce intent being handled by a successor lock holder.
+It still parses and path-validates any present intent before creating append parents or
+publishing bytes; malformed, symlinked, or otherwise unsafe intent state fails closed. The ADR
+0010 sequence is therefore:
+
+1. apply, complete, or roll back the staged operations, leaving the intent durable;
+2. call `atomic_append_line_bytes` with the current verified lock holder;
+3. call the matching original-holder, recovery, or rollback finalizer.
+
+The append neither rewrites the intent nor removes transaction recovery assets. WP-300 is
+responsible for producing the audit line, detecting a previously committed transaction after a
+process interruption, and choosing the matching finalizer.
 
 ## Owned `98_state` layout
 
@@ -168,11 +246,12 @@ audit semantics and chooses whether the adapter completes or rolls back a recove
 │   ├── lock.guard.cancelled-<kind>-<nonce>.json
 │   │                                          retired guard blocked from physical removal
 │   ├── single-<random>.stage              transient single-file postimage
+│   ├── append-<random>.stage              transient complete append postimage
 │   └── transactions/
 │       └── txn-<random>/
-│           ├── 00000000.stage             ordered transaction postimages
-│           ├── 00000000.backup            existing-target preimages for rollback
-│           ├── 00000000.rollback          transient preimage replacement
+│           ├── 00000000.stage             replacement postimages only
+│           ├── 00000000.backup            preimages; mandatory for move and delete
+│           ├── 00000000.rollback          transient backup restoration
 │           ├── 00000000.rebuild-<random>.tmp
 │           │                                  transient postimage reconstruction
 │           └── intent.complete.tmp         transient complete intent before publication
