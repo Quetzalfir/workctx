@@ -43,12 +43,29 @@ index_app = typer.Typer(help="Manage rebuildable derived indexes.")
 app.add_typer(index_app, name="index")
 ref_app = typer.Typer(help="Resolve, traverse, and trace canonical references.")
 app.add_typer(ref_app, name="ref")
+mcp_app = typer.Typer(help="Serve one isolated context over MCP.")
+app.add_typer(mcp_app, name="mcp")
 
 
 @app.command()
 def version() -> None:
     """Print the installed Work Context OS version."""
     typer.echo(__version__)
+
+
+@mcp_app.command("serve")
+def mcp_serve(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path."),
+    ] = None,
+) -> None:
+    """Serve the resolved context over MCP stdio."""
+    begin_command("mcp.serve", json_output=False)
+    root = resolve_cli_context(explicit_path=context_path)
+    from workctx.mcp import serve_stdio
+
+    serve_stdio(root)
 
 
 @app.command()
