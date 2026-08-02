@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "adapter": "claude",
+  "adapter_version": 1,
+  "scope": "project",
+  "generated_at": "2026-08-01T12:00:00Z",
+  "registry": {
+    "path": ".agents/skills/registry.yaml",
+    "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "skills": [
+    {
+      "name": "bootstrap-session",
+      "mode": "generated",
+      "canonical": {
+        "path": ".agents/skills/bootstrap-session/SKILL.md",
+        "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "generated": [
+        {
+          "path": ".claude/skills/bootstrap-session/SKILL.md",
+          "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    }
+  ],
+  "components": {
+    "instruction_bridge": {
+      "ownership": "generated",
+      "source": {
+        "path": "CLAUDE.md",
+        "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "target": {
+        "path": "CLAUDE.md",
+        "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    },
+    "mcp_configuration": {
+      "state": "not_implemented",
+      "path": "forbidden"
+    }
+  },
+  "backups": []
+}

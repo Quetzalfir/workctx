@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "adapter": "claude",
+  "adapter_version": 1,
+  "scope": "project",
+  "generated_at": "2026-08-01T12:00:00Z",
+  "registry": {
+    "path": ".agents/skills/registry.yaml",
+    "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "skills": [
+    {
+      "name": "bootstrap-session",
+      "mode": "generated",
+      "canonical": {
+        "path": ".agents/skills/bootstrap-session/SKILL.md",
+        "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "source_set": {
+        "files": [
+          {
+            "path": ".agents/skills/bootstrap-session/SKILL.md",
+            "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ],
+        "aggregate_hash": "sha256:6bf796b247c93a7d3d114c8fa516ed192d3fdfc377d2c1cc3542e9aa7651d414"
+      },
+      "generated": [
+        {
+          "path": ".claude/skills/bootstrap-session/SKILL.md",
+          "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    }
+  ]
+}

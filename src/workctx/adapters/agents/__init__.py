@@ -1,0 +1,88 @@
+"""Project-scoped adapters for Codex, Claude Code, and Gemini CLI."""
+
+from .detection import (
+    PROJECT_MARKERS,
+    SUPPORTED_VERSION_RANGES,
+    ClientDetector,
+    detect_client,
+    detect_clients,
+    parse_client_version,
+)
+from .errors import (
+    AdapterConflictError,
+    AdapterInvalidError,
+    AgentAdapterError,
+    AgentUnavailableError,
+    InvalidAdapterStateError,
+    InvalidApprovalError,
+    RecoveryConflictError,
+    RecoveryRequiredError,
+    UnsupportedClientVersionError,
+)
+from .models import (
+    AdapterPlan,
+    AdapterState,
+    AdapterStatus,
+    AgentClient,
+    ClientAvailability,
+    ClientCapability,
+    DriftDetail,
+    DriftReason,
+    FeatureState,
+    FeatureStatus,
+    FileOperation,
+    OpenedContext,
+    OperationAction,
+    OperationResult,
+    PlannedChange,
+    SemanticVersion,
+    SourceOrigin,
+    SupportedVersionRange,
+    TargetApproval,
+)
+from .service import AgentAdapterService
+from .session import open_context
+
+AgentAdapterManager = AgentAdapterService
+ComponentStatus = FeatureStatus
+
+__all__ = [
+    "PROJECT_MARKERS",
+    "SUPPORTED_VERSION_RANGES",
+    "AdapterConflictError",
+    "AdapterInvalidError",
+    "AdapterPlan",
+    "AdapterState",
+    "AdapterStatus",
+    "AgentAdapterError",
+    "AgentAdapterManager",
+    "AgentAdapterService",
+    "AgentClient",
+    "AgentUnavailableError",
+    "ClientAvailability",
+    "ClientCapability",
+    "ClientDetector",
+    "ComponentStatus",
+    "DriftDetail",
+    "DriftReason",
+    "FeatureState",
+    "FeatureStatus",
+    "FileOperation",
+    "InvalidAdapterStateError",
+    "InvalidApprovalError",
+    "OpenedContext",
+    "OperationAction",
+    "OperationResult",
+    "PlannedChange",
+    "RecoveryConflictError",
+    "RecoveryRequiredError",
+    "SemanticVersion",
+    "SourceOrigin",
+    "SupportedVersionRange",
+    "TargetApproval",
+    "UnsupportedClientVersionError",
+    "detect_client",
+    "detect_clients",
+    "open_context",
+    "parse_client_version",
+]

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "adapter": "claude",
+  "adapter_version": 1,
+  "scope": "project",
+  "generated_at": "2026-07-30T20:00:00Z",
+  "registry": {
+    "path": ".agents/skills/registry.yaml",
+    "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "skills": [
+    {
+      "name": "bootstrap-session",
+      "canonical": {
+        "path": ".agents/skills/bootstrap-session/SKILL.md",
+        "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "generated": [
+        {
+          "path": ".claude/skills/bootstrap-session/SKILL.md",
+          "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    }
+  ]
+}

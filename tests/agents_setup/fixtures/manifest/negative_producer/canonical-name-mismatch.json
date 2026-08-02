@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "adapter": "codex",
+  "adapter_version": 1,
+  "scope": "project",
+  "generated_at": "2026-08-01T12:00:00Z",
+  "registry": {
+    "path": ".agents/skills/registry.yaml",
+    "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "skills": [
+    {
+      "name": "bootstrap-session",
+      "mode": "native-verified",
+      "canonical": {
+        "path": ".agents/skills/close-session/SKILL.md",
+        "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "source_set": {
+        "files": [
+          {
+            "path": ".agents/skills/close-session/SKILL.md",
+            "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        ],
+        "aggregate_hash": "sha256:e812aa82604c10956443adaed81186fe4381e9d14f01ac3405df95ada4edfb40"
+      }
+    }
+  ],
+  "components": {
+    "instruction_bridge": {
+      "ownership": "user-owned",
+      "source": {
+        "path": "AGENTS.md",
+        "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "target": {
+        "path": "AGENTS.md",
+        "content_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    },
+    "mcp_configuration": {
+      "state": "not_implemented"
+    }
+  },
+  "backups": []
+}

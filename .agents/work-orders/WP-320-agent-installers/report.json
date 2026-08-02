@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-320-agent-installers",
+  "status": "completed",
+  "summary": "Implemented typed Codex, Claude Code, and Gemini CLI adapter APIs for detection, manifest-driven install, drift status, targeted repair, safe uninstall, recovery, and context bootstrap. D-032 through D-034 add trusted three-factor mutation authority, complete native source sets, and kit-authored target-flavored bridges. All required validation commands pass.",
+  "base_commit": "2c47821c602536284366f5b3aef7806af6c5124d",
+  "final_commit": "2c47821c602536284366f5b3aef7806af6c5124d",
+  "files_changed": [
+    "src/workctx/adapters/agents/**",
+    "tests/agents_setup/**",
+    "docs/reference/agent-adapters.md",
+    "docs/reference/skill-adapters.md",
+    "schemas/skill-adapter-manifest.schema.json",
+    "src/workctx/resources/agent_kit/**",
+    "scripts/sync_agent_kit.py",
+    ".agents/work-orders/WP-320-agent-installers/report.md",
+    ".agents/work-orders/WP-320-agent-installers/report.json"
+  ],
+  "behavior_implemented": [
+    "Typed independent Codex, Claude, and Gemini detection using injected executable discovery, project markers, capability reports, and fail-safe supported-version ranges.",
+    "Repository-first canonical skill and registry loading with a deterministic packaged-agent-kit fallback and registry-derived side-effect advisories.",
+    "Generated and native-verified manifest entries, typed instruction-bridge and MCP components, producer validation, project-local backup records, and legacy generated-manifest compatibility.",
+    "D-032 three-factor overwrite and deletion authority: an adapter-scoped schema-valid path, current bytes equal to the manifest-recorded hash, and the exact raw manifest digest authenticated by the fixed per-project Work Context user-configuration install record.",
+    "Trusted pending transitions bind client, manifest path, prior and next manifest digests, and the ordered operation digest; authority is rechecked after transaction intent persistence and immediately before every apply or recovery mutation.",
+    "D-033 complete native-verified source sets with sorted canonical-path and sha256 pairs for every file below a skill directory plus a domain-separated aggregate digest; add, remove, rename, and content drift are detected.",
+    "D-034 self-contained, target-flavored bridge templates authored in the packaged kit; synchronization covers only skills and registry, context AGENTS content is preserved, and bridges are generated only when absent.",
+    "Content-hash-idempotent install, drift status, targeted repair, manifest-listed-only uninstall, process locking, atomic replacement, and durable recovery; any failed authority factor makes the whole plan report-only.",
+    "Typed open_context subprocess bootstrap without credential handling.",
+    "MCP status reported exactly as not_implemented without server identity or configuration generation.",
+    "No-follow project-scoped filesystem operations and negative tests proving client authentication credentials and user-global client auth files are never read, copied, configured, or required."
+  ],
+  "tests": [
+    {
+      "command": "git merge --ff-only 2c47821",
+      "status": "passed",
+      "result": "Fast-forwarded bae004764c48f62239b0e622a1a3a7b40187e5ea to 2c47821c602536284366f5b3aef7806af6c5124d."
+    },
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "372 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 79 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "1187 collected; 1181 passed and 6 skipped in 342.83s."
+    },
+    {
+      "command": "uv run pytest tests/agents_setup/test_install_records.py tests/agents_setup/test_service_authority.py -q",
+      "status": "passed",
+      "result": "29 passed in 18.75s."
+    },
+    {
+      "command": "uv run python scripts/sync_agent_kit.py --check",
+      "status": "passed",
+      "result": "Agent kit is synchronized."
+    },
+    {
+      "command": "uv run pytest tests/test_plan_contracts.py -q",
+      "status": "passed",
+      "result": "4 passed."
+    },
+    {
+      "command": "Validate report.json against .agents/plan/initial/agent-report.schema.json with Draft202012Validator",
+      "status": "passed",
+      "result": "report.json valid"
+    },
+    {
+      "command": "Audit git status --porcelain=v1 -uall against contract allowed_paths",
+      "status": "passed",
+      "result": "Allowed-path audit passed for all 80 changed files."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "result": "No whitespace errors."
+    }
+  ],
+  "assumptions": [
+    "The operator's Round 2 and Round 3 instructions for the revision worktree, branch, and base supersede stale location metadata in contract.json; allowed and forbidden path grants remain unchanged.",
+    "The fixed platformdirs Work Context user-configuration location is the trusted domain required by D-032 and is distinct from prohibited client authentication and client-global configuration files.",
+    "MCP configuration generation remains a deliberate D-014 non-goal until WP-330 defines the server identity."
+  ],
+  "decisions": [
+    "D-026: Codex uses native-verified manifest entries while generated outputs use explicit generated entries.",
+    "D-027: canonical skills and registry ship in a deterministically synchronized package resource kit.",
+    "D-028: selected-client bridges are generated only when absent; existing user bridges remain untouched.",
+    "D-029: Gemini uses .gemini/skills/<name>/SKILL.md and every client probe uses a declared supported-version range with fail-safe unsupported results.",
+    "D-030: retained backups are project-local under .workctx/backups/<timestamp>/ and manifest-listed.",
+    "D-032: overwrite or deletion requires adapter-scoped path authority, target hash equality, and a project-manifest digest authenticated by the fixed user-directory install record; otherwise the entire plan is report-only.",
+    "D-033: native-verified entries record sorted complete source sets plus an aggregate digest.",
+    "D-034: bridge templates are self-contained and kit-authored; source synchronization covers only skills and registry, and context AGENTS remains the base contract.",
+    "D-014: MCP configuration generation is deferred until WP-330."
+  ],
+  "deviations": [],
+  "security_considerations": [
+    "The only user-configuration artifact accessed is Work Context's own fixed agent-adapter install record, whose public API has no path override; no client auth file, token, credential, or client-global configuration is accessed.",
+    "The exact raw manifest digest and current target hash are revalidated against the trusted record after transaction intent persistence and immediately before every target mutation or recovery write.",
+    "Adapter targets and native source paths are allowlisted and project-relative; no-follow access rejects traversal, symlinks or reparse points, unsafe Windows names, case collisions, and credential-capable names before content access.",
+    "Existing user bridges and all unauthenticated or modified targets remain untouched; uninstall removes only authenticated manifest-listed generated targets and never recursively removes neighboring user content.",
+    "Tests use isolated fake project and home directories plus fake executable discovery, so no real client or real user-global auth file is required.",
+    "MCP has a data-only not_implemented seam with no server identity, configuration target, or credential path."
+  ],
+  "migration_considerations": [
+    "Readers accept legacy generated manifests while current writers emit explicit modes, typed components, and complete native source sets.",
+    "Successful adapter operations create or update the separate trusted install record in Work Context's fixed user-configuration location; uninstall removes the applicable trusted record without inspecting or migrating client-global state.",
+    "Transaction preimages and manifest bookkeeping use retained project-local backups; no user-global backup migration occurs."
+  ],
+  "unresolved": [],
+  "recommended_next_action": "Lead review and integration, followed by separately owned CLI wiring; WP-330 may later implement the reserved MCP seam with its defined server identity."
+}

@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workctx.dev/schemas/skill-adapter-manifest.schema.json",
-  "title": "Generated skill adapter manifest",
+  "title": "Agent adapter manifest",
+  "description": "Schema validation is necessary but not sufficient. Producers and consumers must also enforce semantic relations that portable JSON Schema cannot compare directly: each canonical path is derived from its skill name; each native-verified source set belongs to that skill, contains the canonical path/hash pair exactly once, has unique Unicode-NFC/full-case-fold path keys, and has the declared aggregate hash; generated paths have unique collision keys and belong to the selected adapter; the instruction bridge source and target map to the selected adapter; generated bridge source and target hashes match; each backup timestamp directory corresponds to created_at; and all declared paths pass the no-follow filesystem rules in the reference contract. In native-verified mode, canonical is the primary native path/hash verification record, source_set covers every file in the canonical skill directory, and generated is absent. When components is present, it contains exactly one instruction_bridge and one mcp_configuration whose state is exactly not_implemented and which carries no path or server identity. New producers must explicitly set every skill mode and emit components and backups. Their omission is accepted only to read legacy generated manifests.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -47,6 +48,16 @@
       "items": {
         "$ref": "#/$defs/skillAdapter"
       }
+    },
+    "components": {
+      "$ref": "#/$defs/adapterComponents"
+    },
+    "backups": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/backupEntry"
+      }
     }
   },
   "allOf": [
@@ -71,6 +82,28 @@
                     "properties": {
                       "path": {
                         "pattern": "^\\.codex/"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "components": {
+            "properties": {
+              "instruction_bridge": {
+                "properties": {
+                  "source": {
+                    "properties": {
+                      "path": {
+                        "const": "AGENTS.md"
+                      }
+                    }
+                  },
+                  "target": {
+                    "properties": {
+                      "path": {
+                        "const": "AGENTS.md"
                       }
                     }
                   }
@@ -108,6 +141,28 @@
                 }
               }
             }
+          },
+          "components": {
+            "properties": {
+              "instruction_bridge": {
+                "properties": {
+                  "source": {
+                    "properties": {
+                      "path": {
+                        "const": "CLAUDE.md"
+                      }
+                    }
+                  },
+                  "target": {
+                    "properties": {
+                      "path": {
+                        "const": "CLAUDE.md"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -139,6 +194,28 @@
                 }
               }
             }
+          },
+          "components": {
+            "properties": {
+              "instruction_bridge": {
+                "properties": {
+                  "source": {
+                    "properties": {
+                      "path": {
+                        "const": "GEMINI.md"
+                      }
+                    }
+                  },
+                  "target": {
+                    "properties": {
+                      "path": {
+                        "const": "GEMINI.md"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -152,6 +229,19 @@
     "generatedPath": {
       "type": "string",
       "pattern": "^\\.(?:codex|claude|gemini)/(?!\\.\\.?(?:/|$))(?!.*(?:/\\.\\.?)(?:/|$))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "managedPath": {
+      "type": "string",
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\)(?!\\.\\.?(?:/|$))(?!.*(?:/\\.\\.?)(?:/|$))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "backupPath": {
+      "type": "string",
+      "pattern": "^\\.workctx/backups/[0-9]{8}T[0-9]{6}(?:\\.[0-9]+)?Z/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
     },
     "registrySource": {
       "type": "object",
@@ -186,6 +276,44 @@
         }
       }
     },
+    "nativeSourceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*/(?!\\.\\.?(?:/|$))(?!.*(?:/\\.\\.?)(?:/|$))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
+    "nativeSourceSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "files",
+        "aggregate_hash"
+      ],
+      "properties": {
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nativeSourceFile"
+          }
+        },
+        "aggregate_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
     "generatedFile": {
       "type": "object",
       "additionalProperties": false,
@@ -207,8 +335,7 @@
       "additionalProperties": false,
       "required": [
         "name",
-        "canonical",
-        "generated"
+        "canonical"
       ],
       "properties": {
         "name": {
@@ -217,8 +344,17 @@
           "minLength": 2,
           "maxLength": 80
         },
+        "mode": {
+          "enum": [
+            "generated",
+            "native-verified"
+          ]
+        },
         "canonical": {
           "$ref": "#/$defs/canonicalSource"
+        },
+        "source_set": {
+          "$ref": "#/$defs/nativeSourceSet"
         },
         "generated": {
           "type": "array",
@@ -227,6 +363,174 @@
           "items": {
             "$ref": "#/$defs/generatedFile"
           }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "generated"
+          ],
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "mode"
+                ]
+              },
+              {
+                "required": [
+                  "source_set"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "mode": {
+              "const": "generated"
+            }
+          },
+          "required": [
+            "mode",
+            "generated"
+          ],
+          "not": {
+            "required": [
+              "source_set"
+            ]
+          }
+        },
+        {
+          "properties": {
+            "mode": {
+              "const": "native-verified"
+            }
+          },
+          "required": [
+            "mode",
+            "source_set"
+          ],
+          "not": {
+            "required": [
+              "generated"
+            ]
+          }
+        }
+      ]
+    },
+    "bridgeSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md"
+          ]
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
+    "bridgeTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "AGENTS.md",
+            "CLAUDE.md",
+            "GEMINI.md"
+          ]
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        }
+      }
+    },
+    "instructionBridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ownership",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "ownership": {
+          "enum": [
+            "generated",
+            "user-owned"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/bridgeSource"
+        },
+        "target": {
+          "$ref": "#/$defs/bridgeTarget"
+        }
+      }
+    },
+    "mcpConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "const": "not_implemented"
+        }
+      }
+    },
+    "adapterComponents": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instruction_bridge",
+        "mcp_configuration"
+      ],
+      "properties": {
+        "instruction_bridge": {
+          "$ref": "#/$defs/instructionBridge"
+        },
+        "mcp_configuration": {
+          "$ref": "#/$defs/mcpConfiguration"
+        }
+      }
+    },
+    "backupEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "original_path",
+        "path",
+        "content_hash",
+        "created_at"
+      ],
+      "properties": {
+        "original_path": {
+          "$ref": "#/$defs/managedPath"
+        },
+        "path": {
+          "$ref": "#/$defs/backupPath"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/contentHash"
+        },
+        "created_at": {
+          "$ref": "#/$defs/utcTimestamp"
         }
       }
     }
