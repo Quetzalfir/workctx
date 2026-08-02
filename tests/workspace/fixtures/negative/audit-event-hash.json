@@ -1,15 +1,27 @@
 {
   "schema_version": 1,
   "id": "AUD-20260730T120000Z-fixture",
+  "proposal_id": "TXP-20260730T120000Z-fixture",
   "context_id": "fictional-context",
   "timestamp": "2026-07-30T12:00:00Z",
   "actor": {
-    "type": "human",
-    "id": "fictional-operator"
+    "type": "system",
+    "id": "workctx-transaction-recovery",
+    "agent": null,
+    "model": null
   },
-  "action": "fixture_validation",
-  "result": "success",
+  "action": "recovery",
+  "result": "rolled_back",
+  "base_revision": "0000000000000000000000000000000000000000000000000000000000000000",
   "source_refs": [],
-  "target_refs": [],
-  "content_hash": "sha256:invalid"
+  "operations": [
+    {
+      "op": "update",
+      "target": "03_work/tasks/TASK-2026-001.md",
+      "preimage_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "postimage_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
+  "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "event_hash": "invalid"
 }

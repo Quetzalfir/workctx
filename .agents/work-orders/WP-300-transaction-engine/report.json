@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-300-transaction-engine",
+  "status": "completed",
+  "summary": "WP-300 is complete under ADRs 0006 and 0010 plus decision D-031: typed transaction/audit contracts, deterministic D-025 preflight, atomic apply through public WP-200/WP-201 primitives, a verified hash-chained ledger, idempotency/conflict semantics, durable projection staleness, and ledger-event-gated rollback-only recovery all pass the full repository gate.",
+  "base_commit": "334b6492b72c7f32f4d9cf3e54dc96792677e29e",
+  "final_commit": "f5e55ff674bcbc063fdd2b901bad76b45dbcd10c",
+  "files_changed": [
+    "src/workctx/domain/transactions.py",
+    "src/workctx/transactions/__init__.py",
+    "src/workctx/transactions/engine.py",
+    "src/workctx/transactions/errors.py",
+    "src/workctx/transactions/ledger.py",
+    "src/workctx/transactions/models.py",
+    "schemas/transaction-proposal.schema.json",
+    "schemas/audit-event.schema.json",
+    "tests/workspace/fixtures/positive/transaction-proposal.json",
+    "tests/workspace/fixtures/positive/audit-event.json",
+    "tests/workspace/fixtures/negative/transaction-proposal-operations.json",
+    "tests/workspace/fixtures/negative/audit-event-hash.json",
+    "tests/transactions/__init__.py",
+    "tests/transactions/support.py",
+    "tests/transactions/test_contracts.py",
+    "tests/transactions/test_engine.py",
+    "tests/transactions/test_failures.py",
+    "tests/transactions/test_ledger.py",
+    "tests/transactions/test_path_security.py",
+    "tests/transactions/test_preflight_traversal.py",
+    "tests/transactions/test_recovery_crash_windows.py",
+    "tests/transactions/test_recovery_d031.py",
+    "tests/transactions/test_recovery_integrity.py",
+    "tests/transactions/test_results.py",
+    "docs/reference/transactions.md",
+    ".agents/work-orders/WP-300-transaction-engine/report.md",
+    ".agents/work-orders/WP-300-transaction-engine/report.json"
+  ],
+  "behavior_implemented": [
+    "Closed typed transaction proposal and audit event models with matching tightened Draft 2020-12 schemas and the four granted fixtures.",
+    "Deterministic validate/dry-run using D-025 final-state composition across artifact manifests, evidence and embedded observation references, task relations, body references, ownership, and collision rules.",
+    "Atomic apply under a fenced context lock using public WP-200/WP-201 write-ahead intent, stage write/move/delete, fenced append, and finalization APIs only.",
+    "ADR 0010 compact JSONL hash-chain verification, append, tamper detection, zero-revision genesis, exact-replay idempotency, and reused identifier conflicts.",
+    "Apply results with committed revision, applied targets, ledger event ID/hash/references, and projection freshness or durable staleness details.",
+    "D-031 ledger-event-gated recovery: verified matching event means cleanup-only completion; no event means authenticated preimage rollback only; retries use full apply.",
+    "Periodic heartbeat and fence-loss handling through long apply, recovery, ledger, finalizer, stager factory, and projection phases.",
+    "Failure-injection coverage for mid-sequence failure, takeover, tampered ledger, projection failure after commit, recovery crash windows, move/delete rollback, and long-running lease refresh."
+  ],
+  "tests": [
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "318 files already formatted."
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 64 source files."
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "938 passed in 246.85 seconds (0:04:06)."
+    },
+    {
+      "command": "uv run python -c \"import json; from pathlib import Path; from jsonschema import Draft202012Validator; root=Path('.agents'); schema=json.loads((root/'plan/initial/agent-report.schema.json').read_text(encoding='utf-8')); report=json.loads((root/'work-orders/WP-300-transaction-engine/report.json').read_text(encoding='utf-8')); Draft202012Validator(schema).validate(report); print('WP-300 report.json validates against agent-report.schema.json')\"",
+      "status": "passed",
+      "result": "WP-300 report.json validates against agent-report.schema.json."
+    },
+    {
+      "command": "uv run pytest tests/test_plan_contracts.py -q",
+      "status": "passed",
+      "result": "4 passed."
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed",
+      "result": "Exit code 0 with no output."
+    }
+  ],
+  "assumptions": [
+    "The verified durable ledger event is the commit point; event presence selects cleanup only and event absence selects preimage rollback only.",
+    "RecoveryResult preserves the requested strategy but reports the D-031 outcome actually performed, so eventless COMPLETE reports rolled_back.",
+    "A retry after eventless rollback supplies a new proposal/revision and uses the full authenticated apply path.",
+    "D-025 preflight composes transaction-touched state; untouched whole-workspace graph and cycle consistency remains in the strict WP-220 post-apply gate.",
+    "External durable-reference placeholders receive structural preflight checks while workspace-owned references also receive composed existence, type, and context checks."
+  ],
+  "decisions": [
+    "A matching event anywhere in the fully verified chain authorizes exact-intent cleanup without forward writes or a second append.",
+    "An eventless intent prebuilds the rollback audit event, validates all preimages and the ledger head before mutation, restores preimages, fenced-appends the event, verifies it, and then finalizes rollback.",
+    "Recovery audit events use the reserved workctx-transaction-recovery system actor with empty source references and explicit rolled_back outcome.",
+    "Projection failures after the audit append preserve the committed apply/recovery result and attempt durable SQLiteProjection.invalidate()."
+  ],
+  "deviations": [],
+  "security_considerations": [
+    "All canonical writes use public WP-200/WP-201 primitives while the fenced context lock is held; no canonical file is written directly.",
+    "Path validation rejects traversal, controls, Windows device names, and ledger case/trailing/ADS aliases; the ledger must be a regular file.",
+    "Audit metadata carries hashes and locators without raw evidence payloads or secret values, and secret diagnostics do not echo values.",
+    "Only fictional temporary workspaces were used; no external systems, credentials, private data, or repository canonical workspace was mutated."
+  ],
+  "migration_considerations": [
+    "No persistent-format migration is required; a new ledger begins at revision zero and D-031 recovers existing WP-201 intent records without extending their format."
+  ],
+  "unresolved": [],
+  "recommended_next_action": "Implementation lead: inspect implementation commit f5e55ff674bcbc063fdd2b901bad76b45dbcd10c, independently rerun the required gate, and integrate WP-300 so WP-310 and WP-330 can consume its result interfaces."
+}

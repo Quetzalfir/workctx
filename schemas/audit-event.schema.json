@@ -2,19 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workctx.dev/schemas/audit-event.schema.json",
   "title": "Audit event",
+  "description": "Draft 2020-12 validation is necessary but not sufficient. Structural recovery-event constraints require result rolled_back, the reserved workctx-transaction-recovery system actor, and empty source_refs. Producer invariants outside this structural schema are: id is AUD- plus proposal_id without its TXP- prefix; base_revision equals prev_hash; timestamp is UTC; for an apply event, actor, context_id, and source_refs match the authenticated proposal while ordered operations match both that proposal and its write-ahead intent; for a recovery event, context_id and ordered operations match an eventless intent and the event records only its hash-verified preimage rollback; cleanup after a matching verified event appends no recovery event; all operation hashes match the intent and the bytes represented by the result; event_hash is the lowercase SHA-256 of the canonical compact UTF-8 JSON event with event_hash set to the empty string; the first event uses the zero revision as prev_hash; later prev_hash values equal the preceding verified event_hash; and proposal_id occurs at most once in the ledger. The ledger producer and verifier enforce these relations.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "id",
+    "proposal_id",
     "context_id",
     "timestamp",
     "actor",
     "action",
     "result",
+    "base_revision",
     "source_refs",
-    "target_refs",
-    "content_hash"
+    "operations",
+    "prev_hash",
+    "event_hash"
   ],
   "properties": {
     "schema_version": {
@@ -22,53 +26,383 @@
       "const": 1
     },
     "id": {
-      "type": "string"
+      "$ref": "#/$defs/audit_event_id"
+    },
+    "proposal_id": {
+      "$ref": "#/$defs/transaction_id"
     },
     "context_id": {
-      "type": "string"
+      "$ref": "#/$defs/context_id"
     },
     "timestamp": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "(?:Z|\\+00:00)$"
     },
     "actor": {
-      "type": "object"
+      "$ref": "#/$defs/actor"
     },
     "action": {
-      "type": "string"
+      "enum": [
+        "apply",
+        "recovery"
+      ]
     },
     "result": {
       "enum": [
-        "success",
-        "rejected",
-        "failed",
-        "partial_projection_failure"
+        "committed",
+        "rolled_back"
       ]
+    },
+    "base_revision": {
+      "$ref": "#/$defs/revision"
     },
     "source_refs": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/durable_reference"
+      },
+      "uniqueItems": true
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/operation"
       }
     },
-    "target_refs": {
-      "type": "array",
-      "items": {
-        "type": "string"
+    "prev_hash": {
+      "$ref": "#/$defs/revision"
+    },
+    "event_hash": {
+      "$ref": "#/$defs/revision"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "recovery"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "rolled_back"
+          },
+          "actor": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/system_actor"
+              },
+              {
+                "properties": {
+                  "id": {
+                    "const": "workctx-transaction-recovery"
+                  }
+                }
+              }
+            ]
+          },
+          "source_refs": {
+            "maxItems": 0
+          }
+        }
       }
+    }
+  ],
+  "$defs": {
+    "transaction_id": {
+      "type": "string",
+      "pattern": "^TXP-[0-9]{8}T[0-9]{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "audit_event_id": {
+      "type": "string",
+      "pattern": "^AUD-[0-9]{8}T[0-9]{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "context_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     },
     "content_hash": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
-    "previous_event_hash": {
-      "type": [
-        "string",
-        "null"
+    "durable_reference": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9+.-]*://.+$",
+      "not": {
+        "pattern": "^file://"
+      },
+      "allOf": [
+        {
+          "if": {
+            "pattern": "^workctx://"
+          },
+          "then": {
+            "pattern": "^workctx://[a-z0-9]+(?:-[a-z0-9]+)*/(?:evidence|person|team|project|system|service|module|flow|integration|decision|risk|question|task|claim|draft|investigation|incident|observation|artifact)/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$"
+          }
+        },
+        {
+          "if": {
+            "pattern": "^artifact://"
+          },
+          "then": {
+            "pattern": "^artifact://sha256/[0-9a-f]{64}$"
+          }
+        },
+        {
+          "if": {
+            "pattern": "^repo://"
+          },
+          "then": {
+            "pattern": "^repo://[a-z0-9]+(?:[._-][a-z0-9]+)*@[0-9a-fA-F]{7,64}/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+(?:/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+)*#L[1-9][0-9]*-L[1-9][0-9]*$"
+          }
+        }
       ]
     },
-    "details": {
-      "type": "object"
+    "context_path": {
+      "type": "string",
+      "pattern": "^(?:00_inbox|01_processed|02_knowledge|03_work|04_views|05_outbox|90_integrations|99_meta)/(?:[^\\u0000-\\u001f/\\\\]+/)*[^\\u0000-\\u001f/\\\\]+$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^99_meta/[aA][uU][dD][iI][tT]/[lL][eE][dD][gG][eE][rR]\\.[jJ][sS][oO][nN][lL]$"
+          },
+          {
+            "pattern": "(?:^|/)\\.\\.?(?:/|$)"
+          },
+          {
+            "pattern": ":"
+          },
+          {
+            "pattern": "(?:^|/)[^/]*[. ](?:/|$)"
+          },
+          {
+            "pattern": "(?:^|/)(?:[cC][oO][nN]|[pP][rR][nN]|[aA][uU][xX]|[nN][uU][lL]|[cC][lL][oO][cC][kK]\\$|[cC][oO][nN][iI][nN]\\$|[cC][oO][nN][oO][uU][tT]\\$|[cC][oO][mM][1-9]|[lL][pP][tT][1-9])(?:\\.[^/]*)?(?:/|$)"
+          }
+        ]
+      }
+    },
+    "generated_path": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/context_path"
+        },
+        {
+          "pattern": "^04_views/"
+        }
+      ]
+    },
+    "human_actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "agent",
+        "model"
+      ],
+      "properties": {
+        "type": {
+          "const": "human"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "agent": {
+          "type": "null"
+        },
+        "model": {
+          "type": "null"
+        }
+      }
+    },
+    "agent_actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "agent",
+        "model"
+      ],
+      "properties": {
+        "type": {
+          "const": "agent"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "system_actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "agent",
+        "model"
+      ],
+      "properties": {
+        "type": {
+          "const": "system"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "agent": {
+          "type": "null"
+        },
+        "model": {
+          "type": "null"
+        }
+      }
+    },
+    "actor": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/human_actor"
+        },
+        {
+          "$ref": "#/$defs/agent_actor"
+        },
+        {
+          "$ref": "#/$defs/system_actor"
+        }
+      ]
+    },
+    "create_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "target",
+        "postimage_hash"
+      ],
+      "properties": {
+        "op": {
+          "const": "create"
+        },
+        "target": {
+          "$ref": "#/$defs/context_path"
+        },
+        "postimage_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "update_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "target",
+        "preimage_hash",
+        "postimage_hash"
+      ],
+      "properties": {
+        "op": {
+          "const": "update"
+        },
+        "target": {
+          "$ref": "#/$defs/context_path"
+        },
+        "preimage_hash": {
+          "$ref": "#/$defs/content_hash"
+        },
+        "postimage_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "move_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "source",
+        "destination",
+        "content_hash"
+      ],
+      "properties": {
+        "op": {
+          "const": "move"
+        },
+        "source": {
+          "$ref": "#/$defs/context_path"
+        },
+        "destination": {
+          "$ref": "#/$defs/context_path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "delete_generated_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "target",
+        "preimage_hash"
+      ],
+      "properties": {
+        "op": {
+          "const": "delete_generated"
+        },
+        "target": {
+          "$ref": "#/$defs/generated_path"
+        },
+        "preimage_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/create_operation"
+        },
+        {
+          "$ref": "#/$defs/update_operation"
+        },
+        {
+          "$ref": "#/$defs/move_operation"
+        },
+        {
+          "$ref": "#/$defs/delete_generated_operation"
+        }
+      ]
     }
   }
 }

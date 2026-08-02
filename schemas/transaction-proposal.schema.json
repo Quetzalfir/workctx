@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workctx.dev/schemas/transaction-proposal.schema.json",
   "title": "Transaction proposal",
+    "description": "Draft 2020-12 validation is necessary but not sufficient. Producer invariants outside this structural schema are: the proposal ID timestamp equals created_at in UTC; context_id equals the bound workspace context; base_revision equals the verified audit-ledger head; local workctx:// references belong to context_id; operation paths use Unicode NFC and are unique after Unicode normalization and case folding; create targets are absent; update, move, and delete sources exist with the expected hashes; move destinations are absent; document IDs and canonical URIs agree with context_id and target filenames; staged document references resolve against the in-memory staged set or current projection; operation ordering and preconditions remain true under the held context lock; and proposal payloads contain no secret-looking values. The transaction engine enforces these relations and full workspace validation is the unconditional post-apply gate.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,7 +14,10 @@
     "created_at",
     "source_refs",
     "operations",
-    "preconditions"
+    "preconditions",
+    "postconditions",
+    "expected_views",
+    "approval"
   ],
   "properties": {
     "schema_version": {
@@ -21,48 +25,16 @@
       "const": 1
     },
     "id": {
-      "type": "string",
-      "pattern": "^TXP-[0-9]{8}T[0-9]{6}Z-[a-z0-9-]+$"
+      "$ref": "#/$defs/transaction_id"
     },
     "context_id": {
-      "type": "string",
-      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      "$ref": "#/$defs/context_id"
     },
     "base_revision": {
-      "type": "integer",
-      "minimum": 0
+      "$ref": "#/$defs/revision"
     },
     "actor": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "id"
-      ],
-      "properties": {
-        "type": {
-          "enum": [
-            "human",
-            "agent",
-            "system"
-          ]
-        },
-        "id": {
-          "type": "string"
-        },
-        "agent": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
+      "$ref": "#/$defs/actor"
     },
     "created_at": {
       "type": "string",
@@ -71,7 +43,7 @@
     "source_refs": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/durable_reference"
       },
       "uniqueItems": true
     },
@@ -79,54 +51,643 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "op",
-          "target",
-          "payload"
-        ],
-        "properties": {
-          "op": {
-            "enum": [
-              "create",
-              "update",
-              "move",
-              "delete_generated",
-              "append_audit"
-            ]
-          },
-          "target": {
-            "type": "string"
-          },
-          "payload": {},
-          "expected_hash": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
+        "$ref": "#/$defs/operation"
       }
     },
     "preconditions": {
       "type": "array",
       "items": {
-        "type": "object"
-      }
+        "$ref": "#/$defs/condition"
+      },
+      "uniqueItems": true
     },
     "postconditions": {
       "type": "array",
       "items": {
-        "type": "object"
-      }
+        "$ref": "#/$defs/condition"
+      },
+      "uniqueItems": true
+    },
+    "expected_views": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "sqlite"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 1,
+      "uniqueItems": true
     },
     "approval": {
       "enum": [
-        "not_required",
         "required",
-        "granted",
-        "denied"
+        "not_required"
+      ]
+    }
+  },
+  "$defs": {
+    "transaction_id": {
+      "type": "string",
+      "pattern": "^TXP-[0-9]{8}T[0-9]{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "context_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "durable_reference": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9+.-]*://.+$",
+      "not": {
+        "pattern": "^file://"
+      },
+      "allOf": [
+        {
+          "if": {
+            "pattern": "^workctx://"
+          },
+          "then": {
+            "pattern": "^workctx://[a-z0-9]+(?:-[a-z0-9]+)*/(?:evidence|person|team|project|system|service|module|flow|integration|decision|risk|question|task|claim|draft|investigation|incident|observation|artifact)/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+$"
+          }
+        },
+        {
+          "if": {
+            "pattern": "^artifact://"
+          },
+          "then": {
+            "pattern": "^artifact://sha256/[0-9a-f]{64}$"
+          }
+        },
+        {
+          "if": {
+            "pattern": "^repo://"
+          },
+          "then": {
+            "pattern": "^repo://[a-z0-9]+(?:[._-][a-z0-9]+)*@[0-9a-fA-F]{7,64}/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+(?:/(?:[A-Za-z0-9._~-]|%[0-9A-F]{2})+)*#L[1-9][0-9]*-L[1-9][0-9]*$"
+          }
+        }
+      ]
+    },
+    "context_path": {
+      "type": "string",
+      "pattern": "^(?:00_inbox|01_processed|02_knowledge|03_work|04_views|05_outbox|90_integrations|99_meta)/(?:[^\\u0000-\\u001f/\\\\]+/)*[^\\u0000-\\u001f/\\\\]+$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^99_meta/[aA][uU][dD][iI][tT]/[lL][eE][dD][gG][eE][rR]\\.[jJ][sS][oO][nN][lL]$"
+          },
+          {
+            "pattern": "(?:^|/)\\.\\.?(?:/|$)"
+          },
+          {
+            "pattern": ":"
+          },
+          {
+            "pattern": "(?:^|/)[^/]*[. ](?:/|$)"
+          },
+          {
+            "pattern": "(?:^|/)(?:[cC][oO][nN]|[pP][rR][nN]|[aA][uU][xX]|[nN][uU][lL]|[cC][lL][oO][cC][kK]\\$|[cC][oO][nN][iI][nN]\\$|[cC][oO][nN][oO][uU][tT]\\$|[cC][oO][mM][1-9]|[lL][pP][tT][1-9])(?:\\.[^/]*)?(?:/|$)"
+          }
+        ]
+      }
+    },
+    "generated_path": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/context_path"
+        },
+        {
+          "pattern": "^04_views/"
+        }
+      ]
+    },
+    "human_actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "agent",
+        "model"
+      ],
+      "properties": {
+        "type": {
+          "const": "human"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "agent": {
+          "type": "null"
+        },
+        "model": {
+          "type": "null"
+        }
+      }
+    },
+    "agent_actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "agent",
+        "model"
+      ],
+      "properties": {
+        "type": {
+          "const": "agent"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "system_actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "agent",
+        "model"
+      ],
+      "properties": {
+        "type": {
+          "const": "system"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "agent": {
+          "type": "null"
+        },
+        "model": {
+          "type": "null"
+        }
+      }
+    },
+    "actor": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/human_actor"
+        },
+        {
+          "$ref": "#/$defs/agent_actor"
+        },
+        {
+          "$ref": "#/$defs/system_actor"
+        }
+      ]
+    },
+    "entity_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "entity"
+        },
+        "document": {
+          "allOf": [
+            {
+              "$ref": "entity.schema.json"
+            },
+            {
+              "not": {
+                "properties": {
+                  "entity_type": {
+                    "enum": [
+                      "artifact",
+                      "claim",
+                      "observation",
+                      "task"
+                    ]
+                  }
+                },
+                "required": [
+                  "entity_type"
+                ]
+              }
+            }
+          ]
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    },
+    "task_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "task"
+        },
+        "document": {
+          "$ref": "task.schema.json"
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    },
+    "claim_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "claim"
+        },
+        "document": {
+          "$ref": "claim.schema.json"
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    },
+    "observation_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document",
+        "body"
+      ],
+      "properties": {
+        "kind": {
+          "const": "observation"
+        },
+        "document": {
+          "$ref": "observation.schema.json"
+        },
+        "body": {
+          "type": "string"
+        }
+      }
+    },
+    "artifact_manifest_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document"
+      ],
+      "properties": {
+        "kind": {
+          "const": "artifact_manifest"
+        },
+        "document": {
+          "$ref": "artifact-manifest.schema.json"
+        }
+      }
+    },
+    "document_payload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/entity_payload"
+        },
+        {
+          "$ref": "#/$defs/task_payload"
+        },
+        {
+          "$ref": "#/$defs/claim_payload"
+        },
+        {
+          "$ref": "#/$defs/observation_payload"
+        },
+        {
+          "$ref": "#/$defs/artifact_manifest_payload"
+        }
+      ]
+    },
+    "document_target_rules": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "kind": {
+                    "const": "task"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "pattern": "^03_work/.+\\.md$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "entity",
+                      "claim",
+                      "observation"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "pattern": "^(?:02_knowledge|03_work|05_outbox)/.+\\.md$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "payload": {
+                "properties": {
+                  "kind": {
+                    "const": "artifact_manifest"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            },
+            "required": [
+              "payload"
+            ]
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "pattern": "^00_inbox/manifests/.+\\.(?:json|ya?ml)$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "create_operation": {
+      "allOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "target",
+            "payload"
+          ],
+          "properties": {
+            "op": {
+              "const": "create"
+            },
+            "target": {
+              "$ref": "#/$defs/context_path"
+            },
+            "payload": {
+              "$ref": "#/$defs/document_payload"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/document_target_rules"
+        }
+      ]
+    },
+    "update_operation": {
+      "allOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "target",
+            "payload",
+            "expected_hash"
+          ],
+          "properties": {
+            "op": {
+              "const": "update"
+            },
+            "target": {
+              "$ref": "#/$defs/context_path"
+            },
+            "payload": {
+              "$ref": "#/$defs/document_payload"
+            },
+            "expected_hash": {
+              "$ref": "#/$defs/content_hash"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/document_target_rules"
+        }
+      ]
+    },
+    "move_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "source",
+        "destination",
+        "expected_hash"
+      ],
+      "properties": {
+        "op": {
+          "const": "move"
+        },
+        "source": {
+          "$ref": "#/$defs/context_path"
+        },
+        "destination": {
+          "$ref": "#/$defs/context_path"
+        },
+        "expected_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "delete_generated_operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "op",
+        "target",
+        "expected_hash"
+      ],
+      "properties": {
+        "op": {
+          "const": "delete_generated"
+        },
+        "target": {
+          "$ref": "#/$defs/generated_path"
+        },
+        "expected_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/create_operation"
+        },
+        {
+          "$ref": "#/$defs/update_operation"
+        },
+        {
+          "$ref": "#/$defs/move_operation"
+        },
+        {
+          "$ref": "#/$defs/delete_generated_operation"
+        }
+      ]
+    },
+    "path_exists_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "path_exists"
+        },
+        "path": {
+          "$ref": "#/$defs/context_path"
+        }
+      }
+    },
+    "path_absent_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path"
+      ],
+      "properties": {
+        "kind": {
+          "const": "path_absent"
+        },
+        "path": {
+          "$ref": "#/$defs/context_path"
+        }
+      }
+    },
+    "path_hash_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "content_hash"
+      ],
+      "properties": {
+        "kind": {
+          "const": "path_hash"
+        },
+        "path": {
+          "$ref": "#/$defs/context_path"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/content_hash"
+        }
+      }
+    },
+    "reference_exists_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "properties": {
+        "kind": {
+          "const": "reference_exists"
+        },
+        "reference": {
+          "$ref": "#/$defs/durable_reference"
+        }
+      }
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/path_exists_condition"
+        },
+        {
+          "$ref": "#/$defs/path_absent_condition"
+        },
+        {
+          "$ref": "#/$defs/path_hash_condition"
+        },
+        {
+          "$ref": "#/$defs/reference_exists_condition"
+        }
       ]
     }
   }
