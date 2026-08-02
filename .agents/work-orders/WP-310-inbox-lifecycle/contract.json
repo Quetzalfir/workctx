@@ -25,7 +25,7 @@
     "WP-220",
     "WP-300"
   ],
-  "base_commit": "PENDING-FINAL-PIN",
+  "base_commit": "925aa08c72eb5fa442750ee3d8740636d03b751c",
   "branch": "agent/WP-310-inbox-lifecycle",
   "worktree": ".worktrees/WP-310-inbox-lifecycle",
   "allowed_paths": [
