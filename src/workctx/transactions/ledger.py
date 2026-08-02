@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
@@ -19,9 +19,13 @@ from workctx.adapters.filesystem import (
     atomic_append_line_bytes,
     dump_json_bytes,
 )
+
+if TYPE_CHECKING:
+    from workctx.transactions.models import ApplyResult
+
 from workctx.domain.transactions import ZERO_REVISION, AuditEvent
 from workctx.errors import ContextBoundaryError
-from workctx.transactions.errors import LedgerIntegrityError
+from workctx.transactions.errors import LedgerIntegrityError, ReceiptAuthenticationError
 
 LEDGER_RELATIVE_PATH = "99_meta/audit/ledger.jsonl"
 
@@ -311,3 +315,30 @@ def _matching_replay(
     if matching_id != matching_proposal or matching_id != candidate:
         raise LedgerIntegrityError()
     return matching_id
+
+
+def authenticate_apply_result(context_root: Path, result: ApplyResult) -> AuditEvent:
+    """Authenticate a supplied historical receipt against the canonical ledger.
+
+    Lead integration addition for WP-310 (D-035): a caller-supplied
+    ``ApplyResult`` is untrusted until its ledger event exists in a
+    chain-verified ledger and every binding field matches. Returns the
+    canonical event so callers can inspect operations and source references.
+    """
+
+    verify_ledger(context_root)
+    event = find_event_by_id(context_root, result.ledger_event_id)
+    if event is None:
+        raise ReceiptAuthenticationError("Receipt references an unknown ledger event")
+    if (
+        event.event_hash != result.ledger_event_hash
+        or compute_event_hash(event) != result.ledger_event_hash
+    ):
+        raise ReceiptAuthenticationError("Receipt hash does not match the canonical event")
+    if event.proposal_id != result.proposal_id or event.context_id != result.context_id:
+        raise ReceiptAuthenticationError("Receipt identity does not match the canonical event")
+    if event.action != "apply" or event.result != "committed":
+        raise ReceiptAuthenticationError("Receipt does not reference a committed apply event")
+    if tuple(event.source_refs) != tuple(result.ledger_source_refs):
+        raise ReceiptAuthenticationError("Receipt source references do not match the event")
+    return event

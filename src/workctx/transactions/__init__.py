@@ -13,6 +13,7 @@ from workctx.transactions.errors import (
     PostconditionRollbackError,
     PreimageChangedError,
     ProposalValidationError,
+    ReceiptAuthenticationError,
     RecoveryPendingError,
     StaleRevisionError,
     TransactionConflictError,
@@ -22,6 +23,7 @@ from workctx.transactions.ledger import (
     AuditSummary,
     LedgerVerification,
     audit_summary,
+    authenticate_apply_result,
     verify_ledger,
 )
 from workctx.transactions.models import (
@@ -52,6 +54,7 @@ __all__ = [
     "ProjectionStatus",
     "ProposalValidationError",
     "ProposalValidationResult",
+    "ReceiptAuthenticationError",
     "RecoveryPendingError",
     "RecoveryResult",
     "RecoveryStrategy",
@@ -62,6 +65,7 @@ __all__ = [
     "TransactionError",
     "apply",
     "audit_summary",
+    "authenticate_apply_result",
     "dry_run",
     "recover",
     "validate_proposal",

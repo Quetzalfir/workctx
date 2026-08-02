@@ -381,21 +381,21 @@ class StagedReplacement:
         published = False
         try:
             for index, operation in enumerate(resolved):
-                preimage = _read_optional_regular_file(operation.target_path)
-                if operation.kind is not IntentTargetKind.REPLACE and preimage is None:
+                backup_candidate = transaction_dir / f"{index:08d}.backup"
+                backup_relative: str | None = None
+                # Bounded memory (D-035): the preimage backup streams in chunks
+                # instead of loading moved or deleted files into memory.
+                preimage_hash = _copy_optional_regular_file_streaming(
+                    operation.target_path, backup_candidate
+                )
+                if operation.kind is not IntentTargetKind.REPLACE and preimage_hash is None:
                     raise RecoveryRequiredError(
                         f"Operation source disappeared during prepare: {operation.target}"
                     )
-                backup_path: Path | None = None
-                backup_relative: str | None = None
-                preimage_hash: str | None = None
-                if preimage is not None:
-                    backup_path = transaction_dir / f"{index:08d}.backup"
-                    _write_fsynced(backup_path, preimage, exclusive=True)
-                    preimage_hash = _hash_bytes(preimage)
-                    if _hash_regular_file(backup_path) != preimage_hash:
+                if preimage_hash is not None:
+                    if _hash_regular_file(backup_candidate) != preimage_hash:
                         raise StagingError("A staged preimage failed hash verification")
-                    backup_relative = backup_path.relative_to(self.context_root).as_posix()
+                    backup_relative = backup_candidate.relative_to(self.context_root).as_posix()
 
                 staged_relative: str | None = None
                 expected_hash: str | None = None
@@ -1559,6 +1559,28 @@ def _read_regular_file(path: Path) -> bytes:
     _reject_unsafe_file(path, allow_missing=False)
     with path.open("rb") as stream:
         return stream.read()
+
+
+def _copy_optional_regular_file_streaming(source: Path, dest: Path) -> str | None:
+    """Copy ``source`` to ``dest`` in bounded-memory chunks, fsynced.
+
+    Returns the sha256 of the copied bytes, or ``None`` when the source does
+    not exist. Applies the same safety checks as ``_read_optional_regular_file``.
+    """
+
+    _reject_unsafe_file(source, allow_missing=True)
+    digest = hashlib.sha256()
+    try:
+        with source.open("rb") as reader, dest.open("xb") as writer:
+            for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+                digest.update(chunk)
+                writer.write(chunk)
+            writer.flush()
+            os.fsync(writer.fileno())
+    except FileNotFoundError:
+        dest.unlink(missing_ok=True)
+        return None
+    return f"sha256:{digest.hexdigest()}"
 
 
 def _read_optional_regular_file(path: Path) -> bytes | None:

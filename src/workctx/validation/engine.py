@@ -887,6 +887,12 @@ def _contains_durable_absolute_path(content: str) -> bool:
     return False
 
 
+def contains_possible_secret(content: str) -> bool:
+    """Public secret-pattern predicate (lead addition, D-035) for ingestion guards."""
+
+    return _contains_possible_secret(content)
+
+
 def _contains_possible_secret(content: str) -> bool:
     if any(pattern.search(content) for pattern in _SECRET_MARKERS):
         return True

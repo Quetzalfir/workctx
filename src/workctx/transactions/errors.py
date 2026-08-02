@@ -64,6 +64,10 @@ class LedgerIntegrityError(UserCorrectableError, TransactionError):
         super().__init__("The transaction audit ledger failed integrity verification.")
 
 
+class ReceiptAuthenticationError(UserCorrectableError, TransactionError):
+    """Raised when a supplied apply receipt cannot be authenticated against the ledger."""
+
+
 class PostconditionRollbackError(UserCorrectableError, TransactionError):
     """Raised after a failed postcondition has been durably rolled back and audited."""
 
