@@ -12,7 +12,8 @@
     "Archive-after-commit: an archive API that composes WP-300 \u2014 the original moves from 00_inbox/raw/ to 01_processed/ only when given a committed transaction receipt (revision + ledger event) referencing the artifact; no receipt, no move",
     "Registration and archive are idempotent by content hash and receipt; interrupted moves are recoverable via the staging primitives",
     "Typed application APIs (register, list_inbox, quarantine_info, archive_after) for CLI and MCP wiring by the lead; document the lifecycle in docs/reference/inbox.md",
-    "D-035 APIs are your dependency surface: authenticate every supplied receipt via workctx.transactions.authenticate_apply_result before any archive move; use workctx.validation.contains_possible_secret for quarantine guards; staged moves are bounded-memory"
+    "D-035 APIs are your dependency surface: authenticate every supplied receipt via workctx.transactions.authenticate_apply_result before any archive move; use workctx.validation.contains_possible_secret for quarantine guards; staged moves are bounded-memory",
+    "D-036 architecture: the physical raw-file moves (inbox->quarantine, inbox->01_processed) are WP-201 staged moves executed under the context lock and gated by authenticate_apply_result on the supplied receipt; the WP-300 transaction you compose carries ONLY the manifest state change (small canonical JSON referencing content hash and locations). Evidence bytes never enter a proposal. The validator now treats evidence zones as opaque; your registration-time guards do the bounded scanning."
   ],
   "non_goals": [
     "No extraction, observation, or proposal generation (WP-410 owns the evidence-processing workflow; LLM work stays agent-side)",
@@ -26,7 +27,7 @@
     "WP-220",
     "WP-300"
   ],
-  "base_commit": "2a7008daa05cd3cd5636628909659c9a783b488d",
+  "base_commit": "PENDING-FINAL-PIN",
   "branch": "agent/WP-310-inbox-lifecycle",
   "worktree": ".worktrees/WP-310-inbox-lifecycle",
   "allowed_paths": [

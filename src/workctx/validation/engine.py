@@ -863,10 +863,26 @@ def _iter_text_files(root: Path) -> Iterator[tuple[Path, str | None]]:
                 yield path, "link"
             elif any(part.casefold() in {".git", "98_state"} for part in relative.parts):
                 continue
+            elif _is_opaque_evidence_path(relative):
+                # D-036: preserved evidence is opaque to content checks; ingestion
+                # guards (WP-310) scan it bounded at registration time.
+                continue
             elif path.is_dir():
                 pending.append(path)
             elif path.is_file() and _is_text_file(path):
                 yield path, None
+
+
+_OPAQUE_EVIDENCE_PREFIXES = (
+    ("00_inbox", "raw"),
+    ("00_inbox", "quarantine"),
+    ("01_processed",),
+)
+
+
+def _is_opaque_evidence_path(relative: Path) -> bool:
+    parts = tuple(part.casefold() for part in relative.parts)
+    return any(parts[: len(prefix)] == prefix for prefix in _OPAQUE_EVIDENCE_PREFIXES)
 
 
 def _is_text_file(path: Path) -> bool:
