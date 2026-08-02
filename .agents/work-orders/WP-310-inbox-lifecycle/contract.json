@@ -11,7 +11,8 @@
     "Quarantine: suspected prompt-injection markers, executable payloads, oversized/unsupported types move to 00_inbox/quarantine/ with a manifest status and a location-only diagnostic (doc-08 evidence-safety controls; never execute or render content)",
     "Archive-after-commit: an archive API that composes WP-300 \u2014 the original moves from 00_inbox/raw/ to 01_processed/ only when given a committed transaction receipt (revision + ledger event) referencing the artifact; no receipt, no move",
     "Registration and archive are idempotent by content hash and receipt; interrupted moves are recoverable via the staging primitives",
-    "Typed application APIs (register, list_inbox, quarantine_info, archive_after) for CLI and MCP wiring by the lead; document the lifecycle in docs/reference/inbox.md"
+    "Typed application APIs (register, list_inbox, quarantine_info, archive_after) for CLI and MCP wiring by the lead; document the lifecycle in docs/reference/inbox.md",
+    "D-035 APIs are your dependency surface: authenticate every supplied receipt via workctx.transactions.authenticate_apply_result before any archive move; use workctx.validation.contains_possible_secret for quarantine guards; staged moves are bounded-memory"
   ],
   "non_goals": [
     "No extraction, observation, or proposal generation (WP-410 owns the evidence-processing workflow; LLM work stays agent-side)",
@@ -25,7 +26,7 @@
     "WP-220",
     "WP-300"
   ],
-  "base_commit": "925aa08c72eb5fa442750ee3d8740636d03b751c",
+  "base_commit": "PENDING-FINAL-PIN",
   "branch": "agent/WP-310-inbox-lifecycle",
   "worktree": ".worktrees/WP-310-inbox-lifecycle",
   "allowed_paths": [
