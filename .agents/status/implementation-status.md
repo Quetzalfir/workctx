@@ -34,8 +34,8 @@ remote).
 | WP-201 | verified | WP-200 | Codex worker | agent/WP-201-staging-extensions | accepted | Integrated; combined gate 777 tests; pre-existing tests untouched |
 | WP-300 | verified | WP-200, WP-201, WP-210, WP-220 | Codex worker | agent/WP-300-transaction-engine | accepted (2 blocker rounds) | Integrated; combined gate 938 tests; D-031 commit-point recovery |
 | WP-310 | ready | WP-200, WP-220, WP-300 | — | agent/WP-310-inbox-lifecycle | — | Released; ready at final pin |
-| WP-320 | revision_requested | WP-120, WP-130 | Codex worker | agent/WP-320-agent-installers | [review](../work-orders/WP-320-agent-installers/leader-review.md) | Correct blocker on five spec gaps (D-026..D-030 recorded); amended contract, worker recreates from new pin |
-| WP-330 | ready | WP-120, WP-220, WP-230, WP-300 | — | agent/WP-330-mcp-server | — | Released; ready at final pin; narrow cli/pyproject/ci grants |
+| WP-320 | verified | WP-120, WP-130 | Codex worker | agent/WP-320-agent-installers-r2 | accepted (3 rounds) | Integrated; D-032 three-factor authority, packaged kit, kit bridges |
+| WP-330 | verified | WP-120, WP-220, WP-230, WP-300 | Codex worker | agent/WP-330-mcp-server | accepted | Integrated; ADR 0012 17-tool surface; combined gate 1298 tests |
 | WP-400..WP-500 | proposed | see backlog | — | — | — | Wave 4+ blocked on Wave 3 |
 
 ## Validation status

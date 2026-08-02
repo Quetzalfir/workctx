@@ -12,3 +12,5 @@
 | 2026-07-30 | WP-230-context-packs | 0f5059a | d64bcab | ruff+format+mypy+pytest (707 combined) | accepted+integrated (1 revision round, ADR 0011) | Wave 2 delivery complete; ref/context-pack CLI wiring pending |
 | 2026-08-01 | WP-201-staging-extensions | 8a87193 | 17b1cf8 | ruff+format+mypy+pytest (777 combined) | accepted+integrated | D-024 unblock; pre-existing tests byte-identical |
 | 2026-08-01 | WP-300-transaction-engine | 5ff9ce5 | f2bc4f9 | ruff+format+mypy+pytest (938 combined) | accepted+integrated (2 blocker rounds) | Critical path; releases WP-310/WP-330 |
+| 2026-08-02 | WP-330-mcp-server | 8bd7681 | a4d8d21 | ruff+mypy(87 files w/ mcp extra)+pytest (1298 combined) | accepted+integrated | ADR 0012 surface live |
+| 2026-08-02 | WP-320-agent-installers | 5fa377e (lead-captured) | 243147c | same combined gate | accepted+integrated (3 rounds) | D-026..D-034 machinery |
