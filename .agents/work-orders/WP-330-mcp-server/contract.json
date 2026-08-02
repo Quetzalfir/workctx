@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "WP-330-mcp-server",
   "title": "MCP server implementing the ADR 0012 alpha surface",
-  "status": "proposed",
+  "status": "ready",
   "objective": "workctx mcp serve exposes the exact ADR 0012 tool surface over stdio with the official MCP Python SDK: 11 read tools, 6 approval-gated mutation tools, read-only resources, structured errors reusing the CLI diagnostic codes, strict context scoping, and integration tests.",
   "business_value": "MCP is the model-neutral boundary that lets any supported agent operate a context (UC-006); the surface is a versioned public contract from day one (risk R-017).",
   "scope": [
@@ -19,7 +19,7 @@
   "non_goals": [
     "No tools beyond ADR 0012; no MCP prompts; no external writes of any kind",
     "No agent client configuration generation (WP-320's seam is finalized by the lead after you integrate)",
-    "No engine changes anywhere — a needed API gap is a coordination request",
+    "No engine changes anywhere \u2014 a needed API gap is a coordination request",
     "No transports beyond stdio in the alpha"
   ],
   "dependencies": [
@@ -28,7 +28,7 @@
     "WP-230",
     "WP-300"
   ],
-  "base_commit": "PENDING-WP300-INTEGRATION",
+  "base_commit": "PENDING-FINAL-PIN",
   "branch": "agent/WP-330-mcp-server",
   "worktree": ".worktrees/WP-330-mcp-server",
   "allowed_paths": [
@@ -111,7 +111,7 @@
   ],
   "security_constraints": [
     "No external writes; no network beyond stdio; evidence and workspace content cross the boundary only through the engines' sanitized outputs",
-    "pyproject.toml and ci.yml edits are limited to enabling the mcp extra for dev/CI — any other change there is forbidden"
+    "pyproject.toml and ci.yml edits are limited to enabling the mcp extra for dev/CI \u2014 any other change there is forbidden"
   ],
   "stop_conditions": [
     "An engine API gap for an ADR 0012 tool (coordination request)",

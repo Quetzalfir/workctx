@@ -2,21 +2,21 @@
   "schema_version": 1,
   "id": "WP-310-inbox-lifecycle",
   "title": "Artifact and inbox lifecycle",
-  "status": "proposed",
-  "objective": "Evidence files are registered with immutable hashes and manifests, duplicates are detected by content and policy, suspicious artifacts are quarantined, and originals are archived only after a successful canonical transaction — the raw-evidence-retention invariant made executable.",
+  "status": "ready",
+  "objective": "Evidence files are registered with immutable hashes and manifests, duplicates are detected by content and policy, suspicious artifacts are quarantined, and originals are archived only after a successful canonical transaction \u2014 the raw-evidence-retention invariant made executable.",
   "business_value": "UC-001 starts here: without safe registration, quarantine, and archive-after-commit, evidence processing cannot be trusted (risks R-008, product invariant on raw evidence).",
   "scope": [
     "Implement src/workctx/ingestion/: artifact registration (SHA-256 content hash, media type, origin, event date, ingest date, status) writing artifact manifests per schemas/artifact-manifest.schema.json into 00_inbox/manifests/ through the WP-200 canonical store",
     "Duplicate policy: same content hash is detected and refused or linked per the manifest status vocabulary; policy documented",
     "Quarantine: suspected prompt-injection markers, executable payloads, oversized/unsupported types move to 00_inbox/quarantine/ with a manifest status and a location-only diagnostic (doc-08 evidence-safety controls; never execute or render content)",
-    "Archive-after-commit: an archive API that composes WP-300 — the original moves from 00_inbox/raw/ to 01_processed/ only when given a committed transaction receipt (revision + ledger event) referencing the artifact; no receipt, no move",
+    "Archive-after-commit: an archive API that composes WP-300 \u2014 the original moves from 00_inbox/raw/ to 01_processed/ only when given a committed transaction receipt (revision + ledger event) referencing the artifact; no receipt, no move",
     "Registration and archive are idempotent by content hash and receipt; interrupted moves are recoverable via the staging primitives",
     "Typed application APIs (register, list_inbox, quarantine_info, archive_after) for CLI and MCP wiring by the lead; document the lifecycle in docs/reference/inbox.md"
   ],
   "non_goals": [
     "No extraction, observation, or proposal generation (WP-410 owns the evidence-processing workflow; LLM work stays agent-side)",
     "No CLI or MCP wiring (lead)",
-    "No changes to WP-300 engine, WP-200 primitives, or the artifact-manifest schema beyond consuming them — schema gaps are coordination requests",
+    "No changes to WP-300 engine, WP-200 primitives, or the artifact-manifest schema beyond consuming them \u2014 schema gaps are coordination requests",
     "No network fetches; artifacts arrive as local files only",
     "No new runtime dependencies"
   ],
@@ -25,7 +25,7 @@
     "WP-220",
     "WP-300"
   ],
-  "base_commit": "PENDING-WP300-INTEGRATION",
+  "base_commit": "PENDING-FINAL-PIN",
   "branch": "agent/WP-310-inbox-lifecycle",
   "worktree": ".worktrees/WP-310-inbox-lifecycle",
   "allowed_paths": [

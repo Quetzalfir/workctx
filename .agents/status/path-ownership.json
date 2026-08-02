@@ -70,7 +70,7 @@
       ],
       "branch": "agent/WP-300-transaction-engine",
       "worktree": ".worktrees/WP-300-transaction-engine",
-      "status": "ready",
+      "status": "verified",
       "note": "Released after WP-201 integration; worker resumes by merging master into its existing worktree."
     },
     {
@@ -99,7 +99,7 @@
       ],
       "branch": "agent/WP-310-inbox-lifecycle",
       "worktree": ".worktrees/WP-310-inbox-lifecycle",
-      "status": "proposed",
+      "status": "ready",
       "note": "Assignable after WP-300 integrates; base pinned then."
     },
     {
@@ -117,7 +117,7 @@
       ],
       "branch": "agent/WP-330-mcp-server",
       "worktree": ".worktrees/WP-330-mcp-server",
-      "status": "proposed",
+      "status": "ready",
       "note": "Assignable after WP-300 integrates; cli/pyproject/ci grants are narrow (mcp serve sub-command and mcp extra only)."
     }
   ]
