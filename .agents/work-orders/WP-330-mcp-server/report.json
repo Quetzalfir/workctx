@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "work_order_id": "WP-330-mcp-server",
+  "status": "completed",
+  "summary": "Implemented the exact ADR 0012 stdio MCP alpha surface with 11 reads, 6 approval-gated mutations, public-engine delegation, structured placeholders, read-only canonical resources, strict isolation and sanitization, lazy optional-SDK loading, CLI/CI wiring, documentation, 108 focused MCP tests, and a green 1,046-test repository gate.",
+  "base_commit": "925aa08c72eb5fa442750ee3d8740636d03b751c",
+  "final_commit": "1bbb7f5cbc0072050f15326f263df0b77c16ffee",
+  "files_changed": [
+    ".github/workflows/ci.yml",
+    "docs/reference/mcp.md",
+    "src/workctx/cli.py",
+    "src/workctx/mcp/__init__.py",
+    "src/workctx/mcp/application.py",
+    "src/workctx/mcp/contracts.py",
+    "src/workctx/mcp/models.py",
+    "src/workctx/mcp/resources.py",
+    "src/workctx/mcp/runner.py",
+    "src/workctx/mcp/serialization.py",
+    "src/workctx/mcp/server.py",
+    "tests/mcp/__init__.py",
+    "tests/mcp/support.py",
+    "tests/mcp/test_cli.py",
+    "tests/mcp/test_contracts.py",
+    "tests/mcp/test_resources.py",
+    "tests/mcp/test_sdk_integration.py",
+    "tests/mcp/test_tools.py",
+    ".agents/work-orders/WP-330-mcp-server/report.md",
+    ".agents/work-orders/WP-330-mcp-server/report.json"
+  ],
+  "behavior_implemented": [
+    "Registered exactly the ADR 0012 17-tool surface with hand-maintained Draft 2020-12 schema-version-1 input and output contracts.",
+    "Delegated live context, validation, projection, retrieval, task, audit, proposal, dry-run, apply, and rebuild operations to integrated public engine APIs.",
+    "Kept inbox_list, artifact_register, and draft_save discoverable as structured NOT-IMPLEMENTED placeholders for unavailable WP-310/WP-420 engines.",
+    "Required literal approved: true structurally and at runtime for all six mutation tools.",
+    "Enforced per-call bound-context verification, recursive foreign-URI/path denial, secure canonical resource resolution, and symlink/junction refusal.",
+    "Mapped failures to sanitized versioned CLI-code/category diagnostic envelopes and recursively redacted normalized secret-key variants and secret-looking text.",
+    "Exposed read-only context configuration and canonical validated-frontmatter resources, with no document bodies, prompts, external writes, or non-stdio transport.",
+    "Added lazy workctx mcp serve CLI loading, clear optional-dependency exit behavior, CI --extra mcp activation, reference documentation, and official-SDK lifecycle coverage."
+  ],
+  "tests": [
+    {
+      "command": "$env:UV_CACHE_DIR=(Join-Path $pwd '.uv-cache'); uv sync --locked --extra mcp",
+      "status": "passed",
+      "result": "Resolved the locked environment and installed official mcp==2.0.0 with its dependencies."
+    },
+    {
+      "command": ".venv\\Scripts\\pytest.exe -q -p no:cacheprovider tests\\mcp",
+      "status": "passed",
+      "result": "108 passed in 40.23s after the independent-review fixes."
+    },
+    {
+      "command": "uv run ruff check .",
+      "status": "passed",
+      "result": "All checks passed!"
+    },
+    {
+      "command": "uv run ruff format --check .",
+      "status": "passed",
+      "result": "335 files already formatted"
+    },
+    {
+      "command": "uv run mypy src",
+      "status": "passed",
+      "result": "Success: no issues found in 72 source files"
+    },
+    {
+      "command": "uv run pytest",
+      "status": "passed",
+      "result": "1046 passed in 312.91s (0:05:12) on the final reviewed state; two earlier outer harness limits at 120s and 300s produced no pytest assertion result."
+    },
+    {
+      "command": "uv run pytest tests/test_plan_contracts.py -q",
+      "status": "passed",
+      "result": "4 passed in 0.08s after report creation."
+    },
+    {
+      "command": "git diff --cached --check",
+      "status": "passed",
+      "result": "No whitespace errors before the implementation commit."
+    },
+    {
+      "command": "uv run python -c \"import json; from pathlib import Path; from jsonschema import Draft202012Validator; root = Path('.'); schema = json.loads((root / '.agents/plan/initial/agent-report.schema.json').read_text(encoding='utf-8')); report = json.loads((root / '.agents/work-orders/WP-330-mcp-server/report.json').read_text(encoding='utf-8')); Draft202012Validator(schema).validate(report); print('WP-330 report.json validates against agent-report.schema.json')\"",
+      "status": "passed",
+      "result": "WP-330 report.json validates against agent-report.schema.json."
+    }
+  ],
+  "assumptions": [
+    "The operator-pinned base 925aa08c72eb5fa442750ee3d8740636d03b751c supersedes the frozen contract's PENDING-FINAL-PIN placeholder.",
+    "WP-310 ingestion and WP-420 draft APIs are absent at the pinned base; task queries are live now while WP-400 enrichment remains future-compatible.",
+    "The context configuration resource URI is workctx://<context>/context/configuration; canonical entities retain their standard durable URIs.",
+    "The existing pyproject optional extra and uv.lock MCP 2.0.0 resolution are correct, so only CI extra activation was required."
+  ],
+  "decisions": [
+    "Use one hand-maintained schema source for discovery and deterministic runtime validation because the low-level SDK does not enforce advertised input schemas.",
+    "Compose public projection resolution and CanonicalStore containment with typed frontmatter validation for canonical resources.",
+    "Recursively preflight all argument strings for foreign Work Context URIs and path escape patterns before public-engine dispatch.",
+    "Preflight-import the optional SDK before its adapter so a true no-extra installation always receives the clear unavailable-dependency error.",
+    "Normalize hyphenated, camelCase, compact, and prefixed secret field names and assignment text at the MCP serialization boundary."
+  ],
+  "deviations": [
+    "The frozen contract retains base_commit PENDING-FINAL-PIN; it was not modified because the operator supplied the final pin and the contract is outside the worker grant.",
+    "The named worktree and branch were absent at session start and were created from the operator-pinned base before implementation.",
+    "No objective, architecture, tool-surface, allowed-path, or dependency deviation was made."
+  ],
+  "security_considerations": [
+    "All operations remain bound to one local context; the surface has no external writes, network transport, prompts, or raw file-edit tools.",
+    "Approval, foreign-context, path traversal, projected-path, symlink/junction, sanitization, and unexpected-exception boundaries are regression tested.",
+    "Canonical resources expose sanitized validated frontmatter only and label canonical entity data as untrusted.",
+    "SDK absence is handled before optional transitive imports and never breaks unrelated workctx commands."
+  ],
+  "migration_considerations": [
+    "This is an additive schema-version-1 adapter and optional CI dependency activation with no canonical workspace schema or data migration.",
+    "Projection rebuild remains disposable derived-state mutation and transaction apply retains the integrated atomic audited engine behavior."
+  ],
+  "unresolved": [
+    "Wire inbox_list and artifact_register to WP-310 when ingestion integrates.",
+    "Wire draft_save to WP-420 and add WP-400 task enrichment without changing the frozen tool names."
+  ],
+  "recommended_next_action": "Implementation lead: validate the report, independently inspect and test base-to-final commit 1bbb7f5cbc0072050f15326f263df0b77c16ffee, integrate it, and later replace WP-310/WP-400/WP-420 placeholders behind the unchanged ADR 0012 surface."
+}
