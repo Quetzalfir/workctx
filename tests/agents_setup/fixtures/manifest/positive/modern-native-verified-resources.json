@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "adapter": "codex",
+  "adapter_version": 1,
+  "scope": "project",
+  "generated_at": "2026-08-01T12:00:00Z",
+  "registry": {
+    "path": ".agents/skills/registry.yaml",
+    "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "skills": [
+    {
+      "name": "bootstrap-session",
+      "mode": "native-verified",
+      "canonical": {
+        "path": ".agents/skills/bootstrap-session/SKILL.md",
+        "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "source_set": {
+        "files": [
+          {
+            "path": ".agents/skills/bootstrap-session/SKILL.md",
+            "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+          },
+          {
+            "path": ".agents/skills/bootstrap-session/references/guide.md",
+            "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          }
+        ],
+        "aggregate_hash": "sha256:e87d7f196c89ae97d1edf44859085ac20b0bc6898057e06606e3ed0f815e4b31"
+      }
+    }
+  ],
+  "components": {
+    "instruction_bridge": {
+      "ownership": "user-owned",
+      "source": {
+        "path": "AGENTS.md",
+        "content_hash": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "target": {
+        "path": "AGENTS.md",
+        "content_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      }
+    },
+    "mcp_configuration": {
+      "state": "not_implemented"
+    }
+  },
+  "backups": []
+}
