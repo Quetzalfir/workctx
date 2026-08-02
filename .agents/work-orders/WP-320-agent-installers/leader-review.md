@@ -1,6 +1,29 @@
 # Leader review: `WP-320-agent-installers`
 
-## Decision
+## Round 2 decision (2026-08-01)
+
+`revision_requested` — implemented-but-blocked accepted as the correct posture; the
+three design gaps are resolved by D-032/D-033/D-034, no contract path changes needed.
+
+1. D-032 (trust model): three-factor deletion/overwrite authority — adapter-scoped
+   path AND content-hash-matches-manifest AND manifest digest authenticated against a
+   trusted per-project install record in the user config directory (platformdirs,
+   the WP-200 registry pattern; written only by the installing process). Any factor
+   failing puts uninstall/repair in report-only conservative mode. Your four failing
+   provenance-policy tests encode exactly this; implement to the decision.
+2. D-033 (auxiliary resources): native-verified manifest entries carry a source set
+   (sorted path+sha256 pairs over the whole skill directory, plus an aggregate
+   digest) under the existing schema grant, with fixtures.
+3. D-034 (bridge materialization): the packaged kit ships target-flavored,
+   self-contained bridge templates authored in the kit; sync-from-.agents covers
+   skills and registry only; context roots keep the context-template AGENTS.md as
+   the base contract; generate-if-absent only.
+
+Corrections: implement the three decisions, drive the four failing tests green, rerun
+the gate, update reports to completed. Same branch/worktree
+(.worktrees/WP-320-agent-installers-r2).
+
+## Round 1 decision
 
 `revision_requested` (blocker accepted; contract amended; resumes on new pin)
 
