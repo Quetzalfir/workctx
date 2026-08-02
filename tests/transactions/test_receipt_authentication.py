@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from workctx.transactions import (
+    LedgerIntegrityError,
     ReceiptAuthenticationError,
     authenticate_apply_result,
 )
@@ -69,5 +70,5 @@ def test_tampered_ledger_refuses_authentication(tmp_path: Path) -> None:
     ledger = root / "99_meta" / "audit" / "ledger.jsonl"
     tampered = ledger.read_text(encoding="utf-8").replace('"committed"', '"rolled_back"', 1)
     ledger.write_text(tampered, encoding="utf-8", newline="\n")
-    with pytest.raises(Exception):
+    with pytest.raises((ReceiptAuthenticationError, LedgerIntegrityError, ValueError)):
         authenticate_apply_result(root, result)
