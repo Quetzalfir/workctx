@@ -12,8 +12,8 @@ Each context has independent:
 
 - canonical files;
 - SQLite and search state;
-- plugin instances;
-- secret references;
+- plugin instances (planned for Phase 3);
+- secret references (planned for Phase 3; today only a validation rule that rejects secret values);
 - agent project configuration;
 - audit records.
 

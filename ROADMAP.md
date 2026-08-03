@@ -2,14 +2,16 @@
 
 ## Phase 1 — CLI and durable core
 
-- context creation and isolation;
-- canonical schemas and reference resolver;
-- artifact registration and evidence processing transactions;
-- validation, indexing, search, and generated operational views;
-- portable skills and agent installers;
-- local MCP server;
-- multi-agent development and review workflow;
-- public documentation and packaging.
+- context creation and isolation — done;
+- canonical schemas and reference resolver — done;
+- artifact registration and evidence processing transactions — done; evidence
+  extraction rails in progress;
+- validation, indexing, search, and generated operational views — validation,
+  indexing, and search done; generated views in progress;
+- portable skills and agent installers — done;
+- local MCP server — done;
+- multi-agent development and review workflow — done;
+- public documentation and packaging — in progress.
 
 ## Phase 2 — Local UI
 
