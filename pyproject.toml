@@ -76,6 +76,10 @@ python_version = "3.12"
 strict = true
 packages = ["workctx"]
 
+[tool.coverage.report]
+# D-039: measured 85% at Wave 3 close; floor set 3 points under, raised in WP-500.
+fail_under = 82
+
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"
 testpaths = ["tests"]

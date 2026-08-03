@@ -10,19 +10,20 @@
 
 ## Current wave
 
-Wave 3 (opened 2026-07-31): ADR 0012 operator-ratified (D-020 closed). WP-300 and
-WP-320 run in parallel now; WP-310 and WP-330 are proposed until WP-300 integrates.
-Integration order: WP-320 on acceptance (independent) / WP-300 -> then WP-310 || WP-330
--> lead wiring (inbox/proposal/transaction/agent CLI commands, WP-320 MCP-config
-finalization). WP-001 remains partial (CI matrix + [project.urls] await a GitHub
-remote).
+Wave 3 CLOSED (2026-08-02): WP-201, WP-300, WP-310, WP-320, WP-330 all integrated, plus
+lead batches LEAD-W1 (nine ready-engine CLI commands) and LEAD-W2 (MCP-config seam).
+WP-001 closed: GitHub Quetzalfir/workctx live, full cross-platform matrix green after
+two real portability fixes (sys.platform narrowing; APFS collision-capability skip).
+D-037 flake root-caused and fixed (prepare-phase retry leak into delay assertions).
+Combined gate: 1384 tests, mypy 92 files, coverage 85% (floor 82 per D-039).
+Next per D-040: docs refresh package + Wave 4 contracts (WP-400/410/420), no checkpoint.
 
 ## Work-package status
 
 | Work package | State | Dependencies | Assigned agent | Branch/worktree | Review | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | WP-000 | closed | — | lead | master / . | operator ratified 2026-07-30 | Status dir, ADRs 0005-0008 (amended after adversarial verify, accepted), 5 work orders, path ownership, [audit record](audit-2026-07-30-scaffold.md) |
-| WP-001 | reported | WP-000 | lead | master / . | [report](../work-orders/WP-001-dev-foundation/report.md) | `partial`: gate green, LF policy, lock, build guard all landed in `ea6861f`; CI matrix + [project.urls] blocked on missing GitHub remote |
+| WP-001 | closed | WP-000 | lead | master / . | completed 2026-08-02 | GitHub Quetzalfir/workctx (private); full 3-OSx2-Py matrix + build GREEN (run 30774956045 + successor); [project.urls] added; local-first CI policy |
 | WP-100 | verified | WP-000, WP-001 | Codex worker | agent/WP-100-reference-contracts | accepted | Integrated at `5c9cd03`; combined gate green (148 tests) |
 | WP-110 | verified | WP-000, WP-001 | Codex worker | agent/WP-110-workspace-schema | accepted | Integrated at `c577801`; combined gate green (222 tests); D-018 cross-check OK |
 | WP-120 | verified | WP-000, WP-001 | Codex worker | agent/WP-120-cli-envelope | accepted | Integrated at `788aa1c`; final Wave 1 gate green |
@@ -33,7 +34,7 @@ remote).
 | WP-230 | verified | WP-100, WP-210 | Codex worker | agent/WP-230-context-packs | accepted | Integrated at `d64bcab` after one ADR 0011 revision round; combined gate 707 tests |
 | WP-201 | verified | WP-200 | Codex worker | agent/WP-201-staging-extensions | accepted | Integrated; combined gate 777 tests; pre-existing tests untouched |
 | WP-300 | verified | WP-200, WP-201, WP-210, WP-220 | Codex worker | agent/WP-300-transaction-engine | accepted (2 blocker rounds) | Integrated; combined gate 938 tests; D-031 commit-point recovery |
-| WP-310 | ready | WP-200, WP-220, WP-300 | — | agent/WP-310-inbox-lifecycle | — | Released; ready at final pin |
+| WP-310 | verified | WP-200, WP-220, WP-300 | Codex worker | agent/WP-310-inbox-lifecycle-r3 | accepted (2 blocker rounds) | Integrated; D-035/D-036 architecture; receipt-gated archive |
 | WP-320 | verified | WP-120, WP-130 | Codex worker | agent/WP-320-agent-installers-r2 | accepted (3 rounds) | Integrated; D-032 three-factor authority, packaged kit, kit bridges |
 | WP-330 | verified | WP-120, WP-220, WP-230, WP-300 | Codex worker | agent/WP-330-mcp-server | accepted | Integrated; ADR 0012 17-tool surface; combined gate 1298 tests |
 | WP-400..WP-500 | proposed | see backlog | — | — | — | Wave 4+ blocked on Wave 3 |
