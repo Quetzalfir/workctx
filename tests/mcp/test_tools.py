@@ -131,10 +131,11 @@ def test_all_live_read_tools_delegate_to_integrated_engines(
     )
     assert audit["audit"]["event_count"] == 0
 
-    inbox = live_service.invoke("inbox_list", {"schema_version": 1})
-    assert inbox.envelope.ok is False
-    assert error_codes(inbox) == {"NOT-IMPLEMENTED"}
-    assert inbox.envelope.result == {"dependency": "WP-310", "implemented": False}
+    inbox = _assert_success(
+        live_service.invoke("inbox_list", {"schema_version": 1}),
+        "inbox_list",
+    )
+    assert inbox == {"artifacts": [], "count": 0}
 
 
 @pytest.mark.parametrize("tool_name", MUTATION_TOOL_NAMES)
@@ -157,7 +158,6 @@ def test_every_mutation_requires_literal_true_at_runtime(
 @pytest.mark.parametrize(
     ("tool_name", "dependency"),
     [
-        ("artifact_register", "WP-310"),
         ("draft_save", "WP-420"),
     ],
 )

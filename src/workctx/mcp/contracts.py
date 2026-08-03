@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Final
 
-from workctx.domain import EntityType, RelationType, TaskStatus
+from workctx.domain import ArtifactSourceType, EntityType, RelationType, TaskStatus
 
 SCHEMA_VERSION: Final = 1
 
@@ -265,6 +265,41 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
     _contract(
         "artifact_register",
         "Register an inbox artifact when the ingestion engine is installed.",
+        {
+            "path": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": (
+                    r"^00_inbox/raw/(?!\.{1,2}(?:/|$))"
+                    r"(?!.*\/\.{1,2}(?:/|$))(?!.*//)(?!.*[\\\x00-\x1f:])"
+                    r"(?!.*[. ](?:/|$))"
+                    r"(?!(?:[^/]+/)*(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|"
+                    r"[Nn][Uu][Ll]|[Cc][Ll][Oo][Cc][Kk]\$|[Cc][Oo][Nn][Ii][Nn]\$|"
+                    r"[Cc][Oo][Nn][Oo][Uu][Tt]\$|[Cc][Oo][Mm][1-9]|"
+                    r"[Ll][Pp][Tt][1-9])(?:\.[^/]*)?(?:/|$))[^/]+(?:/[^/]+)*$"
+                ),
+                "description": "Portable context-relative path below 00_inbox/raw.",
+            },
+            "source_type": {
+                "type": "string",
+                "enum": [source_type.value for source_type in ArtifactSourceType],
+                "description": "Registered artifact source vocabulary.",
+            },
+            "origin": {
+                "type": ["string", "null"],
+                "description": "Optional content-free source origin metadata.",
+            },
+            "event_date": {
+                "type": ["string", "null"],
+                "pattern": (
+                    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:"
+                    r"[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+                ),
+                "format": "date-time",
+                "description": "Optional aware RFC 3339 source event date-time.",
+            },
+        },
+        required=("path", "source_type"),
         mutation=True,
     ),
     _contract(

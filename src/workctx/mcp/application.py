@@ -34,6 +34,7 @@ from workctx.errors import (
     UserCorrectableError,
     WorkctxError,
 )
+from workctx.ingestion import RegisterRequest, list_inbox, register
 from workctx.mcp.contracts import (
     TOOL_CONTRACT_BY_NAME,
     InputContractError,
@@ -409,15 +410,27 @@ class McpToolService:
 
     def _inbox_list(self, arguments: dict[str, Any]) -> ToolResponse:
         del arguments
-        return self._not_implemented("inbox_list", "WP-310")
+        listing = list_inbox(self._root)
+        return self._success(
+            "inbox_list",
+            {"artifacts": listing.artifacts, "count": listing.count},
+        )
 
     def _audit_summary(self, arguments: dict[str, Any]) -> ToolResponse:
         del arguments
         return self._success("audit_summary", {"audit": audit_summary(self._root)})
 
     def _artifact_register(self, arguments: dict[str, Any]) -> ToolResponse:
-        del arguments
-        return self._not_implemented("artifact_register", "WP-310")
+        request = RegisterRequest.model_validate(
+            {
+                "path": arguments["path"],
+                "source_type": arguments["source_type"],
+                "source_origin": arguments.get("origin"),
+                "event_at": arguments.get("event_date"),
+            }
+        )
+        registration = register(self._root, request)
+        return self._success("artifact_register", {"registration": registration})
 
     def _proposal_validate(self, arguments: dict[str, Any]) -> ToolResponse:
         proposal = TransactionProposal.model_validate(arguments["proposal"])
