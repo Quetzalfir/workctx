@@ -40,9 +40,9 @@ migration tooling, docs polish, packaging/release).
 | WP-400 | verified | WP-110, WP-210, WP-300 | Codex worker | agent/WP-400-tasks-views | accepted | Integrated; evidence-required task mutations |
 | WP-410 | verified | WP-230, WP-300, WP-310, WP-330 | Codex worker | agent/WP-410-evidence-workflow | accepted (D-041 round) | Integrated; ingestion MCP tools live |
 | WP-420 | verified | WP-230, WP-300, WP-400 | Codex worker | agent/WP-420-drafting-outbox | accepted | Integrated; draft_save live |
-| WP-510 | in-progress | all Phase 1 | Codex worker | agent/WP-510-migration | — | Legacy migration engine + CLI |
+| WP-510 | verified | all Phase 1 | Codex worker | agent/WP-510-migration | accepted | Integrated at 684ef8d; D-042 single_import ledger policy |
 | WP-520 | verified | all Phase 1 | Codex worker | agent/WP-520-acceptance | accepted | Integrated at 4ca2cba; found the 04_views rebuild defect (lead-fixed 62282bf) |
-| WP-530 | proposed | WP-510 | Claude agent | — | — | Release docs + packaging verification; launches after WP-510 |
+| WP-530 | in-progress | WP-510 | Claude agent | (claude worktree) | — | Release docs + packaging verification |
 
 ## Validation status
 
