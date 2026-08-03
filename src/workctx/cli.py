@@ -655,6 +655,11 @@ def inbox_add(
     outcomes: list[dict[str, JsonValue]] = []
     for file in files:
         relative_path = _raw_artifact_path(root, file)
+        if not relative_path.startswith("00_inbox/raw/"):
+            raise UserCorrectableError(
+                f"Inbox artifacts must live under 00_inbox/raw/ inside the context, "
+                f"not at: {relative_path}"
+            )
         try:
             request = RegisterRequest(
                 path=relative_path,

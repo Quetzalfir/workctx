@@ -239,6 +239,23 @@ def test_verify_reports_match_then_user_correctable_mismatch_after_tampering(
     ]
 
 
+def test_add_outside_raw_zone_names_the_expected_location(tmp_path: Path) -> None:
+    root = _initialize(tmp_path / "context")
+    stray = root / "stray-note.txt"
+    stray.write_text("Fictional note outside the raw zone.\n", encoding="utf-8")
+
+    payload = _envelope(
+        runner.invoke(
+            app,
+            ["inbox", "add", str(stray), "--context", str(root), "--json"],
+        ),
+        exit_code=1,
+        command="inbox.add",
+    )
+    assert any("00_inbox/raw/" in error["message"] for error in payload["errors"])
+    assert any("stray-note.txt" in error["message"] for error in payload["errors"])
+
+
 def test_lookup_and_filter_failures_keep_json_on_stdout_and_diagnostics_on_stderr(
     tmp_path: Path,
 ) -> None:
