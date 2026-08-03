@@ -17,3 +17,7 @@
 | 2026-08-02 | WP-310-inbox-lifecycle | capture | merge | ingestion+filesystem+transactions targeted (392) then combined | accepted+integrated (2 blocker rounds) | D-035/D-036 architecture |
 | 2026-08-02 | LEAD-W1-cli-wiring | capture | merge | full gate 1384 + coverage 85% | accepted+integrated | 9 commands; 2 stale lint expectations updated at integration |
 | 2026-08-02 | LEAD-W2-mcp-seam | capture | merge | full gate 1344 on branch | accepted+integrated (1 correction round) | ownership-set fix via codex resume |
+| 2026-08-02 | WP-400-tasks-views | capture | merge | targeted 174 + combined 1418 | accepted+integrated | Wave 4 |
+| 2026-08-02 | WP-410-evidence-workflow | capture | merge | combined 1418; D-041 schema completion | accepted+integrated (1 blocker round) | inbox_list/artifact_register live |
+| 2026-08-02 | LEAD-W3-inbox-cli | capture | merge | targeted 204 | accepted+integrated | 4 commands |
+| 2026-08-02 | DOCS-R1-refresh | capture | merge | docs-only | accepted+integrated | claims inventory closed |
