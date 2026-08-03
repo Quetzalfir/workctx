@@ -23,3 +23,5 @@
 | 2026-08-02 | DOCS-R1-refresh | capture | merge | docs-only | accepted+integrated | claims inventory closed |
 | 2026-08-02 | LEAD-W4-brief-view-cli | capture | merge | targeted 61 cli | accepted+integrated | doc-04 alpha CLI complete |
 | 2026-08-02 | WP-420-drafting-outbox | capture | merge | branch gate 1436; D-041 draft_save live | accepted+integrated | Wave 4 complete |
+| 2026-08-03 | LEAD-W5-lock-views-fixes | lead fix | direct | lock TOCTOU (macOS CI) + 04_views recreation + regression test | committed 62282bf | found by full-ci + WP-520 |
+| 2026-08-03 | WP-520-acceptance | capture f031b9a | merge 4ca2cba | combined gate 1446 tests | accepted+integrated | 5 e2e scenarios; 1 product blocker (04_views) fixed by lead |
