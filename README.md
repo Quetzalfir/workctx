@@ -15,24 +15,38 @@ The conversation is temporary. The workspace is the memory.
 
 ## Current status
 
-This repository is a **working pre-alpha implementation and engineering plan**, not a finished release. It contains:
+This repository contains the complete first-alpha implementation of the Phase 1 scope (CLI and durable core). The `0.1.0-alpha` release is prepared from this repository; see the [release notes](docs/releases/0.1.0-alpha.md) for the exact feature list, known limitations, and stability policy.
 
-- the product and architecture specification;
-- a concise repository-wide agent contract;
-- a multi-agent leadership and delegation protocol;
-- improved evidence and reference models;
-- canonical skills for repeated workflows;
-- a reusable workspace template;
-- JSON Schemas for core contracts;
-- the Phase 1 engines: canonical store, validation, SQLite/FTS projections, retrieval and context packs, the transaction engine with audit ledger, and the inbox artifact lifecycle;
-- an executable CLI covering context, validation, index, search, ref, context-pack, proposal, transaction, task, agent, and MCP commands;
+Implemented and tested today:
+
+- isolated context workspaces created from a versioned template;
+- the canonical Markdown/YAML store with locking, staging, and atomic writes;
+- workspace validation with stable diagnostic codes;
+- rebuildable SQLite/FTS projections with typed queries and full-text search;
+- retrieval, deterministic context packs, and a read-only operational brief;
+- the transaction engine with an append-only, hash-chained audit ledger;
+- the inbox artifact lifecycle: registration, hashing, safety quarantine, and post-commit archive;
+- generated operational views (current focus, next actions, waiting on, stale knowledge, brief);
+- local outbox drafting with no send capability;
 - a stdio MCP server bound to one context (`workctx mcp serve`);
-- agent installers for Codex, Claude Code, and Gemini CLI;
-- a staged implementation backlog and test strategy.
-
-Evidence extraction rails, generated operational views, and outbox drafting are the remaining Phase 1 packages and are in flight.
+- agent adapter installers for Codex, Claude Code, and Gemini CLI;
+- deterministic migration of legacy Markdown repositories (`workctx migrate legacy`);
+- an end-to-end acceptance suite that drives the public CLI and MCP surfaces.
 
 Phase 1 is intentionally CLI-first. A graphical interface belongs to a later phase.
+
+## Install
+
+The alpha is installed from a source checkout:
+
+```powershell
+git clone https://github.com/Quetzalfir/workctx
+cd workctx
+uv tool install ".[mcp]"
+workctx version
+```
+
+`pipx install ".[mcp]"` from the same checkout is an equivalent alternative. The `[mcp]` extra is only required for `workctx mcp serve`; every other command works without it. For a development environment, use `uv sync` as shown in the contributor quick start below.
 
 ## Local operator preferences
 
@@ -84,21 +98,49 @@ and YAML             projections      Graphify, CodeGraph,
 
 Canonical content remains usable even when all generated state is deleted.
 
-## Workspace lifecycle
+## The six-step cycle
 
-```text
-00_inbox
-    -> register artifact and source locator
-    -> extract observations, decisions, risks, tasks, and relationships
-    -> resolve duplicates and contradictions
-    -> propose one validated transaction
-    -> update canonical knowledge and work
-    -> regenerate views and indexes
-    -> move the original to 01_processed
-    -> create drafts in 05_outbox when requested
-```
+Every piece of evidence moves through the same auditable cycle. Each step has a real command surface today:
 
-Registration, hashing, quarantine, duplicate detection, transactional apply, index rebuild, and post-commit archive to `01_processed/` are implemented today. Evidence extraction rails, generated views, and `05_outbox` drafting are the remaining Phase 1 packages.
+1. **Capture.** Put the raw file below `00_inbox/raw/` and register it. Registration hashes the bytes, writes a manifest, and quarantines suspicious content instead of processing it.
+
+   ```powershell
+   workctx inbox add 00_inbox/raw/standup-note.txt --source chat --event-date 2026-08-03
+   ```
+
+2. **Process.** An agent (or you) extracts observations and builds one typed transaction proposal covering every affected entity. Validate it without touching the workspace:
+
+   ```powershell
+   workctx proposal validate proposal.json
+   workctx transaction apply proposal.json --dry-run
+   ```
+
+3. **Approve and apply.** Apply is explicit: without `--yes` the command only previews. An approved apply is atomic across all files and appends one hash-chained audit event.
+
+   ```powershell
+   workctx transaction apply proposal.json --yes
+   workctx transaction history
+   ```
+
+4. **Rebuild projections.** SQLite indexes and generated views are disposable and rebuilt from canonical files.
+
+   ```powershell
+   workctx index rebuild
+   workctx view rebuild
+   ```
+
+5. **Retrieve.** Ask the workspace, not the chat history.
+
+   ```powershell
+   workctx search "reporting pipeline"
+   workctx brief
+   workctx ref trace workctx://<context-id>/task/TASK-2026-001
+   workctx context-pack workctx://<context-id>/task/TASK-2026-001
+   ```
+
+6. **Draft.** Agents save reply and status drafts to `05_outbox/` through the MCP `draft_save` tool. Drafts are local canonical documents; nothing in the alpha can send, post, or publish them.
+
+The original artifact is archived under `01_processed/` only after its transaction commits.
 
 ## Repository layout
 
@@ -114,6 +156,37 @@ tests/                   Unit, contract, integration, and acceptance tests
 Read [`START-HERE.md`](START-HERE.md) before asking an implementation agent to work on this repository. The manual multi-agent procedure is documented in [`docs/development/implementation-lead-guide.md`](docs/development/implementation-lead-guide.md).
 The checks executed against this generated scaffold are recorded in [`docs/development/scaffold-validation.md`](docs/development/scaffold-validation.md).
 
+## Documentation map
+
+| Start here | |
+| --- | --- |
+| [Quick start](docs/guides/quickstart.md) | Install, create a context, and run the full cycle. |
+| [Concepts](docs/concepts.md) | The vocabulary: evidence, observations, claims, transactions, views. |
+| [Release notes 0.1.0-alpha](docs/releases/0.1.0-alpha.md) | What shipped, known limitations, stability policy. |
+| [Security and privacy](docs/security-and-privacy.md) | Trust model, quarantine, approval gates, and what is not protected. |
+
+| Guides | |
+| --- | --- |
+| [Context layout](docs/guides/context-layout.md) | What each workspace directory means. |
+| [Evidence processing](docs/guides/evidence-processing.md) | The safe processing workflow in detail. |
+| [Multiple contexts](docs/guides/multiple-contexts.md) | Isolation between companies and projects. |
+
+| Reference | |
+| --- | --- |
+| [CLI envelope](docs/reference/cli-envelope.md) | Exit bands, JSON envelopes, context resolution. |
+| [Reference system](docs/reference/reference-system.md) | Stable IDs, `workctx://` URIs, and source locators. |
+| [Transactions](docs/reference/transactions.md) | Proposals, atomic apply, and the audit ledger. |
+| [Inbox lifecycle](docs/reference/inbox.md) | Registration, quarantine, and archive semantics. |
+| [Views](docs/reference/views.md) | Generated operational views. |
+| [Drafting](docs/reference/drafting.md) | The local outbox and the no-send boundary. |
+| [MCP server](docs/reference/mcp.md) | The version 1 tool surface and envelopes. |
+| [Agent adapters](docs/reference/agent-adapters.md) | Codex, Claude Code, and Gemini CLI installers. |
+| [Legacy migration](docs/reference/migration.md) | Converting an existing Markdown repository. |
+| [Architecture overview](docs/architecture/overview.md) | Layering and engine boundaries. |
+| [Architecture decisions](docs/adr/README.md) | Accepted ADRs. |
+
+The project direction is tracked in [`ROADMAP.md`](ROADMAP.md) and release history in [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Contributor quick start
 
 Requirements:
@@ -127,6 +200,7 @@ uv sync --all-groups --extra mcp
 uv run workctx version
 uv run pytest
 uv run ruff check .
+uv run mypy src
 ```
 
 Create a sample context with the current scaffold:

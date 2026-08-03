@@ -157,13 +157,14 @@ The `components` object contains exactly one `instruction_bridge` and exactly on
 `mcp_configuration`. Its states have these meanings:
 
 - `generated` means Work Context created the absent client config and may later replace or delete
-  it only under all three D-032 authority factors;
+  it only under all three authority factors described in [agent adapters](agent-adapters.md);
 - `native` means an existing user-owned config already declares the exact Work Context server
   command and arguments; it is observed but never rewritten or deleted;
 - `divergent` means an existing or formerly existing user-owned config does not match its recorded
   native state; status reports the divergence while install, repair, and uninstall preserve it;
-- `not_implemented` is the legacy WP-320 seam record and has no `path` or `content_hash`. Repair
-  upgrades an authenticated legacy installation with the version `2` renderer.
+- `not_implemented` is the legacy first-generation installer seam record and has no `path` or
+  `content_hash`. Repair upgrades an authenticated legacy installation with the version `2`
+  renderer.
 
 Every other state requires the adapter's exact path and the SHA-256 hash of the observed or
 generated file. The manifest deliberately records no command payload, settings content, or

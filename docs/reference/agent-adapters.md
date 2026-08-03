@@ -99,7 +99,7 @@ hashes or native-verified source sets, bridge ownership, retained backups, and c
 Content hashes are SHA-256 over exact bytes. Timestamps are informational and do not determine
 freshness. The project manifest is bookkeeping, not mutation authority.
 
-Deletion or overwrite authority requires all three D-032 factors at preflight and immediately
+Deletion or overwrite authority requires all three authority factors at preflight and immediately
 before mutation:
 
 1. the target is within the selected adapter's schema-enforced project scope;
@@ -167,7 +167,7 @@ compares the fixed path and current hash with the manifest. A changed generated 
 `mcp_divergent` warning.
 
 Repair and uninstall may replace or remove only a `generated` config whose path, current hash, and
-trusted manifest digest satisfy all three D-032 authority factors. Native and divergent configs
+trusted manifest digest satisfy all three authority factors. Native and divergent configs
 are never mutation targets. Legacy manifests with state `not_implemented` remain readable and are
 upgraded by an authenticated repair.
 

@@ -4,14 +4,17 @@
 
 - context creation and isolation — done;
 - canonical schemas and reference resolver — done;
-- artifact registration and evidence processing transactions — done; evidence
-  extraction rails in progress;
-- validation, indexing, search, and generated operational views — validation,
-  indexing, and search done; generated views in progress;
+- artifact registration and evidence processing transactions — done;
+- validation, indexing, search, and generated operational views — done;
+- outbox drafting with the no-send boundary — done;
 - portable skills and agent installers — done;
 - local MCP server — done;
+- legacy Markdown repository migration — done;
 - multi-agent development and review workflow — done;
-- public documentation and packaging — in progress.
+- public documentation and packaging — this release (`0.1.0-alpha`).
+
+Post-alpha within Phase 1: incremental projection updates (today the SQLite
+index and generated views are rebuild-only).
 
 ## Phase 2 — Local UI
 

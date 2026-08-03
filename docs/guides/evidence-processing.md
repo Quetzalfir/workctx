@@ -17,6 +17,6 @@ A safe workflow:
 11. rebuild affected indexes and views;
 12. report what changed and what remains uncertain.
 
-Registration, hashing, quarantine, duplicate detection, atomic apply, index rebuild, and post-commit archive — steps 1, 8, 9, 10, and the index half of 11 — are implemented today. The extraction and resolution steps 2-7 remain agent-guided until the extraction rails land (WP-410), and generated views (the rest of step 11) arrive with the views package (WP-400).
+Registration, hashing, quarantine, duplicate detection, atomic apply, index and view rebuild, and post-commit archive are deterministic engine behavior. The extraction and resolution steps 2-7 are agent work guided by the evidence-processing workflow contracts and the portable `process-evidence` skill: the agent reads the evidence, extracts observations, and builds the single transaction proposal, while every write still passes through validation and the approval gate.
 
 See `.agents/skills/process-evidence/SKILL.md`.

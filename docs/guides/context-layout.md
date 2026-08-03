@@ -13,7 +13,7 @@ context.yaml
 99_meta/           Policies, templates, migrations, and audit metadata
 ```
 
-`04_views/` and `98_state/` must be rebuildable. Do not place the only copy of knowledge there. View generation lands with the views package (WP-400); until then `04_views/` starts empty.
+`04_views/` and `98_state/` must be rebuildable. Do not place the only copy of knowledge there. `04_views/` starts empty and is populated by `workctx view rebuild`.
 
 All context kinds and profiles use this required top-level layout. Profiles select defaults
 for how the context is used; they are not security roles and do not remove canonical zones.

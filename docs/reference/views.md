@@ -54,7 +54,7 @@ timestamp, rendering is byte-identical. Rebuilds use LF newlines and UTF-8 witho
 
 The Phase 1 frozen SQLite API exposes claim history by subject rather than a global claim scan.
 Accordingly, the stale-knowledge view covers claims attached to projected tasks, which is the
-WP-400 operational scope. It never scans canonical Markdown or issues raw SQL. Task and claim
+views engine's operational scope. It never scans canonical Markdown or issues raw SQL. Task and claim
 data comes from typed `SQLiteProjection` queries, and waiting-on identity resolution uses
 `workctx.retrieval.resolve`. Verified ledger summary APIs supply only the revision and recent
 activity metadata.
