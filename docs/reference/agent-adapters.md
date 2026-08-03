@@ -147,13 +147,29 @@ backup authorizes its deletion. The authenticated manifest is removed last. Proj
 state and the operation-bound pending trusted transition remain available when recovery cannot
 safely verify a preimage or postimage result.
 
-## MCP configuration seam
+## MCP configuration
 
-MCP configuration generation is **not implemented** until WP-330 defines the server identity. The
-manifest reserves `components.mcp_configuration` with state `not_implemented`, and status exposes
-the same state. Phase 1 writes no MCP path, server name, settings, credentials, or placeholder
-identity. The seam is intentionally data-only so WP-330 can add project-scoped configuration
-without changing skill ownership semantics.
+Each adapter configures the integrated stdio server as `workctx mcp serve --context .` under the
+fixed server name `workctx`. Configuration is project-scoped and client-specific:
+
+| Client | Path | Native entry |
+| --- | --- | --- |
+| Codex | `.codex/config.toml` | `[mcp_servers.workctx]` with `command = "workctx"` and `args = ["mcp", "serve", "--context", "."]` |
+| Claude Code | `.mcp.json` | `mcpServers.workctx` with the same command and argument array |
+| Gemini CLI | `.gemini/settings.json` | `mcpServers.workctx` with the same command and argument array |
+
+An absent file is generated deterministically and recorded in
+`components.mcp_configuration` with state `generated`, its exact path, and its exact-byte hash. An
+existing file remains user-owned and is never merged or rewritten: it is recorded as `native` when
+the `workctx` entry has the expected command and arguments, otherwise as `divergent`. Status
+compares the fixed path and current hash with the manifest. A changed generated config is a
+`generated_modified` conflict; a changed or missing user-owned config is a preserved
+`mcp_divergent` warning.
+
+Repair and uninstall may replace or remove only a `generated` config whose path, current hash, and
+trusted manifest digest satisfy all three D-032 authority factors. Native and divergent configs
+are never mutation targets. Legacy manifests with state `not_implemented` remain readable and are
+upgraded by an authenticated repair.
 
 ## Session bootstrap
 

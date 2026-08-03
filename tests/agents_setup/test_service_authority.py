@@ -131,6 +131,7 @@ def test_missing_or_tampered_trusted_record_makes_repair_and_uninstall_report_on
             _MANIFEST_PATH,
             _FIRST_TARGET,
             "CLAUDE.md",
+            ".mcp.json",
         }
         with pytest.raises(AdapterConflictError):
             service.apply_plan(plan)

@@ -9,6 +9,8 @@ from workctx.adapters.agents.models import AgentClient
 from workctx.adapters.agents.renderers import (
     bridge_path,
     content_hash,
+    mcp_configuration_is_equivalent,
+    render_mcp_configuration,
     render_skill,
     skill_target_path,
 )
@@ -93,6 +95,45 @@ def test_renderer_preserves_crlf_line_endings() -> None:
 )
 def test_bridge_paths_are_project_local(client: AgentClient, expected: str) -> None:
     assert bridge_path(client) == expected
+
+
+@pytest.mark.parametrize(
+    ("client", "expected_path", "expected_content"),
+    [
+        (
+            AgentClient.CODEX,
+            ".codex/config.toml",
+            b"[mcp_servers.workctx]\n"
+            b'command = "workctx"\n'
+            b'args = ["mcp", "serve", "--context", "."]\n',
+        ),
+        (
+            AgentClient.CLAUDE,
+            ".mcp.json",
+            b'{\n  "mcpServers": {\n    "workctx": {\n      "command": "workctx",\n'
+            b'      "args": [\n        "mcp",\n        "serve",\n        "--context",\n'
+            b'        "."\n      ]\n    }\n  }\n}\n',
+        ),
+        (
+            AgentClient.GEMINI,
+            ".gemini/settings.json",
+            b'{\n  "mcpServers": {\n    "workctx": {\n      "command": "workctx",\n'
+            b'      "args": [\n        "mcp",\n        "serve",\n        "--context",\n'
+            b'        "."\n      ]\n    }\n  }\n}\n',
+        ),
+    ],
+)
+def test_mcp_configuration_renderer_uses_fixed_project_scoped_server_identity(
+    client: AgentClient,
+    expected_path: str,
+    expected_content: bytes,
+) -> None:
+    rendered = render_mcp_configuration(client)
+
+    assert rendered.path == expected_path
+    assert rendered.content == expected_content
+    assert rendered.target_hash == content_hash(expected_content)
+    assert mcp_configuration_is_equivalent(client, rendered.content)
 
 
 @pytest.mark.parametrize(

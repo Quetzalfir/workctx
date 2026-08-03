@@ -85,17 +85,28 @@ def _load_json(path: Path) -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
-    ("client", "generated_path", "bridge"),
+    ("client", "generated_path", "bridge", "mcp_path"),
     [
-        (AgentClient.CLAUDE, ".claude/skills/fixture-skill/SKILL.md", "CLAUDE.md"),
-        (AgentClient.GEMINI, ".gemini/skills/fixture-skill/SKILL.md", "GEMINI.md"),
+        (
+            AgentClient.CLAUDE,
+            ".claude/skills/fixture-skill/SKILL.md",
+            "CLAUDE.md",
+            ".mcp.json",
+        ),
+        (
+            AgentClient.GEMINI,
+            ".gemini/skills/fixture-skill/SKILL.md",
+            "GEMINI.md",
+            ".gemini/settings.json",
+        ),
     ],
 )
-def test_install_emits_schema_valid_client_manifest_and_deferred_mcp_seam(
+def test_install_emits_schema_valid_client_manifest_and_generated_mcp_config(
     tmp_path: Path,
     client: AgentClient,
     generated_path: str,
     bridge: str,
+    mcp_path: str,
 ) -> None:
     project = tmp_path / client.value
     project.mkdir()
@@ -114,16 +125,17 @@ def test_install_emits_schema_valid_client_manifest_and_deferred_mcp_seam(
     assert manifest.skills[0].generated is not None
     assert manifest.skills[0].generated[0].path == generated_path
     assert manifest.components is not None
-    assert manifest.components.mcp_configuration.model_dump() == {"state": "not_implemented"}
+    assert manifest.components.mcp_configuration.state == "generated"
+    assert manifest.components.mcp_configuration.path == mcp_path
     assert manifest.components.instruction_bridge.target.path == bridge
     assert (project / Path(generated_path)).is_file()
     assert (project / bridge).is_file()
+    assert (project / Path(mcp_path)).is_file()
 
     status = _service().status(project, client)
     assert status.state is AdapterState.CURRENT
-    assert status.mcp_configuration.state is FeatureState.NOT_IMPLEMENTED
-    assert status.mcp_configuration.path is None
-    assert "WP-330" in (status.mcp_configuration.detail or "")
+    assert status.mcp_configuration.state is FeatureState.GENERATED
+    assert status.mcp_configuration.path == mcp_path
 
 
 def test_clients_install_independently_without_cross_client_mutation(tmp_path: Path) -> None:
@@ -155,6 +167,7 @@ def test_reinstall_is_content_and_mtime_idempotent(tmp_path: Path) -> None:
         _manifest_path(project, AgentClient.CLAUDE),
         project / ".claude" / "skills" / _SKILL_NAME / "SKILL.md",
         project / "CLAUDE.md",
+        project / ".mcp.json",
     )
     before = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in tracked}
 
@@ -218,6 +231,7 @@ def test_uninstall_removes_only_manifest_owned_files_and_preserves_siblings(
     assert sibling.read_text(encoding="utf-8") == "keep me\n"
     assert canonical.is_file()
     assert not (project / "CLAUDE.md").exists()
+    assert not (project / ".mcp.json").exists()
     assert not _manifest_path(project, AgentClient.CLAUDE).exists()
     uninstalled_status = service.status(project, AgentClient.CLAUDE)
     assert uninstalled_status.state is AdapterState.NOT_INSTALLED
@@ -333,6 +347,10 @@ def test_codex_packaged_sources_are_seeded_native_verified_and_retained_on_unins
     assert manifest.skills
     assert {skill.mode for skill in manifest.skills} == {"native-verified"}
     assert all(skill.generated is None for skill in manifest.skills)
+    assert manifest.components is not None
+    assert manifest.components.mcp_configuration.state == "generated"
+    mcp_config = project / ".codex" / "config.toml"
+    assert mcp_config.is_file()
     registry = project / ".agents" / "skills" / "registry.yaml"
     seeded = tuple(project / Path(skill.canonical.path) for skill in manifest.skills)
     assert registry.is_file()
@@ -344,4 +362,5 @@ def test_codex_packaged_sources_are_seeded_native_verified_and_retained_on_unins
 
     assert {path: path.read_bytes() for path in (registry, *seeded)} == before
     assert not (project / "AGENTS.md").exists()
+    assert not mcp_config.exists()
     assert not manifest_path.exists()

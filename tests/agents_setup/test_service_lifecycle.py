@@ -91,7 +91,8 @@ def test_codex_native_source_set_resource_drift_repairs_only_manifest(tmp_path: 
     }
     assert recorded_files == expected_files
     assert entry.source_set.aggregate_hash == source_set_aggregate_hash(expected_files.items())
-    assert not (project / ".codex").exists()
+    assert not (project / ".codex" / "skills").exists()
+    assert (project / ".codex" / "config.toml").is_file()
 
     guide.write_bytes(b"# Operator-revised native guide\n")
     native_files = (primary, guide)
@@ -127,7 +128,8 @@ def test_codex_native_source_set_resource_drift_repairs_only_manifest(tmp_path: 
     assert {
         path: (path.read_bytes(), path.stat().st_mtime_ns) for path in native_files
     } == native_after_edit
-    assert not (project / ".codex").exists()
+    assert not (project / ".codex" / "skills").exists()
+    assert (project / ".codex" / "config.toml").is_file()
     repaired = load_manifest(manifest_path.read_bytes()).require_producer_contract()
     assert repaired.skills[0].source_set is not None
     assert {source.path: source.content_hash for source in repaired.skills[0].source_set.files}[
@@ -195,7 +197,8 @@ def test_codex_native_source_set_path_changes_are_stale_not_missing(
     service.repair(plan)
 
     assert service.status(project, AgentClient.CODEX).state is AdapterState.CURRENT
-    assert not (project / ".codex").exists()
+    assert not (project / ".codex" / "skills").exists()
+    assert (project / ".codex" / "config.toml").is_file()
 
 
 @pytest.mark.parametrize(

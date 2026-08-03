@@ -26,10 +26,17 @@ from pydantic import (
 )
 
 from ._safe_fs import is_credential_capable_path
+from .models import McpConfigurationPath
 
 type AdapterName = Literal["codex", "claude", "gemini"]
 type SkillMode = Literal["generated", "native-verified"]
 type BridgeOwnership = Literal["generated", "user-owned"]
+type McpConfigurationState = Literal[
+    "not_implemented",
+    "generated",
+    "native",
+    "divergent",
+]
 
 ContentHash = Annotated[str, StringConstraints(pattern=r"^sha256:[0-9a-f]{64}$")]
 SkillName = Annotated[
@@ -66,6 +73,11 @@ _BRIDGE_BY_ADAPTER: dict[AdapterName, str] = {
     "codex": "AGENTS.md",
     "claude": "CLAUDE.md",
     "gemini": "GEMINI.md",
+}
+_MCP_PATH_BY_ADAPTER: dict[AdapterName, str] = {
+    "codex": ".codex/config.toml",
+    "claude": ".mcp.json",
+    "gemini": ".gemini/settings.json",
 }
 _NATIVE_SOURCE_SET_DOMAIN = b"workctx-native-source-set-v1\0"
 
@@ -221,7 +233,21 @@ class InstructionBridgeComponent(_StrictManifestModel):
 
 
 class McpConfigurationComponent(_StrictManifestModel):
-    state: Literal["not_implemented"]
+    state: McpConfigurationState
+    path: McpConfigurationPath | None = None
+    content_hash: ContentHash | None = None
+
+    @model_validator(mode="after")
+    def validate_state_shape(self) -> Self:
+        for optional_field in ("path", "content_hash"):
+            if optional_field in self.model_fields_set and getattr(self, optional_field) is None:
+                raise ValueError(f"{optional_field} cannot be null")
+        if self.state == "not_implemented":
+            if self.path is not None or self.content_hash is not None:
+                raise ValueError("not_implemented MCP configuration forbids path and content hash")
+        elif self.path is None or self.content_hash is None:
+            raise ValueError("implemented MCP configuration requires path and content hash")
+        return self
 
 
 class AdapterComponents(_StrictManifestModel):
@@ -344,6 +370,17 @@ class AdapterManifest(_StrictManifestModel):
                     raise ValueError(f"generated path collision: {bridge.target.path}")
                 output_keys.add(key)
 
+            mcp = self.components.mcp_configuration
+            if mcp.state != "not_implemented":
+                if mcp.path != _MCP_PATH_BY_ADAPTER[self.adapter]:
+                    raise ValueError("MCP configuration path does not map to the selected adapter")
+                if mcp.state == "generated":
+                    assert mcp.path is not None
+                    key = collision_key(mcp.path)
+                    if key in output_keys:
+                        raise ValueError(f"generated path collision: {mcp.path}")
+                    output_keys.add(key)
+
         backup_keys: set[str] = set()
         for backup in self.backups or ():
             key = collision_key(backup.path)
@@ -421,6 +458,7 @@ __all__ = [
     "GeneratedFile",
     "InstructionBridgeComponent",
     "McpConfigurationComponent",
+    "McpConfigurationState",
     "NativeSourceFile",
     "NativeSourceSet",
     "RegistrySource",

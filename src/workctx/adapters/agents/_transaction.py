@@ -20,7 +20,7 @@ from ._safe_fs import (
 from .errors import RecoveryConflictError, RecoveryRequiredError
 from .layout import InstallationLayout
 from .models import AgentClient, FileOperation
-from .renderers import content_hash
+from .renderers import content_hash, mcp_configuration_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +237,7 @@ def _allowed_transaction_target(
     }[client]
     if (
         target == bridge
+        or target == mcp_configuration_path(client)
         or _safe_skill_target(target, client)
         or _safe_backup_target(target, client)
     ):

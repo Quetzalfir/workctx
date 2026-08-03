@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
+
+type McpConfigurationPath = Literal[
+    ".codex/config.toml",
+    ".mcp.json",
+    ".gemini/settings.json",
+]
 
 
 class AgentClient(StrEnum):
@@ -32,6 +39,9 @@ class FeatureState(StrEnum):
     MISSING = "missing"
     DIVERGED = "diverged"
     NOT_IMPLEMENTED = "not_implemented"
+    GENERATED = "generated"
+    NATIVE = "native"
+    DIVERGENT = "divergent"
 
 
 class AdapterState(StrEnum):
@@ -63,6 +73,7 @@ class DriftReason(StrEnum):
     GENERATED_MISSING = "generated_missing"
     GENERATED_MODIFIED = "generated_modified"
     BRIDGE_DIVERGED = "bridge_diverged"
+    MCP_DIVERGENT = "mcp_divergent"
     BACKUP_MISSING = "backup_missing"
     BACKUP_MODIFIED = "backup_modified"
     ORPHAN_STAGING = "orphan_staging"
@@ -175,8 +186,8 @@ class AdapterStatus:
     )
     mcp_configuration: FeatureStatus = field(
         default_factory=lambda: FeatureStatus(
-            FeatureState.NOT_IMPLEMENTED,
-            detail="Deferred until WP-330; no MCP server identity is configured.",
+            FeatureState.MISSING,
+            detail="Project-scoped MCP configuration is absent.",
         )
     )
     warnings: tuple[str, ...] = ()
