@@ -238,7 +238,7 @@ def test_local_source_lint_never_inspects_client_auth_link_target(
         ("Call MCP tool `context_info`.", True),
         ("Call `mcp__workctx__transaction_apply` MCP tool.", True),
         (
-            "Use `workctx agent install` (planned), then `workctx inbox add`.",
+            "Use `workctx agent install` (planned), then `workctx context migrate`.",
             False,
         ),
     ),

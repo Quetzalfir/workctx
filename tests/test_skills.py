@@ -780,11 +780,11 @@ def test_product_reference_lint_requires_planned_marker(
 
 def test_planned_marker_applies_only_to_the_preceding_product_reference() -> None:
     issues = _product_reference_issues(
-        "Use `workctx agent install` (planned), then `workctx inbox add`."
+        "Use `workctx agent install` (planned), then `workctx context migrate`."
     )
 
     assert len(issues) == 1
-    assert "workctx inbox add" in issues[0]
+    assert "workctx context migrate" in issues[0]
 
 
 @pytest.mark.parametrize(
