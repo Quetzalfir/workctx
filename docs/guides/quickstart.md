@@ -1,6 +1,6 @@
 # Quick start
 
-This guide describes the intended Phase 1 experience. Some commands remain implementation targets in the scaffold.
+This guide describes the Phase 1 experience. The commands below are implemented; evidence extraction and outbox drafting still land in later Phase 1 packages.
 
 ## Install for development
 
@@ -18,10 +18,10 @@ uv run workctx validate D:\WorkContexts\example
 
 ## Open an AI agent
 
-After agent installers are implemented:
+Install the agent adapters, then open a detected client. `agent install` prints a dry-run plan by default; add `--yes` to execute it:
 
 ```powershell
-workctx agent install --agent all --context D:\WorkContexts\example
+workctx agent install --agent all --context D:\WorkContexts\example --yes
 workctx agent open D:\WorkContexts\example --agent codex
 ```
 

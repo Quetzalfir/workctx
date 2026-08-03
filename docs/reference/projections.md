@@ -147,8 +147,9 @@ database remains live and temporary siblings are cleaned.
 
 The process-local reader/swap gate covers all adapter-managed readers in one process. A
 long-lived raw SQLite connection in another process can still block filename replacement on
-Windows; callers must use the typed API, and the canonical writer lock integrated by later
-packages provides cross-process rebuild serialization.
+Windows; callers must use the typed API, and the canonical writer lock — which the
+transaction engine holds across its post-commit rebuild — provides cross-process
+serialization for transaction-driven rebuilds.
 
 ## Typed query surface
 
@@ -167,7 +168,8 @@ read-only `mode=ro&cache=private` connection. Its public reads include:
 Each composite document lookup selects its specialized or generic representation through a
 single reader connection, so a concurrent rebuild cannot mix two projection generations.
 
-No SQLite row, cursor, connection, or SQL fragment crosses the adapter boundary. Incremental
-projection updates and canonical-revision freshness policy are intentionally deferred to
-WP-300; this package supplies explicit full rebuild plus version/context compatibility
-checks.
+No SQLite row, cursor, connection, or SQL fragment crosses the adapter boundary.
+Canonical-revision freshness is covered by the adapter's read-only `SqliteFreshnessProbe`,
+which feeds the validation engine's stale-projection diagnostics. Incremental projection
+updates remain unimplemented and are explicitly post-alpha work with no assigned owner; the
+adapter supplies explicit full rebuild plus version/context compatibility checks.

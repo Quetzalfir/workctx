@@ -17,7 +17,7 @@ manifest. Durable backups are separate entries in `backups`.
 
 ## Manifest location
 
-WP-320 must write one JSON skill manifest per selected adapter. The installation root is the
+The installer writes one JSON skill manifest per selected adapter. The installation root is the
 directory against which every recorded relative path is resolved.
 
 | Installation root | Manifest path |
@@ -54,7 +54,7 @@ generated content.
   and sort `backups` by `path` and then `original_path`.
 - `schema_version` is `1`.
 - `adapter_version` is the selected adapter renderer/layout version, not the Work Context OS
-  release or the installed client version. WP-320 starts each adapter at version `1` and
+  release or the installed client version. The installer starts each adapter at version `1` and
   increments it whenever the same canonical input can produce materially different bytes or
   target paths. Version `2` adds project-scoped MCP configuration to the version `1` skill and
   bridge inventory.
@@ -182,7 +182,7 @@ Filesystem target paths are relative to the installation root, use forward slash
 not contain an empty, `.` or `..` segment. Absolute, drive-qualified, UNC,
 backslash-containing, and root-escaping paths are invalid. Generated skill paths must be under
 the selected client's project-local root: `.codex/`, `.claude/`, or `.gemini/`, matching
-`adapter`. WP-320 chooses the supported native form after client-version detection and records
+`adapter`. The installer chooses the supported native form after client-version detection and records
 every exact output path. Backup paths are under
 `.workctx/backups/<YYYYMMDDTHHMMSS[.fraction]Z>/`; the compact UTC directory timestamp must
 correspond to `created_at`.
@@ -193,7 +193,7 @@ starts `workctx mcp serve --context .` for the project root. Paths in native and
 remain user-owned even though the manifest records their observed hashes.
 
 Schema validation is necessary but not sufficient. Before reading or changing a target,
-WP-320 must also enforce these semantic checks:
+the installer must also enforce these semantic checks:
 
 1. Skill names are unique within the manifest.
 2. Each canonical path is exactly `.agents/skills/<name>/SKILL.md`.
@@ -232,7 +232,7 @@ authority.
 Rules 9 and 10 are validity boundaries, not approval-capable conflicts. A symlink, reparse
 point, non-regular target, reserved name, or path-containment failure makes the installation
 state `invalid`; every operation must perform zero writes until the unsafe state is removed
-outside WP-320.
+outside the installer.
 
 Apply rules 9 and 10 before reading bytes. Resolve the installation root once to its physical
 directory, walk each existing descendant component with `lstat`, and reject links and reparse
@@ -247,7 +247,7 @@ existing ancestors pass this sequence. Any mismatch is `invalid`; never fall bac
 path-following open.
 
 Equality between manifest names and the current validated registry is a freshness comparison,
-not a manifest-validity rule. A well-formed older manifest remains valid so WP-320 can report
+not a manifest-validity rule. A well-formed older manifest remains valid so the installer can report
 `inventory_changed` and repair it.
 
 Extra files not listed in the manifest are unmanaged. They are warnings only and must never
@@ -296,7 +296,7 @@ as self-authenticating.
 
 ## Status and staleness algorithm
 
-Status is derived and never persisted in the manifest. WP-320 must evaluate in this order:
+Status is derived and never persisted in the manifest. The installer must evaluate in this order:
 
 1. Safely inspect the fixed lock and staging locations before ordinary freshness checks. An
    unsafe transaction-state path is `invalid`; a live lock held by another writer is `busy`.
@@ -382,7 +382,7 @@ is handled by the repair preflight below.
 
 ## Install, repair, and uninstall behavior
 
-The planned WP-320 operations must validate paths as untrusted input and show the complete dry
+Install, repair, and uninstall must validate paths as untrusted input and show the complete dry
 run before changing files. They must never inspect, copy, or record client authentication
 credentials. Preflight all targets before the first mutation; an authority failure or conflict
 makes the operation perform zero writes. Unsafe or non-regular targets are `invalid`, not
@@ -390,7 +390,7 @@ conflicts. Neither invalid state nor report-only state can be overridden by appr
 
 ### Lock, precondition, and atomic-replacement protocol
 
-For a context installation, WP-320 must acquire and fence the context write lock at
+For a context installation, the installer must acquire and fence the context write lock at
 `98_state/lock.json` using
 [ADR 0006](../adr/0006-context-locking-and-atomic-writes.md). For a repository-only installation,
 it must use `.workctx/agent-adapters/lock.json` with the same `O_CREAT | O_EXCL` acquisition,

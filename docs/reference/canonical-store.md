@@ -282,5 +282,6 @@ or guard files fail closed. A caller-supplied registry path remains available fo
 configuration and tests, but is rejected when it resolves inside any context root.
 
 No active context is inferred merely because one registration exists. A missing, malformed,
-unregistered, moved, or ID-mismatched active entry fails closed. CLI wiring for context
-resolution step 3 is intentionally deferred to lead integration.
+unregistered, moved, or ID-mismatched active entry fails closed. CLI context resolution uses
+the registry as step 3: the active-context fallback runs only after an explicit path and
+ancestor discovery both fail.
