@@ -20,6 +20,8 @@ class ViewName(StrEnum):
     WAITING_ON = "waiting-on"
     STALE_KNOWLEDGE = "stale-knowledge"
     BRIEF = "brief"
+    RESOURCE_DIRECTORY = "resource-directory"
+    STATUS_REPORT = "status-report"
 
     @property
     def relative_path(self) -> str:
@@ -64,6 +66,83 @@ class LedgerActivitySummary(_ViewRecord):
     last_timestamp: AwareDatetime | None
 
 
+class ResourceAccess(StrEnum):
+    PUBLIC = "public"
+    SSO = "sso"
+    VPN = "vpn"
+    OTHER = "other"
+    UNGROUPED = "ungrouped"
+
+
+class ResourceLinkItem(_ViewRecord):
+    url: str
+    label: str | None
+
+
+class ResourceDirectoryItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    description: str
+    access: ResourceAccess
+    links: tuple[ResourceLinkItem, ...]
+
+
+class ResourceDirectoryPayload(_ViewRecord):
+    resources: tuple[ResourceDirectoryItem, ...]
+
+
+class CompletedTaskItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    completed_at: AwareDatetime
+
+
+class TaskTransitionItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    from_status: TaskStatus
+    to_status: TaskStatus
+    moved_at: AwareDatetime
+
+
+class BlockedWaitingTaskItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    status: TaskStatus
+    since: AwareDatetime
+    age_days: int = Field(ge=0)
+    next_action: str
+
+
+class CommitmentTaskItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    created_at: AwareDatetime
+    due_at: AwareDatetime
+
+
+class ProcessedArtifactItem(_ViewRecord):
+    id: str
+    uri: str
+    original_name: str
+    archived_at: AwareDatetime
+
+
+class StatusReportPayload(_ViewRecord):
+    period_start: AwareDatetime
+    period_end: AwareDatetime
+    completed: tuple[CompletedTaskItem, ...]
+    moved: tuple[TaskTransitionItem, ...]
+    blocked_waiting: tuple[BlockedWaitingTaskItem, ...]
+    new_commitments: tuple[CommitmentTaskItem, ...]
+    evidence_processed: tuple[ProcessedArtifactItem, ...]
+
+
 class BriefPayload(_ViewRecord):
     """Structured payload consumed by the doc-04 ``brief`` command and MCP."""
 
@@ -93,10 +172,20 @@ class ViewRebuildResult(_ViewRecord):
 
 
 __all__ = [
+    "BlockedWaitingTaskItem",
     "BriefPayload",
+    "CommitmentTaskItem",
+    "CompletedTaskItem",
     "GeneratedView",
     "LedgerActivitySummary",
+    "ProcessedArtifactItem",
+    "ResourceAccess",
+    "ResourceDirectoryItem",
+    "ResourceDirectoryPayload",
+    "ResourceLinkItem",
     "StaleClaimItem",
+    "StatusReportPayload",
+    "TaskTransitionItem",
     "TaskViewItem",
     "ViewName",
     "ViewRebuildResult",

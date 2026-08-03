@@ -16,6 +16,7 @@ from workctx.migration import MigrationBlockedError, MigrationError, migrate_leg
 from workctx.migration.inventory import fingerprint_source_tree
 from workctx.migration.models import FileClassification, MappingAction, StageStatus
 from workctx.validation import validate_workspace
+from workctx.views import ViewName
 
 MIGRATION_TIME = datetime(2026, 8, 2, 23, 30, tzinfo=UTC)
 FAKE_SECRET_VALUE = b"fictional-example-value-not-a-credential"
@@ -135,7 +136,7 @@ def test_apply_builds_valid_context_and_complete_reports(
     assert validate_workspace(target).ok
     assert report.validation is not None and report.validation.ok
     assert report.projection is not None and report.projection.documents_skipped == 0
-    assert report.views is not None and len(report.views.paths) == 5
+    assert report.views is not None and len(report.views.paths) == len(ViewName)
     assert report.ledger is not None
     assert report.ledger.interaction == "single_import"
     assert report.ledger.import_events == 1

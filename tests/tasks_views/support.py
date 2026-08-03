@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,8 +18,9 @@ from workctx.domain import (
     TaskStatus,
     TaskType,
 )
-from workctx.domain.transactions import HumanActor
+from workctx.domain.transactions import HumanActor, TransactionProposal
 from workctx.services.contexts import initialize_context
+from workctx.transactions import ApplyResult, TransactionEngine
 
 CONTEXT_ID = "tasks-lab"
 EVIDENCE_ID = "EVD-20260601-task-state-01"
@@ -43,6 +45,25 @@ def human_actor() -> HumanActor:
         agent=None,
         model=None,
     )
+
+
+def clocked_transaction_apply(
+    clock: Callable[[], datetime],
+) -> Callable[..., ApplyResult]:
+    def apply_transaction(
+        context_root: Path,
+        proposal: TransactionProposal,
+        *,
+        approved: bool = False,
+        session_id: str | None = None,
+    ) -> ApplyResult:
+        return TransactionEngine(context_root, clock=clock).apply(
+            proposal,
+            approved=approved,
+            session_id=session_id,
+        )
+
+    return apply_transaction
 
 
 def initialize_tasks_context(root: Path) -> Path:
