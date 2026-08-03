@@ -155,30 +155,6 @@ def test_every_mutation_requires_literal_true_at_runtime(
     assert response.envelope.errors[0].path == "$.approved"
 
 
-@pytest.mark.parametrize(
-    ("tool_name", "dependency"),
-    [
-        ("draft_save", "WP-420"),
-    ],
-)
-def test_missing_wave_dependencies_return_structured_placeholders(
-    live_service: McpToolService,
-    tool_name: str,
-    dependency: str,
-) -> None:
-    response = live_service.invoke(
-        tool_name,
-        {"schema_version": 1, "approved": True},
-    )
-
-    assert response.envelope.ok is False
-    assert error_codes(response) == {"NOT-IMPLEMENTED"}
-    assert response.envelope.result == {"dependency": dependency, "implemented": False}
-    diagnostic = response.envelope.errors[0]
-    assert diagnostic.category == "unavailable_dependency"
-    assert dependency in diagnostic.message
-
-
 @pytest.mark.integration
 def test_transaction_tools_validate_dry_run_apply_and_rebuild_end_to_end(
     tmp_path: Path,

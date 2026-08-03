@@ -1,0 +1,164 @@
+{
+  "positive": [
+    {
+      "schema_version": 1,
+      "approved": true,
+      "draft_id": "DRAFT-20260802-rollout-reply-01",
+      "title": "Rollout readiness reply",
+      "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+      "purpose": "Clarify the rollout state without inventing a commitment.",
+      "format": "email",
+      "body": "Hello Alex,\n\n## Uncertainty\n\nThe vendor date is unconfirmed.\n",
+      "task_uri": "workctx://fictional-context/task/TASK-2026-001",
+      "source_refs": [
+        "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "author_id": "fictional-drafting-agent",
+      "agent": "codex",
+      "model": "gpt-fictional"
+    },
+    {
+      "schema_version": 1,
+      "approved": true,
+      "title": "Short chat reply",
+      "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+      "purpose": "Ask for clarification.",
+      "format": "chat",
+      "body": "Could you confirm the fictional date?\n",
+      "source_refs": [],
+      "author_id": "fictional-drafting-agent",
+      "agent": "codex",
+      "model": "gpt-fictional"
+    }
+  ],
+  "negative": [
+    {
+      "name": "boolean schema version",
+      "data": {
+        "schema_version": true,
+        "approved": true,
+        "title": "Invalid version",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "body": "Draft body.\n",
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "missing body",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "title": "Missing body",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "invalid draft id",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "draft_id": "DRAFT-not-stable",
+        "title": "Invalid ID",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "body": "Draft body.\n",
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "recipient is not a person",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "title": "Wrong recipient",
+        "recipient_uri": "workctx://fictional-context/team/TEAM-alpha",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "body": "Draft body.\n",
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "invalid format",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "title": "Invalid format",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "social_post",
+        "body": "Draft body.\n",
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "duplicate source reference",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "title": "Duplicate sources",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "body": "Draft body.\n",
+        "source_refs": [
+          "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "artifact://sha256/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "machine-specific source reference",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "title": "Invalid source",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "body": "Draft body.\n",
+        "source_refs": [
+          "file://local/private.txt"
+        ],
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional"
+      }
+    },
+    {
+      "name": "extra property",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "title": "Extra property",
+        "recipient_uri": "workctx://fictional-context/person/PER-alex-rivera",
+        "purpose": "Clarify state.",
+        "format": "email",
+        "body": "Draft body.\n",
+        "author_id": "agent",
+        "agent": "codex",
+        "model": "gpt-fictional",
+        "send": true
+      }
+    }
+  ]
+}

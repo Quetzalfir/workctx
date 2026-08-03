@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from workctx.domain import ArtifactSourceType, EntityType, RelationType, TaskStatus
+from workctx.drafting.models import DRAFT_ID_PATTERN, DraftFormat
 
 SCHEMA_VERSION: Final = 1
 
@@ -166,6 +167,11 @@ _TASK_STATUS_ARRAY = {
 _TASK_ID_PROPERTY = {
     "type": "string",
     "pattern": r"^TASK-[0-9]{4}-[0-9]{3}(?:-ST[0-9]{2})?$",
+}
+_SINGLE_LINE_TEXT = {
+    "type": "string",
+    "minLength": 1,
+    "pattern": r"^[^\r\n\x00-\x1f\x7f]+$",
 }
 
 
@@ -330,7 +336,83 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
     ),
     _contract(
         "draft_save",
-        "Persist a local outbox draft when the Wave 4 draft engine is installed.",
+        "Persist an agent-authored, unsent draft in the local canonical outbox.",
+        {
+            "draft_id": {
+                "type": ["string", "null"],
+                "pattern": DRAFT_ID_PATTERN,
+                "description": "Optional existing or caller-allocated canonical draft ID.",
+            },
+            "title": {
+                **deepcopy(_SINGLE_LINE_TEXT),
+                "maxLength": 200,
+            },
+            "recipient_uri": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "pattern": (
+                    r"^workctx://[a-z0-9]+(?:-[a-z0-9]+)*/person/"
+                    r"PER-[a-z0-9]+(?:-[a-z0-9]+)*$"
+                ),
+            },
+            "purpose": {
+                **deepcopy(_SINGLE_LINE_TEXT),
+                "maxLength": 2000,
+            },
+            "format": {
+                "type": "string",
+                "enum": [item.value for item in DraftFormat],
+            },
+            "body": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100_000,
+                "description": "Agent-authored Markdown preserved as canonical draft body text.",
+            },
+            "task_uri": {
+                "type": ["string", "null"],
+                "maxLength": 2000,
+                "pattern": (
+                    r"^workctx://[a-z0-9]+(?:-[a-z0-9]+)*/task/"
+                    r"TASK-[0-9]{4}-[0-9]{3}(?:-ST[0-9]{2})?$"
+                ),
+            },
+            "source_refs": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "pattern": r"^(?!file://)[a-z][a-z0-9+.-]*://.+$",
+                },
+                "maxItems": 100,
+                "uniqueItems": True,
+                "default": [],
+            },
+            "author_id": {
+                **deepcopy(_SINGLE_LINE_TEXT),
+                "maxLength": 200,
+            },
+            "agent": {
+                **deepcopy(_SINGLE_LINE_TEXT),
+                "maxLength": 200,
+            },
+            "model": {
+                **deepcopy(_SINGLE_LINE_TEXT),
+                "maxLength": 200,
+            },
+        },
+        required=(
+            "title",
+            "recipient_uri",
+            "purpose",
+            "format",
+            "body",
+            "author_id",
+            "agent",
+            "model",
+        ),
         mutation=True,
     ),
 )

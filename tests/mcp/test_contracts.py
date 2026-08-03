@@ -52,7 +52,21 @@ EXPECTED_PROPERTIES = {
     "transaction_dry_run": {"schema_version", "proposal", "approved"},
     "transaction_apply": {"schema_version", "proposal", "approved"},
     "index_rebuild": {"schema_version", "approved"},
-    "draft_save": {"schema_version", "approved"},
+    "draft_save": {
+        "schema_version",
+        "approved",
+        "draft_id",
+        "title",
+        "recipient_uri",
+        "purpose",
+        "format",
+        "body",
+        "task_uri",
+        "source_refs",
+        "author_id",
+        "agent",
+        "model",
+    },
 }
 
 EXPECTED_REQUIRED = {
@@ -72,7 +86,18 @@ EXPECTED_REQUIRED = {
     "transaction_dry_run": {"schema_version", "proposal", "approved"},
     "transaction_apply": {"schema_version", "proposal", "approved"},
     "index_rebuild": {"schema_version", "approved"},
-    "draft_save": {"schema_version", "approved"},
+    "draft_save": {
+        "schema_version",
+        "approved",
+        "title",
+        "recipient_uri",
+        "purpose",
+        "format",
+        "body",
+        "author_id",
+        "agent",
+        "model",
+    },
 }
 
 

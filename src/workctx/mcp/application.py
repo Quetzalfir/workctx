@@ -23,6 +23,7 @@ from workctx.doctor import run_doctor
 from workctx.domain import EntityType, RelationType, TaskStatus, WorkctxUri
 from workctx.domain.tasks import TASK_ID_PATTERN
 from workctx.domain.transactions import TransactionProposal
+from workctx.drafting import DraftPayload, save_draft
 from workctx.errors import (
     ConflictError,
     ContextBoundaryError,
@@ -478,8 +479,18 @@ class McpToolService:
         return self._success("index_rebuild", {"rebuild": report})
 
     def _draft_save(self, arguments: dict[str, Any]) -> ToolResponse:
-        del arguments
-        return self._not_implemented("draft_save", "WP-420")
+        payload = DraftPayload.model_validate(
+            {key: value for key, value in arguments.items() if key != "approved"}
+        )
+        result = save_draft(self._root, payload, approved=True)
+        return self._success(
+            "draft_save",
+            {
+                "operation": result.operation,
+                "draft": result.draft,
+                "receipt": result.receipt,
+            },
+        )
 
     def _not_implemented(self, name: str, dependency: str) -> ToolResponse:
         return self._failure(
