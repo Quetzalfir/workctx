@@ -32,13 +32,13 @@ Example:
 
 ```powershell
 git fetch --all --prune
-git worktree add .worktrees/WP-100-reference -b agent/WP-100-reference <BASE_COMMIT>
+git worktree add .worktrees/reference-contracts -b agent/reference-contracts <BASE_COMMIT>
 ```
 
 The lead creates:
 
 ```text
-.agents/work-orders/WP-100-reference/
+.agents/work-orders/reference-contracts/
 ├── contract.json
 ├── prompt.md
 ├── context.md

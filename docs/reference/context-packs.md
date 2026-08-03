@@ -19,7 +19,7 @@ them, but retrieval does not depend on either adapter.
 - `build_pack(reader, reference, budget=12000, ...)` for the ten-section contract;
 - `serialize_context_pack(pack)` for stable, sorted-key JSON.
 
-All reads use the WP-210 typed projection API. Retrieval contains no SQL and does not
+All reads use the typed projection API. Retrieval contains no SQL and does not
 open the projection database or canonical files.
 
 `resolve` returns an explicit result rather than using a missing-row exception. A valid
@@ -128,8 +128,8 @@ assumption=25. Precise `line_range`, `page_range`, `time_range`, `message`,
 `image_region`, `json_pointer`, `table_range`, and `repo_range` locators score 100;
 `whole_artifact` scores 20. For example, a precise assumption scores
 `floor((25 + 100) / 2) = 62`. If only one source-quality signal exists, that signal is
-the score. Source quality does not invent artifact-manifest quality signals that WP-210
-cannot return.
+the score. Source quality does not invent artifact-manifest quality signals that the
+projection cannot return.
 
 Query tokenization is Unicode NFC/case-folded and diacritic-insensitive, then split into
 literal alphanumeric tokens. Repeated query tokens count once, only complete token

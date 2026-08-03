@@ -28,7 +28,7 @@ invalid canonical state.
 | `REF-INVALID-URI` | error | A durable reference is malformed or not canonically encoded. | Use a canonical `workctx://`, `artifact://`, `repo://`, or external URI. |
 | `REF-REPO-SHA` | error | A repository reference omits an immutable hexadecimal commit SHA. | Replace the branch or tag with a 7-64 character commit SHA. |
 | `REF-CONTEXT-MISMATCH` | error | A `workctx://` reference crosses the active context boundary. | Use an entity in the active context or an explicitly approved federated operation. |
-| `REF-UNKNOWN-ENTITY-TYPE` | error | A `workctx://` reference uses a type outside the D-018 vocabulary. | Replace the entity-type segment with one of the canonical D-018 values. |
+| `REF-UNKNOWN-ENTITY-TYPE` | error | A `workctx://` reference uses a type outside the canonical entity-type vocabulary. | Replace the entity-type segment with one of the canonical entity-type values. |
 | `REF-UNRESOLVED` | error | An internal Work Context reference has no canonical target. | Restore the target entity or point to an existing canonical URI. |
 | `REF-ARTIFACT-UNAVAILABLE` | advisory | An `artifact://` digest has no matching artifact manifest. | Restore or ingest the manifest, or explicitly retain the artifact as unavailable. |
 | `REF-EXTERNAL-UNAVAILABLE` | advisory | A valid repository or external reference has no local resolver. | Configure an authorized resolver or explicitly retain it as unavailable. |

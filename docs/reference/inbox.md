@@ -15,7 +15,7 @@ as agent instructions. SHA-256 content identity is exposed as
 - `archive_after(context_root, artifact_id, receipt) -> ArchiveResult`.
 
 `IngestionService` provides the same methods for callers that need an injected clock,
-transaction function, policy, or WP-201 stager in tests. Paths in `RegisterRequest` are
+transaction function, policy, or staged-filesystem stager in tests. Paths in `RegisterRequest` are
 context-relative portable POSIX paths below `00_inbox/raw/`. Absolute paths, traversal,
 backslashes, links escaping the context, and non-regular files fail closed.
 
@@ -27,8 +27,8 @@ quarantined rather than trusted.
 ## Registration and duplicate policy
 
 Registration streams the complete primary file through SHA-256 and writes a schema-valid JSON
-manifest to `00_inbox/manifests/<ART-ID>.json`. The manifest create is the only WP-300 proposal
-payload: it contains metadata, paths, and hashes, never evidence bytes. Artifact IDs use the
+manifest to `00_inbox/manifests/<ART-ID>.json`. The manifest create is the only transaction
+proposal payload: it contains metadata, paths, and hashes, never evidence bytes. Artifact IDs use the
 UTC ingest date, a portable filename slug, and the first free two-digit sequence.
 
 Re-registering the same unchanged live path is idempotent and returns `already_registered`
@@ -69,9 +69,9 @@ Diagnostics contain only a stable reason and context-relative location. They nev
 matched value or raw excerpt. The scanner treats bytes as untrusted data and performs no
 document parsing, decompression, macro inspection, rendering, or command execution.
 
-For a suspicious registration, WP-300 first commits the small quarantined manifest. WP-310
-then authenticates the resulting receipt against the complete ledger and uses a WP-201 staged
-move under the context lock to move the primary and all sidecars into
+For a suspicious registration, the transaction engine first commits the small quarantined
+manifest. The ingestion service then authenticates the resulting receipt against the complete
+ledger and uses a staged filesystem move under the context lock to move the primary and all sidecars into
 `00_inbox/quarantine/`. The manifest retains an authenticated, content-free registration
 receipt in its versioned `notes` metadata so an interrupted quarantine move can be resumed by
 re-running the same `register` request. `quarantine_info` reports reasons and physical/recovery
@@ -85,10 +85,10 @@ state without opening the evidence.
    event as proof;
 2. require that event's exact `source_refs` to contain the artifact URI;
 3. verify the live primary and sidecar hashes;
-4. commit one WP-300 manifest-only update to `status: processed` and `01_processed/`
+4. commit one transactional manifest-only update to `status: processed` and `01_processed/`
    locations when the caller's transaction has not already made that state change;
 5. acquire the context lock and authenticate the supplied receipt again;
-6. execute only physical WP-201 staged moves, then finalize their intent against the
+6. execute only physical staged moves, then finalize their intent against the
    authenticated audit proof.
 
 A missing, forged, foreign-context, rolled-back, ledger-tampered, or nonreferencing receipt
@@ -102,9 +102,10 @@ collisions, and keeps Windows paths bounded while `original_name` preserves sour
 
 ## Idempotency and recovery
 
-Both physical transitions use `StagedReplacement` with `StagedMove` values. WP-201 streams
-preimage backups, fsyncs the intent before the first replace, fences every mutation with the
-context-lock nonce, and retries Windows sharing violations with bounded backoff.
+Both physical transitions use `StagedReplacement` with `StagedMove` values. The staged
+filesystem layer streams preimage backups, fsyncs the intent before the first replace, fences
+every mutation with the context-lock nonce, and retries Windows sharing violations with bounded
+backoff.
 
 If interruption leaves a `WP310-quarantine-...` or `WP310-archive-...` intent, retry the same
 ingestion operation with the same archive receipt where applicable. The service authenticates
@@ -113,8 +114,8 @@ completes only that intent, and finalizes it. An unrelated, malformed, or confli
 never adopted. If all destinations already contain the registered hashes and all sources are
 absent, a retry returns the idempotent completed result without another transaction.
 
-The generic WP-300 recovery command does not own these physical-only intents: their audited
-WP-300 event records the manifest transition by D-036, while their WP-201 intent deliberately
+The generic transaction recovery path does not own these physical-only intents: their audited
+ledger event records only the manifest transition, while their staged-move intent deliberately
 records the separate evidence move. Recovery therefore happens through the matching ingestion
 operation.
 

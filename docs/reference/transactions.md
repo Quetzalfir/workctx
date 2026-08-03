@@ -52,7 +52,7 @@ conditions, hashes, references, timestamp/ID mismatches, cross-context local ref
 normalized path collisions. Relations that JSON Schema cannot express are disclosed as
 producer invariants and enforced by the domain models, following ADR 0011.
 
-The engine then composes D-025 checks in memory:
+The engine then composes the precommit checks in memory:
 
 1. verify the entire ledger and derive its current head;
 2. reject a duplicate proposal ID or stale base revision;
@@ -76,9 +76,9 @@ current canonical identities, including collisions involving embedded observatio
 Only consistency that requires the materialized workspace as a whole and cannot be proved from
 the proposal overlay and current projection remains the responsibility of the strict
 `validate_workspace` post-apply gate, including global graph and cycle consistency. This is the
-D-025 split: every enumerated proposal carrier and staged identity is checked before intent
-publication, while the existing workspace validator is still the authoritative final
-postcondition after canonical replacements.
+precommit/postcondition split: every enumerated proposal carrier and staged identity is checked
+before intent publication, while the existing workspace validator is still the authoritative
+final postcondition after canonical replacements.
 
 External source references are syntax-validated. Local `workctx://` references resolve against
 the proposed overlay first and then `SQLiteProjection.get_document_by_uri`. Artifact references
@@ -105,12 +105,12 @@ caller retries the exact already-recorded proposal.
 
 ## Apply sequence
 
-`apply` composes only the public WP-200/WP-201 filesystem primitives:
+`apply` composes only the public canonical-store and staged-filesystem primitives:
 
 1. acquire `ContextLock` and require recovery state `clean`;
 2. verify the ledger, duplicate ID, current revision, and operation preconditions under the
    lock;
-3. rebuild the projection to make D-025 queries correspond to current canonical inputs, then
+3. rebuild the projection to make precommit queries correspond to current canonical inputs, then
    validate and serialize the complete proposed set in memory;
 4. verify the lock fence;
 5. call `StagedReplacement.prepare` to fsync postimages and preimage backups and publish the
@@ -137,7 +137,7 @@ recovery assets remain authoritative.
 ## Ledger representation and verification
 
 The canonical ledger is `99_meta/audit/ledger.jsonl`. The first fenced append creates the
-missing `99_meta/audit/` directory through the WP-201 primitive. Each event is compact UTF-8
+missing `99_meta/audit/` directory through the staged-filesystem primitive. Each event is compact UTF-8
 JSON followed by exactly one LF. Blank lines, carriage returns, a BOM, duplicate JSON keys,
 noncanonical bytes, incomplete final lines, and duplicate event or proposal IDs are invalid.
 
@@ -173,7 +173,7 @@ failure.
 
 ## Recovery
 
-D-031 makes recovery ledger-event-gated. The verified ADR 0010 append is the commit point
+Recovery is ledger-event-gated. The verified ADR 0010 append is the commit point
 because it occurs after every canonical replacement and before intent finalization. Recovery
 therefore never forward-completes staged replacements and never attempts to reconstruct actor,
 source, or condition data that the intent does not retain.

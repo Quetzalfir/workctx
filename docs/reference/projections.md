@@ -26,8 +26,8 @@ The adapter owns only these runtime names under `98_state/`:
 - uniquely named `index.sqlite3.*.tmp` build databases and their SQLite temporary siblings.
 
 The current implementation deliberately uses SQLite's `DELETE` journal mode and does not
-create WAL files. WP-200 owns `lock.json`, `staging/`, and `backups/`; the projection adapter
-does not read or write them.
+create WAL files. The canonical store owns `lock.json`, `staging/`, and `backups/`; the
+projection adapter does not read or write them.
 
 Every stored row carries the bound context ID where the table shape permits it. Insert and
 context-update triggers compare that ID with the singleton metadata row. Query predicates

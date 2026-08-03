@@ -25,7 +25,7 @@ The isolated scaffold-generation environment could not resolve additional packag
 - `uv run mypy src`;
 - wheel and source-distribution builds.
 
-The CI workflow and implementation work package `WP-001` require these checks on Python 3.12 and 3.13 across Windows, macOS, and Linux before the baseline is accepted.
+The CI workflow requires these checks on Python 3.12 and 3.13 across Windows, macOS, and Linux before the baseline is accepted.
 
 ## Interpretation
 

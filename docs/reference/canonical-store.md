@@ -186,8 +186,8 @@ Per-target inspection includes the operation kind, optional move destination and
 hash, current source hash, staged-postimage hash, and preimage-backup hash. The target-level
 state name `staged_postimage_available` is also retained for compatibility and means that any
 operation kind is recoverably pending. Inspection does not claim whether byte-identical content
-was historically replaced or moved. WP-300 owns transaction and audit semantics and chooses
-whether the adapter completes or rolls back a recoverable intent.
+was historically replaced or moved. The transaction engine owns transaction and audit semantics
+and chooses whether the adapter completes or rolls back a recoverable intent.
 
 ## Atomic line append
 
@@ -228,9 +228,9 @@ publishing bytes; malformed, symlinked, or otherwise unsafe intent state fails c
 2. call `atomic_append_line_bytes` with the current verified lock holder;
 3. call the matching original-holder, recovery, or rollback finalizer.
 
-The append neither rewrites the intent nor removes transaction recovery assets. WP-300 is
-responsible for producing the audit line, detecting a previously committed transaction after a
-process interruption, and choosing the matching finalizer.
+The append neither rewrites the intent nor removes transaction recovery assets. The transaction
+engine is responsible for producing the audit line, detecting a previously committed transaction
+after a process interruption, and choosing the matching finalizer.
 
 ## Owned `98_state` layout
 
@@ -261,7 +261,8 @@ process interruption, and choosing the matching finalizer.
 
 Timestamps use the Windows-safe `YYYYMMDDTHHMMSS.ffffffZ` form; backup filename collisions add
 a numeric suffix. `backups/` is reserved for the migration flow in ADR 0007, which creates the
-archive only after acquiring the context lock. WP-200 does not create migration backups.
+archive only after acquiring the context lock. The store adapter itself does not create
+migration backups.
 
 `98_state/index.sqlite3`, its WAL/SHM siblings, and projection temporary files belong to the
 SQLite adapter and are intentionally outside this adapter's ownership.

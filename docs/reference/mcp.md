@@ -51,8 +51,7 @@ unavailable-dependency diagnostic and exit-band code 5.
 
 ## Version 1 tool surface
 
-ADR 0012 freezes the first-alpha public surface at exactly 17 tools. All are advertised even when a
-later engine is not yet integrated, so client configurations remain stable.
+ADR 0012 freezes the first-alpha public surface at exactly 17 tools. All 17 are implemented.
 
 ### Read tools
 
@@ -67,28 +66,24 @@ later engine is not yet integrated, so client configurations remain stable.
 | `context_pack` | Builds a deterministic bounded context pack. |
 | `task_list` | Lists projected tasks using context-bound filters. |
 | `task_show` | Returns one projected task by ID or canonical URI. |
-| `inbox_list` | Reserved for the WP-310 ingestion engine; currently returns `NOT-IMPLEMENTED`. |
+| `inbox_list` | Lists registered artifact manifests in deterministic ID order. |
 | `audit_summary` | Returns the verified canonical transaction-ledger summary. |
-
-`task_list` and `task_show` use the current projection engine. Additional task enrichment planned
-for WP-400 does not change their names or version 1 contracts.
 
 ### Approval-gated mutation tools
 
 | Tool | Behavior |
 | --- | --- |
-| `artifact_register` | Reserved for WP-310; currently returns `NOT-IMPLEMENTED` after approval is checked. |
+| `artifact_register` | Registers one raw inbox artifact and returns its manifest registration. |
 | `proposal_validate` | Validates a typed transaction proposal without applying it. |
 | `transaction_dry_run` | Computes staged transaction effects without canonical mutation. |
 | `transaction_apply` | Applies one reviewed transaction atomically under the context lock. |
 | `index_rebuild` | Rebuilds disposable SQLite/FTS derived state. |
-| `draft_save` | Reserved for WP-420; currently returns `NOT-IMPLEMENTED` after approval is checked. |
+| `draft_save` | Persists one reply or status draft to the local `05_outbox/`. |
 
 Every mutation schema requires `approved` with the literal value `true`, and the server checks the
-same condition again at runtime. Omitting it or sending `false` produces `APPROVAL_REQUIRED`; a
-placeholder mutation still requires approval before it can return `NOT-IMPLEMENTED`. There are no
-external-write tools in this surface. `draft_save`, when implemented, is limited to the local
-outbox.
+same condition again at runtime. Omitting it or sending `false` produces `APPROVAL_REQUIRED`.
+There are no external-write tools in this surface: `draft_save` is limited to the local outbox and
+has no delivery capability.
 
 ## Schemas and envelopes
 
