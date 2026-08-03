@@ -1,0 +1,1 @@
+"""Full-product acceptance scenarios."""
