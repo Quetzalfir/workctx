@@ -45,3 +45,14 @@ disjoint packages so workers never share writable paths.
 - `inbox add` out-of-zone path error message is rough ("Inbox artifact metadata is
   invalid") — lead fixes inline during this wave or folds into WP-520 blocker flow.
 - Incremental projection updates remain explicitly post-alpha (documented).
+
+## Outcome (2026-08-03)
+
+Wave closed; Phase 1 complete. WP-510 integrated at 684ef8d (D-042 single_import),
+WP-520 at 4ca2cba (its rebuild scenario exposed the 04_views recreation defect,
+lead-fixed with a regression test at 62282bf alongside the lock-guard TOCTOU race
+that had failed macOS CI), WP-530 at 47283d0 (packaging verified by clean-venv
+install; lead swept cli-envelope.md, the one file outside its contract). All three
+wave-close criteria that can be checked pre-tag passed: matrix green including the
+acceptance suite, migration fixture end-to-end with source untouched, wheel install
+exercised outside the repo. Tag/version/publish remain with the operator.
