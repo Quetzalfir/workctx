@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import socket
+import stat
 import sys
 import time
 from contextlib import suppress
@@ -700,13 +701,13 @@ def _read_snapshot(path: Path) -> _LockSnapshot | None:
     try:
         with path.open("rb") as stream:
             payload = stream.read()
-            stat = os.fstat(stream.fileno())
+            file_stat = os.fstat(stream.fileno())
     except FileNotFoundError:
         return None
     return _LockSnapshot(
         payload=payload,
-        mtime_ns=stat.st_mtime_ns,
-        file_id=(stat.st_dev, stat.st_ino),
+        mtime_ns=file_stat.st_mtime_ns,
+        file_id=(file_stat.st_dev, file_stat.st_ino),
     )
 
 
@@ -774,17 +775,20 @@ def _format_utc(value: datetime) -> str:
 
 
 def _reject_unsafe_file_leaf(path: Path, *, allow_missing: bool) -> None:
+    # One lstat decides everything: guard election deletes transient entries
+    # concurrently, so separate exists()/is_file() probes race with unlink.
     try:
-        if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
-            raise ContextBoundaryError(
-                f"Runtime file must not be a symlink or junction: {path.name}"
-            )
-        if path.exists() and not path.is_file():
-            raise ContextBoundaryError(f"Runtime path must be a regular file: {path.name}")
-        if not allow_missing and not path.exists():
-            raise ContextBoundaryError(f"Runtime file is missing: {path.name}")
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        if not allow_missing:
+            raise ContextBoundaryError(f"Runtime file is missing: {path.name}") from None
+        return
     except OSError as exc:
         raise ContextBoundaryError(f"Unable to inspect runtime path {path.name}: {exc}") from exc
+    if stat.S_ISLNK(mode):
+        raise ContextBoundaryError(f"Runtime file must not be a symlink or junction: {path.name}")
+    if not stat.S_ISREG(mode):
+        raise ContextBoundaryError(f"Runtime path must be a regular file: {path.name}")
 
 
 def _utc_now() -> datetime:

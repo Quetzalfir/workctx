@@ -116,6 +116,10 @@ class ViewService:
         timestamp = _normalize_time(self._clock() if generated_at is None else generated_at)
         session = session_id or f"views-rebuild-{secrets.token_hex(8)}"
         with ContextLock.acquire(self._root, session_id=session) as lock:
+            # 04_views is a disposable generated zone: a rebuild after the
+            # whole directory was deleted must recreate it, because the
+            # staging layer refuses to create parent directories itself.
+            (self._root / "04_views").mkdir(exist_ok=True)
             snapshot = self._snapshot(timestamp)
             generated: list[GeneratedView] = []
             for name in names:

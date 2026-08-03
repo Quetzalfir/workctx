@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -60,6 +61,15 @@ def test_all_views_are_deterministic_and_have_verified_generated_headers(
     assert first_bytes == second_bytes
     assert {view.name for view in first.views} == set(ViewName)
     assert first.source_revision == revision
+
+    shutil.rmtree(root / "04_views")
+    recreated = views.rebuild_views()
+    recreated_bytes = {
+        view.path: (root / Path(view.path)).read_bytes() for view in recreated.views
+    }
+
+    assert recreated == first
+    assert recreated_bytes == first_bytes
     expected_header = (
         "---\n"
         "generated_by: workctx.views\n"
