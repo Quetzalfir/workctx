@@ -10,13 +10,12 @@
 
 ## Current wave
 
-Wave 4 CLOSED (2026-08-02): WP-400, WP-410 (1 blocker round, D-041), WP-420, LEAD-W3,
-LEAD-W4, DOCS-R1 all integrated. The doc-04 Phase 1 alpha-minimum CLI is COMPLETE and
-the ADR 0012 MCP surface is fully live (no placeholders remain). Full-cycle E2E
-verified on real APIs: evidence -> observations -> multi-entity transaction ->
-archive -> evidence-backed task -> generated views/brief -> outbox draft, with a
-5-event verified hash chain. Remaining for Phase 1: WP-500 (end-to-end alpha fixture,
-migration tooling, docs polish, packaging/release).
+Wave 5 CLOSED (2026-08-03): WP-510, WP-520, WP-530 and the Wave 5 lead fixes (lock
+guard TOCTOU, 04_views recreation, cli-envelope truthfulness) all integrated. PHASE 1
+IS COMPLETE: every work package from the initial plan (WP-000..WP-530, with WP-500
+split into 510/520/530) is verified and integrated. The 0.1.0-alpha release is
+prepared (docs, release notes, packaging verified by clean-venv install); tagging and
+publishing remain operator decisions.
 
 ## Work-package status
 
@@ -42,7 +41,7 @@ migration tooling, docs polish, packaging/release).
 | WP-420 | verified | WP-230, WP-300, WP-400 | Codex worker | agent/WP-420-drafting-outbox | accepted | Integrated; draft_save live |
 | WP-510 | verified | all Phase 1 | Codex worker | agent/WP-510-migration | accepted | Integrated at 684ef8d; D-042 single_import ledger policy |
 | WP-520 | verified | all Phase 1 | Codex worker | agent/WP-520-acceptance | accepted | Integrated at 4ca2cba; found the 04_views rebuild defect (lead-fixed 62282bf) |
-| WP-530 | in-progress | WP-510 | Claude agent | (claude worktree) | — | Release docs + packaging verification |
+| WP-530 | verified | WP-510 | Claude agent | worktree-agent (captured) | accepted | Integrated at 47283d0; packaging install-test passed |
 
 ## Validation status
 

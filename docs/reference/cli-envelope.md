@@ -116,20 +116,18 @@ their optional positional path for compatibility. Resolution order is:
 1. an explicit `--context PATH` or positional path, with `--context` winning when both are
    present;
 2. the nearest ancestor of the current directory containing `context.yaml`;
-3. the active context in the user-level registry;
-4. a clear context-not-found failure.
+3. a clear context-not-found failure.
 
-WP-120 implements the explicit and ancestor inputs plus the final failure by calling the
-existing ancestor resolver unchanged. It never falls back from an invalid explicit path to
-the current directory. Step 3 is an intentional seam: WP-200 will insert user-registry
-lookup only after ancestor discovery fails and before the final error. WP-120 does not read
-or write a user registry.
+An invalid explicit path never falls back to the current directory. Falling back to the
+active context in the user-level registry, between ancestor discovery and the final
+failure, is an intentional seam reserved for a future release; today the resolver does
+not read the registry.
 
 `context init` resolves and prints its creation target in human mode and returns the same
 absolute target under `result.root` in JSON mode.
 
 ## Validate alias
 
-Per decision D-012, `workctx validate` remains a public alias for
-`workctx context validate`. Both forms return the canonical command identifier
-`context.validate` and use the same result and exit behavior.
+`workctx validate` is a stable public alias for `workctx context validate`. Both forms
+return the canonical command identifier `context.validate` and use the same result and
+exit behavior.
