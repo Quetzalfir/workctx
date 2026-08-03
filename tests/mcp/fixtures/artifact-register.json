@@ -1,0 +1,112 @@
+{
+  "positive": [
+    {
+      "schema_version": 1,
+      "approved": true,
+      "path": "00_inbox/raw/note.txt",
+      "source_type": "note",
+      "origin": null,
+      "event_date": null
+    },
+    {
+      "schema_version": 1,
+      "approved": true,
+      "path": "00_inbox/raw/meeting/transcript.md",
+      "source_type": "transcript",
+      "origin": "fictional://meeting/410",
+      "event_date": "2026-08-02T20:00:00-06:00"
+    }
+  ],
+  "negative": [
+    {
+      "name": "missing path",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "source_type": "note"
+      }
+    },
+    {
+      "name": "missing source type",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/note.txt"
+      }
+    },
+    {
+      "name": "path outside raw inbox",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "01_processed/note.txt",
+        "source_type": "note"
+      }
+    },
+    {
+      "name": "path traversal",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/../note.txt",
+        "source_type": "note"
+      }
+    },
+    {
+      "name": "Windows device path",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/CoN.txt",
+        "source_type": "note"
+      }
+    },
+    {
+      "name": "nonportable colon",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/note:1.txt",
+        "source_type": "note"
+      }
+    },
+    {
+      "name": "trailing space segment",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/note /source.txt",
+        "source_type": "note"
+      }
+    },
+    {
+      "name": "unknown source type",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/note.txt",
+        "source_type": "webhook"
+      }
+    },
+    {
+      "name": "naive event date",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/note.txt",
+        "source_type": "note",
+        "event_date": "2026-08-02T20:00:00"
+      }
+    },
+    {
+      "name": "extra property",
+      "data": {
+        "schema_version": 1,
+        "approved": true,
+        "path": "00_inbox/raw/note.txt",
+        "source_type": "note",
+        "unexpected": true
+      }
+    }
+  ]
+}
