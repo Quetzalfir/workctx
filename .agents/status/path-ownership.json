@@ -1,68 +1,58 @@
 {
   "schema_version": 1,
-  "wave": 5,
-  "baseline_commit": "d406611+fixture-fix",
+  "wave": 6,
+  "baseline_commit": "b4c1d4a (v0.1.0-alpha)",
   "notes": [
-    "Waves 1-4 assignments are historical (Git history + integration log).",
-    "Wave 5: WP-510 || WP-520 in parallel, disjoint; WP-530 launches after WP-510 integrates.",
-    "cli.py: WP-510 only (migrate group). tests/e2e: WP-520 only. Briefs under .agents/plan/2026-08-02_231022-wave5/.",
+    "Waves 1-5 (Phase 1) are historical (Git history + integration log).",
+    "Phase 2 wave 1: WP-600 || WP-610 in parallel, disjoint. Briefs under .agents/plan/2026-08-03_160507-phase2-wave1/.",
+    "WP-610 is surgical: only the four named hot-path files. Everything else frozen for it.",
     "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
   ],
   "frozen_paths": [
-    "src/workctx/** except src/workctx/migration/** and the WP-510 migrate group in cli.py",
+    "src/workctx/** except the WP-600/WP-610 assigned files",
+    "tests/** except tests/tasks_views/** (WP-600) and tests/perf/** (WP-610)",
     "templates/**",
     "schemas/**",
-    "tests/** except tests/migration/** (WP-510) and tests/e2e/** (WP-520)",
+    "docs/** except docs/reference/views.md (WP-600)",
     ".agents/plan/**",
     ".agents/templates/**",
     ".agents/skills/**",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md",
-    "docs/adr/**"
+    "pyproject.toml"
   ],
   "frozen_interfaces": [
-    "All Wave 1-4 public APIs consumed as-is: domain models, services.contexts, validation engine (incl. contains_possible_secret), SQLiteProjection, retrieval, filesystem store/lock/staging/registry, transactions apply/verify_ledger/authenticate_apply_result, ingestion, evidence rails, TaskService, views, drafting, MCP application",
-    "CLI envelope schema and D-015 exit codes are frozen; new commands conform"
+    "All Phase 1 public APIs consumed as-is; WP-610 makes ZERO public-API changes",
+    "ADR 0006 lease-freshness semantics frozen; heartbeat strategy may change only within the configured staleness bound",
+    "ViewName may gain members (WP-600); every other enum and schema frozen"
   ],
   "assignments": [
     {
-      "work_order_id": "WP-510-migration",
+      "work_order_id": "WP-600-phase2-views",
       "mode": "write",
       "paths": [
-        "src/workctx/migration/**",
-        "tests/migration/**",
-        "src/workctx/cli.py (migrate group + lazy import only)",
-        "docs/reference/migration.md",
-        "docs/reference/cli-envelope.md (one command-table row)"
+        "src/workctx/views/**",
+        "tests/tasks_views/**",
+        "docs/reference/views.md"
       ],
-      "branch": "agent/WP-510-migration",
-      "worktree": ".worktrees/WP-510",
+      "branch": "agent/WP-600-phase2-views",
+      "worktree": ".worktrees/WP-600",
       "status": "assigned"
     },
     {
-      "work_order_id": "WP-520-acceptance",
+      "work_order_id": "WP-610-performance",
       "mode": "write",
       "paths": [
-        "tests/e2e/**"
+        "src/workctx/adapters/filesystem/lock.py",
+        "src/workctx/adapters/sqlite/projection.py",
+        "src/workctx/transactions/engine.py",
+        "src/workctx/ingestion/service.py",
+        "tests/perf/**"
       ],
-      "branch": "agent/WP-520-acceptance",
-      "worktree": ".worktrees/WP-520",
+      "branch": "agent/WP-610-performance",
+      "worktree": ".worktrees/WP-610",
       "status": "assigned"
-    },
-    {
-      "work_order_id": "WP-530-release-docs",
-      "mode": "write",
-      "paths": [
-        "README.md",
-        "CHANGELOG.md",
-        "ROADMAP.md",
-        "docs/** except docs/adr/**, docs/reference/migration.md, docs/reference/cli-envelope.md"
-      ],
-      "branch": "agent/WP-530-release-docs",
-      "worktree": "(claude worktree)",
-      "status": "proposed",
-      "note": "Launches after WP-510 integrates."
     }
   ]
 }
