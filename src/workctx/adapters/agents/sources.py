@@ -422,6 +422,25 @@ def _is_implemented_command(reference: str) -> bool:
     return True
 
 
+@cache
+def _implemented_mcp_tool_names() -> frozenset[str]:
+    # Contracts are SDK-independent and are imported lazily so source discovery does
+    # not initialize the MCP application unless a skill names an MCP tool.
+    from workctx.mcp.contracts import TOOL_CONTRACT_BY_NAME
+
+    return frozenset(name.casefold() for name in TOOL_CONTRACT_BY_NAME)
+
+
+def _is_implemented_mcp_tool(reference: str) -> bool:
+    """Recognize ADR 0012 names in prose and client-qualified MCP aliases."""
+
+    quoted = re.search(r"`([^`\n]+)`", reference)
+    candidate = quoted.group(1) if quoted is not None else reference
+    if candidate.casefold().startswith("mcp__"):
+        candidate = candidate.rsplit("__", maxsplit=1)[-1]
+    return candidate.casefold() in _implemented_mcp_tool_names()
+
+
 def _line_product_references(line: str) -> tuple[_ProductReference, ...]:
     candidates = [
         _ProductReference("command", match.group(0), match.start(), match.end())
@@ -456,7 +475,7 @@ def _product_reference_issues(text: str) -> tuple[str, ...]:
                 issues.append(
                     f"unimplemented product command on line {line_number}: {reference.value}"
                 )
-            elif reference.kind == "mcp":
+            elif reference.kind == "mcp" and not _is_implemented_mcp_tool(reference.value):
                 issues.append(f"unimplemented MCP tool on line {line_number}: {reference.value}")
     return tuple(issues)
 

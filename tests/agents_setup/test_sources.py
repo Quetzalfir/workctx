@@ -9,6 +9,7 @@ from workctx.adapters.agents.errors import InvalidAdapterStateError
 from workctx.adapters.agents.manifest import source_set_aggregate_hash
 from workctx.adapters.agents.models import AgentClient, SourceOrigin
 from workctx.adapters.agents.renderers import content_hash
+from workctx.mcp.contracts import TOOL_CONTRACTS
 
 _SKILL_NAME = "fixture-skill"
 _DESCRIPTION = "Use when exercising portable canonical source validation in isolated tests."
@@ -234,6 +235,8 @@ def test_local_source_lint_never_inspects_client_auth_link_target(
         ("Run `workctx agent install` (planned).", True),
         ("Call MCP tool `context_lookup`.", False),
         ("Call MCP tool `context_lookup` (planned).", True),
+        ("Call MCP tool `context_info`.", True),
+        ("Call `mcp__workctx__transaction_apply` MCP tool.", True),
         (
             "Use `workctx agent install` (planned), then `workctx inbox add`.",
             False,
@@ -254,6 +257,35 @@ def test_local_source_lint_requires_unimplemented_product_references_to_be_plann
     else:
         with pytest.raises(InvalidAdapterStateError, match="unimplemented"):
             sources.load_canonical_sources(project, AgentClient.CLAUDE)
+
+
+@pytest.mark.parametrize("tool_name", [contract.name for contract in TOOL_CONTRACTS])
+def test_local_source_lint_allows_every_adr_0012_mcp_tool_name(
+    tmp_path: Path,
+    tool_name: str,
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_local_source(project, f"Call MCP tool `{tool_name}`.")
+
+    sources.load_canonical_sources(project, AgentClient.CLAUDE)
+
+
+def test_local_source_lint_rejects_unknown_client_qualified_mcp_tool(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    _write_local_source(project, "Call `mcp__workctx__unknown_tool` MCP tool.")
+
+    with pytest.raises(InvalidAdapterStateError, match="unimplemented MCP tool"):
+        sources.load_canonical_sources(project, AgentClient.CLAUDE)
+
+
+def test_mcp_tool_allowlist_is_sourced_from_contract_names_and_rejects_unknowns() -> None:
+    names = {contract.name for contract in TOOL_CONTRACTS}
+
+    assert all(sources._is_implemented_mcp_tool(name) for name in names)
+    assert sources._is_implemented_mcp_tool("mcp__workctx__transaction_apply")
+    assert not sources._is_implemented_mcp_tool("mcp__workctx__unknown_tool")
 
 
 def test_packaged_source_lint_resolves_links_inside_packaged_kit(

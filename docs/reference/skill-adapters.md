@@ -1,7 +1,7 @@
 # Skill adapter manifests
 
-This document is the normative adapter-manifest contract for the WP-320 agent installer.
-It defines how canonical skills, instruction bridges, the deferred MCP seam, and retained
+This document is the normative adapter-manifest contract for the agent installer. It defines how
+canonical skills, instruction bridges, project-scoped MCP configuration, and retained
 manifest-listed backups are inventoried and how their drift is detected.
 
 Canonical skill content remains under `.agents/skills/`. A client may consume that content
@@ -10,10 +10,10 @@ source of truth.
 
 Skill-generated files remain under `skills[].generated`. Instruction bridges are separate
 ownership records under `components.instruction_bridge`; they are never represented as skill
-outputs. `components.mcp_configuration` reserves the MCP seam with the sole v1 state
-`not_implemented`. It records neither a path nor a server identity because generation remains
-deferred until the post-WP-330 contract is integrated. Durable backups are separate entries in
-`backups`.
+outputs. `components.mcp_configuration` records state `generated`, `native`, or `divergent`, with
+`not_implemented` retained only for readable legacy manifests. Implemented records commit to the
+exact client-native path and observed bytes without copying configuration content into the
+manifest. Durable backups are separate entries in `backups`.
 
 ## Manifest location
 
@@ -56,7 +56,8 @@ generated content.
 - `adapter_version` is the selected adapter renderer/layout version, not the Work Context OS
   release or the installed client version. WP-320 starts each adapter at version `1` and
   increments it whenever the same canonical input can produce materially different bytes or
-  target paths.
+  target paths. Version `2` adds project-scoped MCP configuration to the version `1` skill and
+  bridge inventory.
 - `generated_at` is an RFC 3339 UTC timestamp using the `Z` designator. Consumers must enable
   JSON Schema format assertion in addition to the schema's UTC pattern. An idempotent install
   that makes no changes preserves both the existing manifest bytes and this timestamp.
@@ -73,7 +74,7 @@ The manifest must validate against
 {
   "schema_version": 1,
   "adapter": "claude",
-  "adapter_version": 1,
+  "adapter_version": 2,
   "scope": "project",
   "generated_at": "2026-07-30T20:00:00Z",
   "registry": {
@@ -109,7 +110,9 @@ The manifest must validate against
       }
     },
     "mcp_configuration": {
-      "state": "not_implemented"
+      "state": "generated",
+      "path": ".mcp.json",
+      "content_hash": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
     }
   },
   "backups": []
@@ -151,10 +154,22 @@ source and target hashes are equal; for user-owned ownership they may differ and
 that divergence without mutation.
 
 The `components` object contains exactly one `instruction_bridge` and exactly one
-`mcp_configuration`. The MCP record is exactly `{ "state": "not_implemented" }`; v1 forbids a
-path, server identity, command, or settings payload. Each backup records `original_path`, its
-durable `path`, exact `content_hash`, and RFC 3339 UTC `created_at`. A backup entry is retained-data
-bookkeeping only; it does not establish ownership or authorize overwrite or deletion.
+`mcp_configuration`. Its states have these meanings:
+
+- `generated` means Work Context created the absent client config and may later replace or delete
+  it only under all three D-032 authority factors;
+- `native` means an existing user-owned config already declares the exact Work Context server
+  command and arguments; it is observed but never rewritten or deleted;
+- `divergent` means an existing or formerly existing user-owned config does not match its recorded
+  native state; status reports the divergence while install, repair, and uninstall preserve it;
+- `not_implemented` is the legacy WP-320 seam record and has no `path` or `content_hash`. Repair
+  upgrades an authenticated legacy installation with the version `2` renderer.
+
+Every other state requires the adapter's exact path and the SHA-256 hash of the observed or
+generated file. The manifest deliberately records no command payload, settings content, or
+credentials. Each backup records `original_path`, its durable `path`, exact `content_hash`, and
+RFC 3339 UTC `created_at`. A backup entry is retained-data bookkeeping only; it does not establish
+ownership or authorize overwrite or deletion.
 
 ADR 0008 alignment fixtures validate positive examples with both Draft 2020-12 JSON Schema and
 the strict Pydantic model. Structural negative fixtures must be rejected by both. Relational
@@ -172,6 +187,11 @@ every exact output path. Backup paths are under
 `.workctx/backups/<YYYYMMDDTHHMMSS[.fraction]Z>/`; the compact UTC directory timestamp must
 correspond to `created_at`.
 
+MCP configuration paths are fixed by adapter: `.codex/config.toml`, `.mcp.json`, and
+`.gemini/settings.json` for Codex, Claude, and Gemini respectively. The generated entry always
+starts `workctx mcp serve --context .` for the project root. Paths in native and divergent records
+remain user-owned even though the manifest records their observed hashes.
+
 Schema validation is necessary but not sufficient. Before reading or changing a target,
 WP-320 must also enforce these semantic checks:
 
@@ -187,8 +207,9 @@ WP-320 must also enforce these semantic checks:
    duplicate keys on every platform, including case-sensitive platforms.
 5. Every generated path belongs to the adapter named by the manifest.
 6. The bridge source and target names map to the adapter; generated bridge hashes match.
-7. Components contain exactly one instruction-bridge record and the exact
-   `not_implemented` MCP record. New producer output includes components and backups.
+7. Components contain exactly one instruction-bridge record and one MCP record. Implemented MCP
+   states require the exact path for the selected adapter and a content hash; `not_implemented`
+   forbids both. New producer output uses an implemented state and includes components and backups.
 8. Each backup path is unique by collision key and its compact directory timestamp corresponds
    to `created_at`.
 9. The derived manifest and transaction-state paths, the fixed registry path, canonical and
@@ -200,12 +221,13 @@ WP-320 must also enforce these semantic checks:
     directories. None use Windows reserved device names or trailing dots or spaces.
 11. The manifest contains no credentials, authentication material, or secret values.
 
-The standard schema structurally enforces entry shapes, exact component multiplicity, MCP state,
-adapter bridge names, and safe path grammars. The Pydantic consumer/producer model mirrors those
-checks and enforces declared-set and cross-field comparisons in rules 1-8 that JSON Schema cannot
-express portably. Source loading additionally proves that a native source set covers the current
-skill-directory inventory. Filesystem rules 9-10 remain operation-time checks. This split follows
-ADR 0011; schema validation alone is never mutation authority.
+The standard schema structurally enforces entry shapes, exact component multiplicity, MCP state
+shapes and adapter paths, adapter bridge names, and safe path grammars. The Pydantic
+consumer/producer model mirrors those checks and enforces declared-set and cross-field comparisons
+in rules 1-8 that JSON Schema cannot express portably. Source loading additionally proves that a
+native source set covers the current skill-directory inventory. Filesystem rules 9-10 remain
+operation-time checks. This split follows ADR 0011; schema validation alone is never mutation
+authority.
 
 Rules 9 and 10 are validity boundaries, not approval-capable conflicts. A symlink, reparse
 point, non-regular target, reserved name, or path-containment failure makes the installation
@@ -318,8 +340,9 @@ Status is derived and never persisted in the manifest. WP-320 must evaluate in t
      below the skill directory and compare the complete sorted set and aggregate with the
      manifest; do not follow links or read credential-capable paths.
 8. Collect every applicable drift reason independently:
-   - `legacy_manifest` when any skill omits `mode` or the manifest omits `components` or
-     `backups`; repair rewrites the complete current producer form;
+   - `legacy_manifest` when any skill omits `mode`, the manifest omits `components` or `backups`,
+     or the MCP component remains `not_implemented`; repair rewrites the complete current producer
+     form;
    - `adapter_version_changed` when the recorded older renderer version is not current;
    - `registry_changed` when a present, valid registry hash differs;
    - `inventory_changed` when valid current registry IDs and manifest skill names differ;
@@ -336,19 +359,23 @@ Status is derived and never persisted in the manifest. WP-320 must evaluate in t
      template to detect ordinary source staleness. A user-owned bridge whose observed hash differs
      from the current source is `bridge_diverged`, an unmanaged warning that never authorizes
      repair;
+   - a generated MCP config uses the same `generated_missing` and `generated_modified`
+     classifications. A `native` or `divergent` config that no longer matches its recorded hash
+     is `mcp_divergent`, a preserved user-owned warning that never authorizes repair;
    - `backup_missing` or `backup_modified` when a manifest-listed durable backup no longer
      matches its record.
 9. If any `generated_modified` or `backup_modified` reason exists, report `conflict`; this
    takes precedence over ordinary staleness. Otherwise, report `stale` when any drift reason
    exists.
-10. Report `current` only when no drift reason exists. Unmanaged-file warnings do not change
-   an otherwise current status. `registry_missing` or `source_missing` blocks install and repair
-   even if the overall read-only status is `conflict` or `stale`; restore valid canonical input
-   before mutation. An authority warning independently sets repair and uninstall to report-only,
-   even when the derived freshness state is otherwise `current`.
+10. Report `current` when no material drift exists. The preserved `bridge_diverged` and
+   `mcp_divergent` warnings do not make an otherwise current adapter stale. `registry_missing` or
+   `source_missing` blocks install and repair even if the overall read-only status is `conflict`
+   or `stale`; restore valid canonical input before mutation. An authority warning independently
+   sets repair and uninstall to report-only, even when the derived freshness state is otherwise
+   `current`.
 
-The required MCP `not_implemented` record is informational and does not make an otherwise
-current manifest stale. `generated_at` is informational and never participates in freshness.
+A legacy MCP `not_implemented` record makes the manifest stale for a version `2` repair.
+`generated_at` is informational and never participates in freshness.
 A missing canonical skill is not deletion authority while its ID remains in the validated registry. A skill
 removed from a valid current registry is instead an intentional desired-inventory change and
 is handled by the repair preflight below.
@@ -434,7 +461,7 @@ so target drift cannot gain overwrite or deletion authority from this metadata-o
 ### Install and repair
 
 1. Validate the current registry and canonical inventory, then compute the complete desired
-   skill/output set and instruction-bridge record using the current renderer version.
+   skill/output set, instruction-bridge record, and MCP config using the current renderer version.
    Select project `.agents/` canonical inputs when present; otherwise use the skill and registry
    mirror in the packaged agent kit. Never fall back from a present but invalid project source.
    Repository synchronization covers skills and `registry.yaml` only; bridge templates are
@@ -444,28 +471,33 @@ so target drift cannot gain overwrite or deletion authority from this metadata-o
    protocol, record `ownership: user-owned`, and never modify it. A user-owned bridge remains
    outside install and repair mutation sets even when it diverges. In a context root this
    preserves the context-template `AGENTS.md` as the base contract.
-3. Stop in report-only mode on any desired path that exists but is not tracked by an authenticated
-   old manifest. A path tracked under another skill is also preserved as a conflict.
-4. A missing desired target may be created under the exclusive-reservation protocol. A tracked
+3. For the selected MCP path, generate the deterministic Work Context entry only when the path is
+   absent and no user-owned MCP record exists. If the path already exists, preserve its exact bytes
+   and record `native` when its `workctx` entry has command `workctx` and arguments
+   `["mcp", "serve", "--context", "."]`; otherwise record `divergent`. Once recorded as
+   user-owned, a missing or changed config is never recreated or rewritten automatically.
+4. Stop in report-only mode on any desired skill path that exists but is not tracked by an
+   authenticated old manifest. A path tracked under another skill is also preserved as a conflict.
+5. A missing desired target may be created under the exclusive-reservation protocol. A tracked
    target may be replaced only when its path is adapter-scoped, its current hash still matches the
    manifest-recorded generated hash, the exact manifest digest matches the stable trusted install
    record, and every just-in-time precondition succeeds.
-5. A tracked target with different bytes is `generated_modified`. Preserve it and return a
+6. A tracked target with different bytes is `generated_modified`. Preserve it and return a
    report-only plan for the whole repair. Neither explicit approval nor a newly created backup may
    substitute for the failed content-hash factor.
-6. A tracked output is obsolete only when its skill is absent from the valid current registry
+7. A tracked output is obsolete only when its skill is absent from the valid current registry
    or the current renderer maps that skill to a different path. Remove it only when its current
    hash matches the authenticated manifest and every just-in-time precondition succeeds. A
-   modified obsolete output is preserved under step 5.
-7. For a path move, stage the new output before removing the matching old output. Stage all
+   modified obsolete output is preserved under step 6.
+8. For a path move, stage the new output before removing the matching old output. Stage all
    bytes, retain transaction-local verified preimages, and apply the authenticated set as one
    rollback-capable operation. On failure, restore the old target set and leave the old manifest
    and stable trusted digest unchanged.
-8. Existing manifest-listed durable backups remain retained-data records. Validate and preserve
+9. Existing manifest-listed durable backups remain retained-data records. Validate and preserve
    them during repair; do not create a durable backup merely to obtain overwrite or deletion
    authority. Transaction-local verified preimages are separate and are removed only after the
    operation resolves safely.
-9. Persist the operation-bound pending trusted transition before the first project mutation.
+10. Persist the operation-bound pending trusted transition before the first project mutation.
    Write or atomically replace the project manifest under the same transaction protocol only
    after every output reaches the desired state, then resolve the trusted record to the verified
    manifest endpoint. A current reinstall performs zero writes and preserves `generated_at` and
@@ -473,8 +505,9 @@ so target drift cannot gain overwrite or deletion authority from this metadata-o
 
 ### Uninstall
 
-1. Preflight every recorded generated skill output, generated instruction bridge, and durable
-   backup against an exact manifest authenticated by the stable user-config install record. A
+1. Preflight every recorded generated skill output, generated instruction bridge, generated MCP
+   config, and durable backup against an exact manifest authenticated by the stable user-config
+   install record. A
    missing output is already removed. A present safe regular file is eligible for deletion only
    when its path is adapter-scoped and its current hash equals its manifest-recorded hash. A
    non-regular or unsafe target makes the state `invalid` and the whole operation performs zero
@@ -482,10 +515,11 @@ so target drift cannot gain overwrite or deletion authority from this metadata-o
 2. If any present target fails its scoped-path or recorded-content factor, or the manifest fails
    trusted-record authentication, return a report-only plan and perform zero writes. Preserve the
    complete installation; approval and backup creation cannot override a failed factor.
-3. Delete only authenticated, preflighted generated files, generated bridges, and exact
-   manifest-listed backup files. Never delete a user-owned instruction bridge, an unmanaged file,
-   canonical native-verified sources, or any directory recursively; leave empty directories in
-   place.
+3. Delete only authenticated, preflighted generated files, generated bridges, generated MCP
+   configs, and exact manifest-listed backup files. Never delete a user-owned instruction bridge,
+   a native or
+   divergent MCP config, an unmanaged file, canonical native-verified sources, or any directory
+   recursively; leave empty directories in place.
 4. Persist a pending trusted transition bound to the exact uninstall operation set. Remove the
    authenticated manifest last under the same project transaction, only after every tracked
    output is absent. Resolve the trusted entry to absent only after the full postimage verifies.

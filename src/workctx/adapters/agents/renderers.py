@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tomllib
 from dataclasses import dataclass
 
 from ._safe_fs import collision_key, validate_relative_path
 from .errors import InvalidAdapterStateError
-from .models import AgentClient
+from .models import AgentClient, McpConfigurationPath
 
-ADAPTER_VERSION = 1
+ADAPTER_VERSION = 2
 
 _CLIENT_ROOTS: dict[AgentClient, str] = {
     AgentClient.CODEX: ".agents/skills",
@@ -23,6 +24,15 @@ _BRIDGE_PATHS: dict[AgentClient, str] = {
     AgentClient.CLAUDE: "CLAUDE.md",
     AgentClient.GEMINI: "GEMINI.md",
 }
+
+_MCP_CONFIGURATION_PATHS: dict[AgentClient, McpConfigurationPath] = {
+    AgentClient.CODEX: ".codex/config.toml",
+    AgentClient.CLAUDE: ".mcp.json",
+    AgentClient.GEMINI: ".gemini/settings.json",
+}
+
+_MCP_SERVER_COMMAND = "workctx"
+_MCP_SERVER_ARGS = ("mcp", "serve", "--context", ".")
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +67,15 @@ class RenderedSkill:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class RenderedMcpConfiguration:
+    """One deterministic project-scoped MCP client configuration."""
+
+    path: McpConfigurationPath
+    target_hash: str
+    content: bytes
+
+
 def content_hash(content: bytes) -> str:
     """Return the manifest's exact-byte SHA-256 representation."""
 
@@ -67,6 +86,65 @@ def bridge_path(client: AgentClient) -> str:
     """Return the client-native project instruction filename."""
 
     return _BRIDGE_PATHS[client]
+
+
+def mcp_configuration_path(client: AgentClient) -> McpConfigurationPath:
+    """Return the client-native project MCP configuration filename."""
+
+    return _MCP_CONFIGURATION_PATHS[client]
+
+
+def render_mcp_configuration(client: AgentClient) -> RenderedMcpConfiguration:
+    """Render the deterministic Work Context stdio server entry for one client."""
+
+    path = mcp_configuration_path(client)
+    if client is AgentClient.CODEX:
+        content = (
+            "[mcp_servers.workctx]\n"
+            f'command = "{_MCP_SERVER_COMMAND}"\n'
+            'args = ["mcp", "serve", "--context", "."]\n'
+        ).encode()
+    else:
+        content = (
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "workctx": {
+                            "command": _MCP_SERVER_COMMAND,
+                            "args": list(_MCP_SERVER_ARGS),
+                        }
+                    }
+                },
+                ensure_ascii=False,
+                indent=2,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+    return RenderedMcpConfiguration(path, content_hash(content), content)
+
+
+def mcp_configuration_is_equivalent(client: AgentClient, content: bytes) -> bool:
+    """Return whether user-owned config already declares the Work Context server."""
+
+    try:
+        text = content.decode("utf-8")
+        if client is AgentClient.CODEX:
+            payload = tomllib.loads(text)
+            servers = payload.get("mcp_servers")
+        else:
+            payload = json.loads(text)
+            servers = payload.get("mcpServers") if isinstance(payload, dict) else None
+    except (UnicodeDecodeError, json.JSONDecodeError, tomllib.TOMLDecodeError):
+        return False
+    if not isinstance(servers, dict):
+        return False
+    server = servers.get("workctx")
+    return (
+        isinstance(server, dict)
+        and server.get("command") == _MCP_SERVER_COMMAND
+        and server.get("args") == list(_MCP_SERVER_ARGS)
+    )
 
 
 def skill_target_path(client: AgentClient, name: str) -> str:

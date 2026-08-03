@@ -92,6 +92,25 @@ def test_changed_user_owned_bridge_skipped_by_plan_aborts_apply(tmp_path: Path) 
     assert not (project / _LOCK_PATH).exists()
 
 
+def test_changed_user_owned_mcp_config_skipped_by_plan_aborts_apply(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    config = project / ".mcp.json"
+    config.write_text('{"mcpServers": {"operator": {"command": "other"}}}\n', encoding="utf-8")
+    service = _service()
+
+    plan = service.plan_install(project, AgentClient.CLAUDE)
+    assert ".mcp.json" not in {change.path for change in plan.changes}
+    config.write_text('{"mcpServers": {"operator": {"command": "revised"}}}\n', encoding="utf-8")
+
+    with pytest.raises(AdapterConflictError, match=r"\.mcp\.json"):
+        service.install(plan)
+
+    assert "revised" in config.read_text(encoding="utf-8")
+    assert not (project / _TARGET_PATH).exists()
+    assert not (project / _MANIFEST_PATH).exists()
+    assert not (project / _LOCK_PATH).exists()
+
+
 def test_changed_managed_target_aborts_noop_apply_under_lock(tmp_path: Path) -> None:
     project = _project(tmp_path)
     require_lock = False
