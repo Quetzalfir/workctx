@@ -149,3 +149,40 @@ invariant (values never in workspace, source control, logs, prompts, reports):
   records the resolver design and its boundaries.
 
 Needs its own work package next wave; not foldable into WP-600/610.
+
+## C-211 addendum — dev ergonomics (operator, 2026-08-03)
+
+Operator wants secrets effortless, including agent-driven registration in dev.
+Adopted scope additions:
+
+- `workctx secret import <.env-file>`: bulk-imports NAME=value pairs into the
+  OS credential store, then offers to shred the file — one command to migrate
+  an existing dev setup;
+- agent-orchestrated registration: the agent runs `workctx secret set NAME`
+  and the VALUE is typed/pasted by the human into the masked interactive
+  prompt, so it never transits chat, transcripts, or agent logs;
+- env-var fallback (`WORKCTX_SECRET_<NAME>`) for throwaway dev shells and CI.
+
+Explicitly REJECTED: plaintext secrets inside the workspace/repo, even
+local-only — it violates the core invariant, local repos get pushed, synced,
+and read whole by agents, and the OS-store path above is equally easy. The
+guide must state this with the import command as the answer.
+
+## C-212 — Usage-driven relevance and decay (operator idea, 2026-08-03)
+
+Extends C-202. The system observes its own read paths (search hits, ref
+resolutions, context-pack inclusions, MCP reads) and manages information
+importance over time:
+
+- promotion: a tier-2 reference consulted/passed repeatedly gets a suggested
+  promotion to tier-1 entity ("referenced 7x this month — promote?");
+- decay: a task or claim losing references and activity gets a suggested
+  degradation (close, archive, supersede) with the inactivity evidence.
+
+Design principles (non-negotiable): usage telemetry is machine-local
+advisory state under 98_state (never canonical, never synced, rebuild-safe
+to delete); the system SUGGESTS via views/brief and every promotion or
+degradation lands as an ordinary approvable transaction — nothing mutates
+silently. Optional per-class auto-approve policy can come later, opt-in.
+Needs real design (what counts as a use, thresholds, anti-noise) — its own
+package, likely after C-202's suggestion pipeline exists.
