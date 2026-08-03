@@ -4,9 +4,37 @@ Work Context OS uses one presentation boundary for machine-readable command resu
 Typer has successfully parsed a command that accepts `--json`, stdout contains exactly one
 JSON object and no decorative text. Human diagnostics are written to stderr.
 
-`workctx version` deliberately remains plain text. The current JSON-capable commands are
-`doctor`, `context init`, `context inspect`, `context validate`, and the retained top-level
-`validate` alias.
+`workctx version` deliberately remains plain text. The current JSON-capable command table is:
+
+| CLI command | Envelope `command` | Primary `result` fields |
+| --- | --- | --- |
+| `doctor` | `doctor` | `checks` |
+| `context init` | `context.init` | `root`, `context` |
+| `context inspect` | `context.inspect` | `root`, `context` |
+| `context validate` | `context.validate` | `root`, `issues` |
+| `validate` | `context.validate` | `root`, `issues` |
+| `index rebuild` | `index.rebuild` | `root`, `trigger`, `counts`, `skipped` |
+| `ref show` | `ref.show` | `resolution` |
+| `ref related` | `ref.related` | `focal`, `depth`, `direction`, `nodes`, `edges` |
+| `ref trace` | `ref.trace` | `focal`, `claims`, `observations`, `missing_observations` |
+| `context-pack` | `context-pack` | `pack` |
+| `proposal validate` | `proposal.validate` | `validation` |
+| `proposal show` | `proposal.show` | `dry_run` |
+| `transaction apply` | `transaction.apply` | `dry_run`, then `preview` or `receipt` |
+| `transaction history` | `transaction.history` | `summary`, `events` |
+| `transaction show` | `transaction.show` | `event` |
+| `search` | `search` | `query`, `count`, `hits` |
+| `task list` | `task.list` | `count`, `tasks` |
+| `task show` | `task.show` | `task` |
+| `agent detect` | `agent.detect` | `clients` |
+| `agent status` | `agent.status` | `statuses` |
+| `agent install` | `agent.install` | `applied`, `plans`, `receipts` |
+| `agent open` | `agent.open` | `session` |
+
+`transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
+are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
+apply reports `dry_run: false` and includes the authenticated transaction receipt. Likewise,
+`agent install` returns the complete plan without changing files unless `--yes` is present.
 
 ## Envelope contract
 
