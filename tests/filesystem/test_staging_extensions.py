@@ -740,6 +740,9 @@ def test_move_permission_error_retry_policy(context_root: Path, persistent: bool
             [StagedMove(source.relative_to(context_root), destination.relative_to(context_root))],
             lock=holder,
         )
+        # D-037 root cause: prepare() itself may retry on real AV/indexer contention
+        # and consume injected sleeps; only apply-phase delays are under test.
+        delays.clear()
         if persistent:
             with pytest.raises(RecoverableReplaceError, match="3 attempts"):
                 stager.apply(intent, lock=holder)
@@ -782,6 +785,9 @@ def test_delete_permission_error_retry_policy(context_root: Path, persistent: bo
             [StagedDelete(target.relative_to(context_root))],
             lock=holder,
         )
+        # D-037 root cause: prepare() itself may retry on real AV/indexer contention
+        # and consume injected sleeps; only apply-phase delays are under test.
+        delays.clear()
         if persistent:
             with pytest.raises(RecoverableReplaceError, match="3 attempts"):
                 stager.apply(intent, lock=holder)
