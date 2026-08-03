@@ -16,8 +16,16 @@
 Post-alpha within Phase 1: incremental projection updates (today the SQLite
 index and generated views are rebuild-only).
 
-## Phase 2 — Local UI
+## Phase 2 — Assistant experience and local UI
 
+- portable personalization: user-level and per-context instruction layers
+  (tone, role, boundaries) merged into every installed agent adapter, so
+  preferences are written once and reach Codex, Claude Code, and Gemini alike;
+- assisted improvement loop: the agent detects quality drift (missing
+  references, stale structure, weak output contracts), files each finding as a
+  reviewable suggestion, and adopted suggestions become versioned local skill
+  or template changes that survive upgrades — engine changes remain ordinary
+  open-source contributions to this repository;
 - context dashboard;
 - drag-and-drop inbox;
 - transaction review queue;
