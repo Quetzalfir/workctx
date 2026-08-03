@@ -109,3 +109,43 @@ one projection refresh. Target: register < 0.5s, small apply < 1.5s.
 
 Single-writer-per-context stays by design — parallelism belongs to read paths
 (already safe) and to the agent layer, not to canonical writes.
+
+## C-209 — Code repositories guide + curation tiering (operator-requested, 2026-08-03)
+
+Two halves, both small:
+
+1. Public guide `docs/guides/code-repositories.md`: the two working modes
+   (referenceable fichas -> on-demand deep dive; active deep review whose
+   conclusions persist), `repo://<id>@<commit>/<path>#L..` locator usage, the
+   one-time `gh auth login` setup, and the investigate-system skill flow.
+2. Explicit THREE-TIER curation rule, added to the curate-knowledge and
+   process-evidence skills and to the guide, answering "does every URL get
+   saved the same way?" — NO:
+   - Tier 1 entity: core repos/systems of the project or team (own ficha,
+     typed relations, appears in the resource directory, accumulates
+     observations);
+   - Tier 2 reference: useful sources that support existing knowledge — a
+     `references` entry or a source ref inside an evidence note; searchable,
+     no entity;
+   - Tier 3 nothing: one-off helpful links; may be mentioned in a note body,
+     never canonicalized.
+   Default when unsure: tier 2, promote to tier 1 only on second real use
+   (mirrors "prefer improving an existing entity over a redundant note").
+
+## C-211 — Secret references, pulled forward from Phase 3 (operator decision, 2026-08-03)
+
+Operator wants the secrets story now. Scope for a first slice, honoring the
+invariant (values never in workspace, source control, logs, prompts, reports):
+
+- `secret-ref` convention: canonical files may name a secret
+  (`secret_ref: github-token`), never hold a value;
+- resolver seam backed by the OS credential store (Windows Credential
+  Manager / macOS Keychain / Secret Service via keyring), with env-var
+  fallback for CI;
+- `workctx secret set|check|list` CLI: `set` prompts interactively and writes
+  ONLY to the OS store; `check` verifies resolvability without printing
+  values; `list` shows names only;
+- validation keeps refusing secret-shaped VALUES everywhere; a mini-ADR
+  records the resolver design and its boundaries.
+
+Needs its own work package next wave; not foldable into WP-600/610.
