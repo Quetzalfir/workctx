@@ -10,12 +10,13 @@
 
 ## Current wave
 
-Wave 5 CLOSED (2026-08-03): WP-510, WP-520, WP-530 and the Wave 5 lead fixes (lock
-guard TOCTOU, 04_views recreation, cli-envelope truthfulness) all integrated. PHASE 1
-IS COMPLETE: every work package from the initial plan (WP-000..WP-530, with WP-500
-split into 510/520/530) is verified and integrated. The 0.1.0-alpha release is
-prepared (docs, release notes, packaging verified by clean-venv install); tagging and
-publishing remain operator decisions.
+Phase 2 wave 1 CLOSED (2026-08-03): WP-600 (resource-directory and status-report
+views, C-203/C-207) and WP-610 (mutation-path performance, C-208) integrated with
+the lead read-API additions (query_entities, read_audit_events). Registration
+dropped from ~4s to ~1.05s (lead-verified); full suite runtime fell ~30%. Released
+earlier the same day: v0.1.0-alpha (tag + GitHub release, private). Next cut
+proposed to the operator: C-211 secrets, C-209 repo guide + curation tiering,
+C-201 personalization layers.
 
 ## Work-package status
 
@@ -42,6 +43,8 @@ publishing remain operator decisions.
 | WP-510 | verified | all Phase 1 | Codex worker | agent/WP-510-migration | accepted | Integrated at 684ef8d; D-042 single_import ledger policy |
 | WP-520 | verified | all Phase 1 | Codex worker | agent/WP-520-acceptance | accepted | Integrated at 4ca2cba; found the 04_views rebuild defect (lead-fixed 62282bf) |
 | WP-530 | verified | WP-510 | Claude agent | worktree-agent (captured) | accepted | Integrated at 47283d0; packaging install-test passed |
+| WP-600 | verified | lead read APIs | Codex worker | agent/WP-600-phase2-views | accepted (1 blocker round) | Integrated; resource-directory + status-report views |
+| WP-610 | verified | — | Codex worker | agent/WP-610-performance | accepted | Integrated at 5f4a9e8; lead re-measured all counts |
 
 ## Validation status
 

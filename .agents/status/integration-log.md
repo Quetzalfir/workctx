@@ -31,3 +31,6 @@
 | 2026-08-03 | LEAD-W5-inbox-ux | lead fix | direct | stray-path inbox add message + CLI test; full gate 1456 | committed ed028a2 | closes the carried Wave 4 note |
 | 2026-08-03 | RELEASE-0.1.0-alpha | tag b4c1d4a | gh release | matrix 6+build green (dispatch 30858233782); wheel+sdist attached | published (private repo) | operator option 1 |
 | 2026-08-03 | LEAD-P2-read-apis | lead addition | direct 04248c1 | query_entities + read_audit_events + 3 tests | committed | unblocked WP-600 same-day |
+| 2026-08-03 | LEAD-P2-view-count-fix | lead fix | in WP-600 branch | migration view-count anchored to ViewName enum | committed c221fa0 | prevents recurrence |
+| 2026-08-03 | WP-600-phase2-views | capture 5b88036 | merge | combined gate 1462; lead reran outside sandbox | accepted+integrated | C-203+C-207 live; 1 blocker round (read APIs) |
+| 2026-08-03 | WP-610-performance | capture | merge 5f4a9e8 | combined gate 1463; lead re-measured 4s->1.05s, 133->9 fsyncns, zero fsync sites removed | accepted+integrated | C-208; suite runtime -30% |
