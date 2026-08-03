@@ -10,13 +10,13 @@
 
 ## Current wave
 
-Wave 3 CLOSED (2026-08-02): WP-201, WP-300, WP-310, WP-320, WP-330 all integrated, plus
-lead batches LEAD-W1 (nine ready-engine CLI commands) and LEAD-W2 (MCP-config seam).
-WP-001 closed: GitHub Quetzalfir/workctx live, full cross-platform matrix green after
-two real portability fixes (sys.platform narrowing; APFS collision-capability skip).
-D-037 flake root-caused and fixed (prepare-phase retry leak into delay assertions).
-Combined gate: 1384 tests, mypy 92 files, coverage 85% (floor 82 per D-039).
-Next per D-040: docs refresh package + Wave 4 contracts (WP-400/410/420), no checkpoint.
+Wave 4 CLOSED (2026-08-02): WP-400, WP-410 (1 blocker round, D-041), WP-420, LEAD-W3,
+LEAD-W4, DOCS-R1 all integrated. The doc-04 Phase 1 alpha-minimum CLI is COMPLETE and
+the ADR 0012 MCP surface is fully live (no placeholders remain). Full-cycle E2E
+verified on real APIs: evidence -> observations -> multi-entity transaction ->
+archive -> evidence-backed task -> generated views/brief -> outbox draft, with a
+5-event verified hash chain. Remaining for Phase 1: WP-500 (end-to-end alpha fixture,
+migration tooling, docs polish, packaging/release).
 
 ## Work-package status
 
@@ -37,7 +37,10 @@ Next per D-040: docs refresh package + Wave 4 contracts (WP-400/410/420), no che
 | WP-310 | verified | WP-200, WP-220, WP-300 | Codex worker | agent/WP-310-inbox-lifecycle-r3 | accepted (2 blocker rounds) | Integrated; D-035/D-036 architecture; receipt-gated archive |
 | WP-320 | verified | WP-120, WP-130 | Codex worker | agent/WP-320-agent-installers-r2 | accepted (3 rounds) | Integrated; D-032 three-factor authority, packaged kit, kit bridges |
 | WP-330 | verified | WP-120, WP-220, WP-230, WP-300 | Codex worker | agent/WP-330-mcp-server | accepted | Integrated; ADR 0012 17-tool surface; combined gate 1298 tests |
-| WP-400..WP-500 | proposed | see backlog | — | — | — | Wave 4+ blocked on Wave 3 |
+| WP-400 | verified | WP-110, WP-210, WP-300 | Codex worker | agent/WP-400-tasks-views | accepted | Integrated; evidence-required task mutations |
+| WP-410 | verified | WP-230, WP-300, WP-310, WP-330 | Codex worker | agent/WP-410-evidence-workflow | accepted (D-041 round) | Integrated; ingestion MCP tools live |
+| WP-420 | verified | WP-230, WP-300, WP-400 | Codex worker | agent/WP-420-drafting-outbox | accepted | Integrated; draft_save live |
+| WP-500 | proposed | all Phase 1 | — | — | — | Final package: e2e fixture, migration, packaging |
 
 ## Validation status
 

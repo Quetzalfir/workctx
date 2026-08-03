@@ -21,3 +21,5 @@
 | 2026-08-02 | WP-410-evidence-workflow | capture | merge | combined 1418; D-041 schema completion | accepted+integrated (1 blocker round) | inbox_list/artifact_register live |
 | 2026-08-02 | LEAD-W3-inbox-cli | capture | merge | targeted 204 | accepted+integrated | 4 commands |
 | 2026-08-02 | DOCS-R1-refresh | capture | merge | docs-only | accepted+integrated | claims inventory closed |
+| 2026-08-02 | LEAD-W4-brief-view-cli | capture | merge | targeted 61 cli | accepted+integrated | doc-04 alpha CLI complete |
+| 2026-08-02 | WP-420-drafting-outbox | capture | merge | branch gate 1436; D-041 draft_save live | accepted+integrated | Wave 4 complete |
