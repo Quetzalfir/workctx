@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
     from workctx.retrieval.records import ResolutionResult
     from workctx.transactions.models import DryRunResult, TransactionDiagnostic
+    from workctx.views import BriefPayload
 
 import typer
 from pydantic import JsonValue, ValidationError
@@ -58,6 +59,8 @@ inbox_app = typer.Typer(help="Register and inspect inbox artifacts.")
 app.add_typer(inbox_app, name="inbox")
 artifact_app = typer.Typer(help="Inspect and verify preserved artifacts.")
 app.add_typer(artifact_app, name="artifact")
+view_app = typer.Typer(help="Rebuild generated operational views.")
+app.add_typer(view_app, name="view")
 index_app = typer.Typer(help="Manage rebuildable derived indexes.")
 app.add_typer(index_app, name="index")
 ref_app = typer.Typer(help="Resolve, traverse, and trace canonical references.")
@@ -717,6 +720,81 @@ def artifact_verify(
         output_console.print(Text(f"{artifact.manifest.id}: content hash matches."))
 
 
+@app.command("brief")
+def brief_command(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Build a read-only structured operational brief."""
+    begin_command("brief", json_output=json_output)
+
+    from workctx.views import brief
+
+    root = resolve_cli_context(explicit_path=context_path)
+    payload = brief(root)
+    result = cast("dict[str, JsonValue]", payload.model_dump(mode="json"))
+    if json_output:
+        emit_success(result=result, context_id=payload.context_id)
+    else:
+        _render_brief_payload(payload)
+
+
+@view_app.command("rebuild")
+def view_rebuild(
+    only: Annotated[
+        str | None,
+        typer.Option("--only", help="Rebuild one named operational view."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Rebuild all generated operational views or one selected view."""
+    begin_command("view.rebuild", json_output=json_output)
+
+    from workctx.views import ViewName, rebuild_view, rebuild_views
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    if only is None:
+        rebuilt = rebuild_views(root)
+    else:
+        try:
+            selected = ViewName(only)
+        except ValueError as exc:
+            choices = ", ".join(view.value for view in ViewName)
+            message = f"View name must be one of: {choices}."
+            record_failure(
+                result={"only": only},
+                context_id=context_id,
+                errors=[CliDiagnostic(code="VIEW_NAME_INVALID", message=message)],
+            )
+            raise UserCorrectableError(message) from exc
+        rebuilt = rebuild_view(root, selected)
+
+    result = cast("dict[str, JsonValue]", rebuilt.model_dump(mode="json"))
+    if json_output:
+        emit_success(result=result, context_id=rebuilt.context_id)
+    else:
+        names = ", ".join(view.name.value for view in rebuilt.views)
+        output_console.print(
+            Text(
+                f"Rebuilt {len(rebuilt.views)} operational view(s) at "
+                f"revision {rebuilt.source_revision}: {names}."
+            ),
+            soft_wrap=True,
+        )
+
+
 @index_app.command("rebuild")
 def index_rebuild(
     path: Annotated[Path | None, typer.Argument(help="Context root or path inside it.")] = None,
@@ -1270,6 +1348,57 @@ def _projection_reader(context_path: Path | None) -> SQLiteProjection:
 
     root = resolve_cli_context(explicit_path=context_path)
     return SQLiteProjection(root)
+
+
+def _render_brief_payload(payload: BriefPayload) -> None:
+    output_console.print(Text(f"Daily brief — {payload.context_id}", style="bold"))
+    output_console.print(Text("Today focus", style="bold"))
+    if payload.today_focus:
+        for task in payload.today_focus:
+            output_console.print(
+                Text(
+                    f"  {task.id} [{task.priority.value}/{task.status.value}] "
+                    f"{task.title} — {task.next_action}"
+                ),
+                soft_wrap=True,
+            )
+    else:
+        output_console.print(Text("  None"))
+
+    output_console.print(Text("Blockers", style="bold"))
+    if payload.blockers:
+        for task in payload.blockers:
+            details = ", ".join(task.blockers) or task.next_action
+            output_console.print(Text(f"  {task.id} — {details}"), soft_wrap=True)
+    else:
+        output_console.print(Text("  None"))
+
+    output_console.print(Text("Waiting on", style="bold"))
+    if payload.waiting_on:
+        for group in payload.waiting_on:
+            task_ids = ", ".join(task.id for task in group.tasks)
+            output_console.print(
+                Text(f"  {group.display_name}: {task_ids}"),
+                soft_wrap=True,
+            )
+    else:
+        output_console.print(Text("  None"))
+
+    output_console.print(Text("Stale claims", style="bold"))
+    if payload.stale_claims:
+        for claim in payload.stale_claims:
+            output_console.print(
+                Text(f"  {claim.id} — {claim.predicate} ({claim.age_days} days old)"),
+                soft_wrap=True,
+            )
+    else:
+        output_console.print(Text("  None"))
+
+    activity = payload.recent_ledger_activity
+    output_console.print(
+        Text(f"Recent ledger: {activity.event_count} event(s); revision {activity.head_revision}."),
+        soft_wrap=True,
+    )
 
 
 def _parse_event_date(value: str | None) -> tuple[datetime | None, bool]:

@@ -17,6 +17,8 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `inbox list` | `inbox.list` | `count`, `artifacts` |
 | `artifact show` | `artifact.show` | `artifact` |
 | `artifact verify` | `artifact.verify` | `verification` |
+| `brief` | `brief` | `schema_version`, `context_id`, `generated_at`, `source_revision`, `today_focus`, `blockers`, `waiting_on`, `stale_claims`, `recent_ledger_activity` |
+| `view rebuild` | `view.rebuild` | `schema_version`, `context_id`, `generated_at`, `source_revision`, `views` |
 | `index rebuild` | `index.rebuild` | `root`, `trigger`, `counts`, `skipped` |
 | `ref show` | `ref.show` | `resolution` |
 | `ref related` | `ref.related` | `focal`, `depth`, `direction`, `nodes`, `edges` |
