@@ -13,6 +13,10 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `context inspect` | `context.inspect` | `root`, `context` |
 | `context validate` | `context.validate` | `root`, `issues` |
 | `validate` | `context.validate` | `root`, `issues` |
+| `inbox add` | `inbox.add` | `count`, `outcomes` |
+| `inbox list` | `inbox.list` | `count`, `artifacts` |
+| `artifact show` | `artifact.show` | `artifact` |
+| `artifact verify` | `artifact.verify` | `verification` |
 | `index rebuild` | `index.rebuild` | `root`, `trigger`, `counts`, `skipped` |
 | `ref show` | `ref.show` | `resolution` |
 | `ref related` | `ref.related` | `focal`, `depth`, `direction`, `nodes`, `edges` |

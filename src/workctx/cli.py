@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Annotated, cast
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
 
     from workctx.adapters.agents import (
         AdapterPlan,
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     )
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
     from workctx.domain.transactions import AuditEvent, TransactionProposal
+    from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
     from workctx.retrieval.records import ResolutionResult
     from workctx.transactions.models import DryRunResult, TransactionDiagnostic
 
@@ -52,6 +54,10 @@ app = typer.Typer(
 )
 context_app = typer.Typer(help="Create, inspect, and validate isolated contexts.")
 app.add_typer(context_app, name="context")
+inbox_app = typer.Typer(help="Register and inspect inbox artifacts.")
+app.add_typer(inbox_app, name="inbox")
+artifact_app = typer.Typer(help="Inspect and verify preserved artifacts.")
+app.add_typer(artifact_app, name="artifact")
 index_app = typer.Typer(help="Manage rebuildable derived indexes.")
 app.add_typer(index_app, name="index")
 ref_app = typer.Typer(help="Resolve, traverse, and trace canonical references.")
@@ -473,6 +479,242 @@ def transaction_show(
         output_console.print(
             Text(f"{event.id}: proposal {event.proposal_id} {event.result} ({event.event_hash})")
         )
+
+
+@inbox_app.command("add")
+def inbox_add(
+    files: Annotated[
+        list[Path],
+        typer.Argument(help="Files already present below the selected context's 00_inbox/raw."),
+    ],
+    source: Annotated[
+        str | None,
+        typer.Option("--source", help="Source type or origin metadata."),
+    ] = None,
+    event_date: Annotated[
+        str | None,
+        typer.Option("--event-date", help="ISO 8601 source event date or timestamp."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Register one or more existing raw artifacts."""
+    begin_command("inbox.add", json_output=json_output)
+
+    from workctx.domain import ArtifactSourceType
+    from workctx.ingestion import (
+        DuplicateArtifactError,
+        IngestionService,
+        RegisterRequest,
+    )
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    service = IngestionService(root)
+    event_at, event_at_inferred = _parse_event_date(event_date)
+    normalized_source = source.strip() if source is not None else None
+    if normalized_source == "":
+        raise UserCorrectableError("Inbox source metadata must not be empty.")
+    source_type = ArtifactSourceType.OTHER
+    if normalized_source is not None:
+        source_type = next(
+            (
+                candidate
+                for candidate in ArtifactSourceType
+                if candidate.value == normalized_source.lower()
+            ),
+            ArtifactSourceType.OTHER,
+        )
+
+    outcomes: list[dict[str, JsonValue]] = []
+    for file in files:
+        relative_path = _raw_artifact_path(root, file)
+        try:
+            request = RegisterRequest(
+                path=relative_path,
+                source_type=source_type,
+                source_origin=normalized_source,
+                event_at=event_at,
+                event_at_inferred=event_at_inferred,
+            )
+        except ValidationError as exc:
+            raise UserCorrectableError("Inbox artifact metadata is invalid.") from exc
+        try:
+            registration = service.register(request)
+        except DuplicateArtifactError as exc:
+            duplicate = _resolve_artifact_record(service, exc.duplicate_of)
+            outcomes.append(
+                {
+                    "path": relative_path,
+                    "outcome": "duplicate",
+                    "disposition": "duplicate_refused",
+                    "artifact_id": duplicate.manifest.id,
+                    "reference": duplicate.reference,
+                    "status": duplicate.manifest.status.value,
+                    "duplicate_of": duplicate.manifest.id,
+                    "diagnostics": [],
+                }
+            )
+            continue
+        outcomes.append(_registration_outcome_payload(relative_path, registration))
+
+    result: dict[str, JsonValue] = {
+        "count": len(outcomes),
+        "outcomes": cast(JsonValue, outcomes),
+    }
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        for outcome in outcomes:
+            output_console.print(
+                Text(f"{outcome['path']}: {outcome['outcome']} ({outcome['artifact_id']})")
+            )
+
+
+@inbox_app.command("list")
+def inbox_list(
+    status: Annotated[
+        str | None,
+        typer.Option("--status", help="Restrict to one artifact status."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List registered artifact manifests in deterministic ID order."""
+    begin_command("inbox.list", json_output=json_output)
+
+    from workctx.domain import ArtifactStatus
+    from workctx.ingestion import IngestionService
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    statuses: frozenset[ArtifactStatus] | None = None
+    if status is not None:
+        try:
+            statuses = frozenset({ArtifactStatus(status)})
+        except ValueError as exc:
+            raise UserCorrectableError("Inbox status is not supported.") from exc
+    listing = IngestionService(root).list_inbox(statuses=statuses)
+    artifacts = [_artifact_payload(artifact) for artifact in listing.artifacts]
+    result: dict[str, JsonValue] = {
+        "count": len(artifacts),
+        "artifacts": cast(JsonValue, artifacts),
+    }
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(Text(f"Found {len(artifacts)} registered artifacts."))
+
+
+@artifact_app.command("show")
+def artifact_show(
+    identifier: Annotated[
+        str,
+        typer.Argument(help="Artifact ID or canonical artifact:// URI."),
+    ],
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Show one registered artifact manifest."""
+    begin_command("artifact.show", json_output=json_output)
+
+    from workctx.ingestion import ArtifactNotFoundError, IngestionService
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    try:
+        artifact = _resolve_artifact_record(IngestionService(root), identifier)
+    except ArtifactNotFoundError:
+        message = "Artifact did not resolve in the selected context."
+        record_failure(
+            result={"identifier": identifier},
+            context_id=context_id,
+            errors=[CliDiagnostic(code="ARTIFACT_NOT_FOUND", message=message)],
+        )
+        raise UserCorrectableError(message) from None
+    result: dict[str, JsonValue] = {"artifact": _artifact_payload(artifact)}
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(
+            Text(
+                f"{artifact.manifest.id} [{artifact.manifest.status.value}]: "
+                f"{artifact.manifest.original_name}"
+            )
+        )
+
+
+@artifact_app.command("verify")
+def artifact_verify(
+    identifier: Annotated[
+        str,
+        typer.Argument(help="Artifact ID or canonical artifact:// URI."),
+    ],
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Stream the preserved artifact and compare its SHA-256 with the manifest."""
+    begin_command("artifact.verify", json_output=json_output)
+
+    from workctx.ingestion import ArtifactNotFoundError, IngestionService
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    try:
+        artifact = _resolve_artifact_record(IngestionService(root), identifier)
+    except ArtifactNotFoundError:
+        message = "Artifact did not resolve in the selected context."
+        record_failure(
+            result={"identifier": identifier},
+            context_id=context_id,
+            errors=[CliDiagnostic(code="ARTIFACT_NOT_FOUND", message=message)],
+        )
+        raise UserCorrectableError(message) from None
+    actual_hash = _stream_artifact_hash(root, artifact)
+    expected_hash = artifact.manifest.content_hash
+    matches = actual_hash == expected_hash
+    result: dict[str, JsonValue] = {
+        "verification": {
+            "artifact_id": artifact.manifest.id,
+            "reference": artifact.reference,
+            "path": artifact.manifest.preserved_path,
+            "expected_hash": expected_hash,
+            "actual_hash": actual_hash,
+            "matches": matches,
+        }
+    }
+    if not matches:
+        message = "Artifact content hash does not match its manifest."
+        record_failure(
+            result=result,
+            context_id=context_id,
+            errors=[CliDiagnostic(code="ARTIFACT_HASH_MISMATCH", message=message)],
+        )
+        raise UserCorrectableError(message)
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(Text(f"{artifact.manifest.id}: content hash matches."))
 
 
 @index_app.command("rebuild")
@@ -1028,6 +1270,137 @@ def _projection_reader(context_path: Path | None) -> SQLiteProjection:
 
     root = resolve_cli_context(explicit_path=context_path)
     return SQLiteProjection(root)
+
+
+def _parse_event_date(value: str | None) -> tuple[datetime | None, bool]:
+    if value is None:
+        return None, False
+
+    from datetime import UTC, date, datetime, time
+
+    normalized = value.strip()
+    if not normalized:
+        raise UserCorrectableError("Event date must not be empty.")
+    try:
+        if len(normalized) == 10:
+            event_date = date.fromisoformat(normalized)
+            return datetime.combine(event_date, time.min, tzinfo=UTC), True
+        timestamp = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise UserCorrectableError("Event date must use ISO 8601 format.") from exc
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise UserCorrectableError("Event timestamps must include a timezone offset.")
+    return timestamp, False
+
+
+def _raw_artifact_path(root: Path, path: Path) -> str:
+    if not path.is_absolute():
+        return path.as_posix()
+    try:
+        return path.resolve(strict=False).relative_to(root.resolve(strict=True)).as_posix()
+    except (OSError, ValueError) as exc:
+        raise UserCorrectableError(
+            "Inbox artifact paths must stay inside the selected context."
+        ) from exc
+
+
+def _resolve_artifact_record(service: IngestionService, identifier: str) -> ArtifactRecord:
+    from workctx.domain import ArtifactId, ArtifactReference
+    from workctx.ingestion import ArtifactNotFoundError
+
+    try:
+        if identifier.startswith("artifact://"):
+            reference = str(ArtifactReference.parse(identifier))
+            matches = tuple(
+                artifact
+                for artifact in service.list_inbox().artifacts
+                if artifact.reference == reference
+            )
+        else:
+            artifact_id = str(ArtifactId.parse(identifier))
+            matches = tuple(
+                artifact
+                for artifact in service.list_inbox().artifacts
+                if artifact.manifest.id == artifact_id
+            )
+    except ValueError as exc:
+        raise UserCorrectableError(
+            "Artifact identity must be an ART ID or canonical artifact:// URI."
+        ) from exc
+    if not matches:
+        raise ArtifactNotFoundError("The requested artifact manifest was not found.")
+    return matches[0]
+
+
+def _artifact_payload(artifact: ArtifactRecord) -> dict[str, JsonValue]:
+    return cast("dict[str, JsonValue]", artifact.model_dump(mode="json"))
+
+
+def _registration_outcome_payload(
+    path: str,
+    registration: RegistrationResult,
+) -> dict[str, JsonValue]:
+    from workctx.ingestion import RegistrationDisposition
+
+    outcome = (
+        "quarantined"
+        if registration.disposition is RegistrationDisposition.QUARANTINED
+        else (
+            "duplicate"
+            if registration.disposition
+            in {
+                RegistrationDisposition.ALREADY_REGISTERED,
+                RegistrationDisposition.DUPLICATE_LINKED,
+            }
+            else "registered"
+        )
+    )
+    manifest = registration.artifact.manifest
+    return {
+        "path": path,
+        "outcome": outcome,
+        "disposition": registration.disposition.value,
+        "artifact_id": manifest.id,
+        "reference": registration.artifact.reference,
+        "status": manifest.status.value,
+        "duplicate_of": manifest.duplicate_of,
+        "diagnostics": [
+            cast("dict[str, JsonValue]", diagnostic.model_dump(mode="json"))
+            for diagnostic in registration.diagnostics
+        ],
+    }
+
+
+def _stream_artifact_hash(root: Path, artifact: ArtifactRecord) -> str:
+    import hashlib
+    from pathlib import PurePosixPath
+
+    from workctx.adapters.filesystem import CanonicalStore, ContextZone
+    from workctx.ingestion import ArtifactReadError
+
+    preserved_path = PurePosixPath(artifact.manifest.preserved_path).as_posix()
+    if not any(
+        preserved_path.startswith(f"{prefix}/")
+        for prefix in ("00_inbox/raw", "00_inbox/quarantine", "01_processed")
+    ):
+        raise ArtifactReadError()
+    path = CanonicalStore(root).resolve_path(
+        preserved_path,
+        zones=(ContextZone.INBOX, ContextZone.PROCESSED),
+    )
+    if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
+        raise ArtifactReadError()
+    if not path.is_file():
+        raise ArtifactReadError()
+
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as exc:
+        raise ArtifactReadError() from exc
+    return f"sha256:{digest.hexdigest()}"
 
 
 def _retrieval_call[T](operation: Callable[[], T]) -> T:
