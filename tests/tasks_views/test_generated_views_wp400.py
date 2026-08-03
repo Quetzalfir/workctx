@@ -64,9 +64,7 @@ def test_all_views_are_deterministic_and_have_verified_generated_headers(
 
     shutil.rmtree(root / "04_views")
     recreated = views.rebuild_views()
-    recreated_bytes = {
-        view.path: (root / Path(view.path)).read_bytes() for view in recreated.views
-    }
+    recreated_bytes = {view.path: (root / Path(view.path)).read_bytes() for view in recreated.views}
 
     assert recreated == first
     assert recreated_bytes == first_bytes
