@@ -29,3 +29,5 @@
 | 2026-08-03 | WP-530-release-docs | capture | merge 47283d0 | agent gate 1455 tests + packaging install-test; lead vocab sweep clean | accepted+integrated | Wave 5 complete |
 | 2026-08-03 | LEAD-W5-cli-envelope | lead fix | direct | context-resolution truth + alias wording in cli-envelope.md | committed with close | file was read-only for WP-530 |
 | 2026-08-03 | LEAD-W5-inbox-ux | lead fix | direct | stray-path inbox add message + CLI test; full gate 1456 | committed ed028a2 | closes the carried Wave 4 note |
+| 2026-08-03 | RELEASE-0.1.0-alpha | tag b4c1d4a | gh release | matrix 6+build green (dispatch 30858233782); wheel+sdist attached | published (private repo) | operator option 1 |
+| 2026-08-03 | LEAD-P2-read-apis | lead addition | direct 04248c1 | query_entities + read_audit_events + 3 tests | committed | unblocked WP-600 same-day |
