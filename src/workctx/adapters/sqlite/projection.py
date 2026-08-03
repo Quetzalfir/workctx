@@ -327,6 +327,36 @@ class SQLiteProjection:
         except sqlite3.Error as exc:
             raise ProjectionQueryError("Alias lookup failed") from exc
 
+    def query_entities(
+        self,
+        *,
+        entity_types: frozenset[EntityType] | None = None,
+    ) -> tuple[EntityRecord, ...]:
+        """Return entities, optionally filtered by type, ordered by (entity_type, id)."""
+
+        if entity_types is not None and not entity_types:
+            return ()
+        parameters: list[object] = [self._context_id]
+        type_clause = ""
+        if entity_types is not None:
+            values = sorted(entity_type.value for entity_type in entity_types)
+            type_clause = f" AND entity_type IN ({_placeholders(len(values))})"
+            parameters.extend(values)
+        self.ensure_ready()
+        try:
+            with self._reader_connection() as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT * FROM entities
+                    WHERE context_id = ?{type_clause}
+                    ORDER BY entity_type, id
+                    """,
+                    parameters,
+                ).fetchall()
+                return tuple(self._entity_record(connection, row) for row in rows)
+        except sqlite3.Error as exc:
+            raise ProjectionQueryError("Entity query failed") from exc
+
     def get_document_by_uri(
         self, uri: str | WorkctxUri
     ) -> EntityRecord | TaskRecord | ClaimRecord | ObservationRecord | None:

@@ -97,6 +97,33 @@ def audit_summary(context_root: Path) -> AuditSummary:
     )
 
 
+def read_audit_events(
+    context_root: Path,
+    *,
+    since: datetime | None = None,
+    through: datetime | None = None,
+) -> tuple[AuditEvent, ...]:
+    """Return chronological events after full-ledger verification, optionally bounded.
+
+    Bounds are inclusive and compare against each event's timestamp; both must be
+    timezone-aware when provided.
+    """
+
+    for name, bound in (("since", since), ("through", through)):
+        if bound is not None and (bound.tzinfo is None or bound.utcoffset() is None):
+            raise ValueError(f"{name} must be timezone-aware")
+    if since is not None and through is not None and since > through:
+        raise ValueError("since must not be later than through")
+    store = CanonicalStore(context_root)
+    events = _read_verified_events(store)
+    return tuple(
+        event
+        for event in events
+        if (since is None or event.timestamp >= since)
+        and (through is None or event.timestamp <= through)
+    )
+
+
 def find_event_by_proposal_id(context_root: Path, proposal_id: str) -> AuditEvent | None:
     """Return the unique event for a proposal after full-ledger verification."""
 
