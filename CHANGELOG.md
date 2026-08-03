@@ -2,7 +2,7 @@
 
 All notable changes will be documented here.
 
-## 0.1.0-alpha - UNRELEASED
+## 0.1.0-alpha - 2026-08-03
 
 First alpha: the complete Phase 1 scope (CLI and durable core). See
 [`docs/releases/0.1.0-alpha.md`](docs/releases/0.1.0-alpha.md) for details,
