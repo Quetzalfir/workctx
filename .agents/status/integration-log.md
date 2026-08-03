@@ -28,3 +28,4 @@
 | 2026-08-03 | WP-510-migration | capture 8f1cc7c | merge 684ef8d | worktree gate 1449 tests; lead reran outside sandbox | accepted+integrated | D-042 single_import; ledger seam kept |
 | 2026-08-03 | WP-530-release-docs | capture | merge 47283d0 | agent gate 1455 tests + packaging install-test; lead vocab sweep clean | accepted+integrated | Wave 5 complete |
 | 2026-08-03 | LEAD-W5-cli-envelope | lead fix | direct | context-resolution truth + alias wording in cli-envelope.md | committed with close | file was read-only for WP-530 |
+| 2026-08-03 | LEAD-W5-inbox-ux | lead fix | direct | stray-path inbox add message + CLI test; full gate 1456 | committed ed028a2 | closes the carried Wave 4 note |
