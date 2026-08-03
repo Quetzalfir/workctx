@@ -6,9 +6,14 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from workctx.validation.engine import contains_possible_secret
 from workctx.views.models import (
     BriefPayload,
+    ResourceAccess,
+    ResourceDirectoryPayload,
+    ResourceLinkItem,
     StaleClaimItem,
+    StatusReportPayload,
     TaskViewItem,
     ViewName,
     WaitingOnGroup,
@@ -22,6 +27,8 @@ def render_view(
     payload: BriefPayload,
     *,
     next_actions: Sequence[TaskViewItem],
+    resource_directory: ResourceDirectoryPayload,
+    status_report: StatusReportPayload,
 ) -> bytes:
     """Render one generated file from an already consistent structured snapshot."""
 
@@ -31,6 +38,8 @@ def render_view(
         ViewName.WAITING_ON: _waiting_on(payload.waiting_on),
         ViewName.STALE_KNOWLEDGE: _stale_knowledge(payload.stale_claims),
         ViewName.BRIEF: _brief(payload),
+        ViewName.RESOURCE_DIRECTORY: _resource_directory(resource_directory),
+        ViewName.STATUS_REPORT: _status_report(status_report),
     }
     content = _header(payload) + sections[name]
     return content.encode("utf-8")
@@ -183,6 +192,162 @@ def _brief(payload: BriefPayload) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _resource_directory(payload: ResourceDirectoryPayload) -> str:
+    lines: list[str] = []
+    excluded: set[str] = set()
+    _append_resource_line(lines, "# Resource directory", excluded=excluded)
+    _append_resource_line(lines, "", excluded=excluded)
+    if not payload.resources:
+        _append_resource_line(lines, "_No resources._", excluded=excluded)
+        return "\n".join(lines) + "\n"
+
+    labels = {
+        ResourceAccess.PUBLIC: "Public",
+        ResourceAccess.SSO: "SSO",
+        ResourceAccess.VPN: "VPN",
+        ResourceAccess.OTHER: "Other",
+        ResourceAccess.UNGROUPED: "Ungrouped",
+    }
+    for access in ResourceAccess:
+        resources = tuple(item for item in payload.resources if item.access is access)
+        if not resources:
+            continue
+        _append_resource_line(lines, f"## {labels[access]}", excluded=excluded)
+        _append_resource_line(lines, "", excluded=excluded)
+        _append_resource_line(
+            lines,
+            "| Resource | Link(s) | Description | Entity URI |",
+            excluded=excluded,
+        )
+        _append_resource_line(
+            lines,
+            "| --- | --- | --- | --- |",
+            excluded=excluded,
+        )
+        rendered = 0
+        for resource in resources:
+            links = "<br>".join(_resource_link(link) for link in resource.links) or "—"
+            row = (
+                "| "
+                + " | ".join(
+                    (
+                        _cell(resource.title),
+                        links,
+                        _cell(resource.description or "—"),
+                        f"`{_cell(resource.uri)}`",
+                    )
+                )
+                + " |"
+            )
+            if _append_resource_line(
+                lines,
+                row,
+                excluded=excluded,
+                entity_id=resource.id,
+            ):
+                rendered += 1
+        if rendered == 0:
+            _append_resource_line(
+                lines,
+                "| _No renderable resources._ | — | — | — |",
+                excluded=excluded,
+            )
+        _append_resource_line(lines, "", excluded=excluded)
+
+    if excluded:
+        _append_resource_line(lines, "## Exclusions", excluded=excluded)
+        _append_resource_line(lines, "", excluded=excluded)
+        for entity_id in sorted(excluded):
+            _append_resource_line(
+                lines,
+                f"- `{_inline(entity_id)}`: excluded: possible secret",
+                excluded=excluded,
+                entity_id=entity_id,
+            )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _status_report(payload: StatusReportPayload) -> str:
+    lines = [
+        "# Status report",
+        "",
+        f"Period: {_timestamp(payload.period_start)} to {_timestamp(payload.period_end)}",
+        "",
+        "## Completed",
+        "",
+    ]
+    if payload.completed:
+        lines.extend(
+            f"- {_record_link(item.id, item.title, item.uri)} reached done on "
+            f"{_timestamp(item.completed_at)}."
+            for item in payload.completed
+        )
+    else:
+        lines.append("_No tasks reached done in this period._")
+
+    lines.extend(("", "## Moved", ""))
+    if payload.moved:
+        lines.extend(
+            f"- {_record_link(item.id, item.title, item.uri)} moved from "
+            f"{item.from_status.value} to {item.to_status.value} on "
+            f"{_timestamp(item.moved_at)}."
+            for item in payload.moved
+        )
+    else:
+        lines.append("_No task status transitions in this period._")
+
+    lines.extend(("", "## Blocked and waiting", ""))
+    if payload.blocked_waiting:
+        lines.extend(
+            f"- {_record_link(item.id, item.title, item.uri)} has been "
+            f"{item.status.value} for {item.age_days} days since {_timestamp(item.since)}; "
+            f"next action: {_inline(item.next_action)}"
+            for item in payload.blocked_waiting
+        )
+    else:
+        lines.append("_No tasks are currently blocked or waiting._")
+
+    lines.extend(("", "## New commitments", ""))
+    if payload.new_commitments:
+        lines.extend(
+            f"- {_record_link(item.id, item.title, item.uri)} was created on "
+            f"{_timestamp(item.created_at)} and is due {_timestamp(item.due_at)}."
+            for item in payload.new_commitments
+        )
+    else:
+        lines.append("_No tasks with due dates were created in this period._")
+
+    lines.extend(("", "## Evidence processed", ""))
+    if payload.evidence_processed:
+        lines.extend(
+            f"- {_record_link(item.id, item.original_name, item.uri)} was archived on "
+            f"{_timestamp(item.archived_at)}."
+            for item in payload.evidence_processed
+        )
+    else:
+        lines.append("_No evidence artifacts were archived in this period._")
+    return "\n".join(lines) + "\n"
+
+
+def _append_resource_line(
+    lines: list[str],
+    line: str,
+    *,
+    excluded: set[str],
+    entity_id: str | None = None,
+) -> bool:
+    if contains_possible_secret(line):
+        if entity_id is not None:
+            excluded.add(entity_id)
+        return False
+    lines.append(line)
+    return True
+
+
+def _resource_link(link: ResourceLinkItem) -> str:
+    return f"[{_cell(link.label or link.url)}]({_inline(link.url)})"
+
+
 def _task_bullets(tasks: Sequence[TaskViewItem], empty: str) -> list[str]:
     if not tasks:
         return [f"_{empty}_"]
@@ -194,7 +359,11 @@ def _task_bullets(tasks: Sequence[TaskViewItem], empty: str) -> list[str]:
 
 
 def _task_link(task: TaskViewItem) -> str:
-    return f"[{_cell(task.id)} — {_cell(task.title)}]({_inline(task.uri)})"
+    return _record_link(task.id, task.title, task.uri)
+
+
+def _record_link(record_id: str, title: str, uri: str) -> str:
+    return f"[{_cell(record_id)} — {_cell(title)}]({_inline(uri)})"
 
 
 def _cell(value: str) -> str:

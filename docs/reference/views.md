@@ -1,8 +1,9 @@
 # Generated operational views and daily brief
 
 Operational views are rebuildable Markdown projections under `04_views/`. They summarize
-canonical tasks, task-subject claims, people referenced by waiting-on fields, and verified audit
-metadata. They are never canonical input and must not be edited as a competing source of truth.
+canonical tasks, task-subject claims, operational resources, processed artifacts, people
+referenced by waiting-on fields, and verified audit activity. They are never canonical input and
+must not be edited as a competing source of truth.
 
 ## Public API
 
@@ -39,8 +40,9 @@ normalized to UTC whole seconds. `generated_by` distinguishes derived files from
 Markdown. Workspace validation excludes the complete `04_views` zone from canonical-document
 validation; the header is still present so humans and downstream tools can identify provenance.
 
-For the same projected task/claim state, verified ledger state, stale threshold, and generation
-timestamp, rendering is byte-identical. Rebuilds use LF newlines and UTF-8 without a BOM.
+For the same projected entity/task/claim state, canonical resource and artifact metadata,
+verified ledger state, stale threshold, and generation timestamp, rendering is byte-identical.
+Rebuilds use LF newlines and UTF-8 without a BOM.
 
 ## Files
 
@@ -51,13 +53,48 @@ timestamp, rendering is byte-identical. Rebuilds use LF newlines and UTF-8 witho
 | `04_views/waiting-on.md` | Tasks grouped by waiting-on value; local person URIs are resolved through the retrieval API to display names. |
 | `04_views/stale-knowledge.md` | Current task-subject claims whose `observed_at` age meets the configured stale threshold. |
 | `04_views/brief.md` | Human-readable rendering of the structured daily-brief payload. |
+| `04_views/resource-directory.md` | System, service, and integration entities grouped by public, SSO, VPN, other, and ungrouped access. |
+| `04_views/status-report.md` | Factual seven-day task, commitment, blocker/waiting, and processed-evidence activity suitable for a manager update. |
 
-The Phase 1 frozen SQLite API exposes claim history by subject rather than a global claim scan.
-Accordingly, the stale-knowledge view covers claims attached to projected tasks, which is the
-views engine's operational scope. It never scans canonical Markdown or issues raw SQL. Task and claim
-data comes from typed `SQLiteProjection` queries, and waiting-on identity resolution uses
-`workctx.retrieval.resolve`. Verified ledger summary APIs supply only the revision and recent
-activity metadata.
+The resource directory reads the eligible entity set from `SQLiteProjection.query_entities`, then
+loads each source document through `CanonicalStore`. Typed `references` are ungrouped links. The
+optional `access_urls` extra frontmatter field accepts URL strings or mappings with `url`, optional
+`label`, and optional `access`. Recognized access values are `public`, `sso`, `vpn`, and `other`;
+other non-empty values join the `other` group, while missing access values are ungrouped. An
+explicit `access_urls` entry supplies the access group for a duplicate typed-reference target.
+Entities without links still appear in the ungrouped table. Within each group, resources are
+ordered by case-insensitive title and stable ID, and the ungrouped table is last.
+
+Every resource-directory line is checked with `contains_possible_secret` before emission. A
+flagged entity row is omitted. The view adds one `excluded: possible secret` note per affected
+entity, and that note identifies only the entity ID; the rejected title, description, URL, and URI
+are not copied into the note.
+
+The status-report period is the inclusive interval from seven days before the injected generation
+clock through the generation timestamp. Its sections are:
+
+- **Completed:** currently done task records whose current status claim began in the period, with
+  task `updated_at` as the fallback for claim-free authored tasks;
+- **Moved:** status claims created by committed audit events in the period and linked to their
+  superseded status claims;
+- **Blocked and waiting:** currently blocked or waiting tasks, with age measured from the current
+  status claim and task `updated_at` as the fallback for claim-free authored tasks;
+- **New commitments:** tasks created in the period that carry a due timestamp;
+- **Evidence processed:** currently processed artifact manifests whose archive update audit event
+  falls in the period.
+
+Each rendered item carries its task `workctx://` URI or artifact `artifact://` URI. Empty sections
+use an explicit factual `_No ..._` message. The renderer does not infer narrative, completion
+percentages, or unstored progress.
+
+The SQLite API exposes claim history by subject rather than a global claim scan. Accordingly, the
+stale-knowledge and status-report views inspect claims attached to projected tasks, which is the
+views engine's operational scope. The views engine never issues raw SQL. Entity, task, and claim
+data comes from typed `SQLiteProjection` queries; waiting-on identity resolution uses
+`workctx.retrieval.resolve`; resource documents use `CanonicalStore`; and processed artifacts use
+the ingestion listing API. Verified ledger summary APIs supply the source revision and brief
+metadata, while `read_audit_events` supplies chain-verified chronological events for the status
+report.
 
 View writes go directly to `04_views` under the context lock and use an atomic single-file
 replacement. They do not create transaction proposals or audit events because views are derived
