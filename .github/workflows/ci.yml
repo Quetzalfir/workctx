@@ -1,8 +1,14 @@
 name: CI
 
+# Local-first policy (operator decision, 2026-08-02): the authoritative gate runs
+# locally; Actions exists for cross-platform validation. To save minutes, every push
+# runs one quick Linux job; the full 3-OS x 2-Python matrix and the build job run only
+# on manual dispatch or when the commit message contains [full-ci].
+
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,7 +18,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quick:
+    if: ${{ !contains(github.event.head_commit.message, '[full-ci]') && github.event_name != 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked --all-groups --extra mcp
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src
+      - run: uv run pytest --cov=workctx --cov-report=term-missing
+
   quality:
+    if: ${{ contains(github.event.head_commit.message, '[full-ci]') || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +54,7 @@ jobs:
       - run: uv run pytest --cov=workctx --cov-report=term-missing
 
   build:
+    if: ${{ contains(github.event.head_commit.message, '[full-ci]') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

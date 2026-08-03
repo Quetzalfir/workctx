@@ -32,6 +32,12 @@ dependencies = [
   "typer>=0.15,<1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Quetzalfir/workctx"
+Repository = "https://github.com/Quetzalfir/workctx"
+Issues = "https://github.com/Quetzalfir/workctx/issues"
+Changelog = "https://github.com/Quetzalfir/workctx/blob/master/CHANGELOG.md"
+
 [project.optional-dependencies]
 mcp = ["mcp[cli]>=2,<3"]
 
