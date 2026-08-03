@@ -79,3 +79,33 @@ Operator asked for it during Phase 1 close: consolidated views from a company
 context across its sibling project contexts. Registered so it stops being an
 orphaned conversation item, but it crosses the context security boundary and
 belongs with Phase 4 shared-context design, not Phase 2.
+
+## C-208 — Mutation-path performance pass (measured 2026-08-03)
+
+Operator reported slow first-evidence processing. Lead profiled on Windows 11
+(NTFS + Defender). Facts, per single small-file registration (~4s fixed cost,
+nearly size-independent: 10 lines vs 5 MB differ by 0.6s):
+
+- 1,232 file opens (0.89s) — repeated re-opening of locks, snapshots, and
+  canonical files within one operation;
+- 30 SQLite `executescript` schema initializations (0.64s) — a fresh
+  connection + schema per internal query instead of one per operation;
+- 8,618 `Path.resolve` final-path calls (0.56s) and 8,679 stats (0.33s) —
+  boundary checks re-resolve the same roots thousands of times;
+- 133 fsyncs (0.38s) — the only cost that is durability by design;
+- YAML re-parsing of canonical files several times per apply (~0.5s);
+- lock heartbeat ~40ms per write, 2 sync writes per engine step (16 steps).
+
+Bulk apply measured at 9.5s for 150 entities (~64ms/entity); FTS search 8ms;
+view rebuild 0.19s; ledger verify 8ms — read paths are healthy, the ceremony
+around mutations is not. Raw disk is innocent (write+replace 0.9ms).
+
+Directions (correctness-preserving, no ADR changes expected): one SQLite
+connection with schema-once per operation; resolve the context root once per
+locked operation and join relative paths without re-resolving; cache canonical
+reads within a single apply; heartbeat piggybacking (write only when lease age
+exceeds half the interval); amortize multi-file `inbox add` under one lock and
+one projection refresh. Target: register < 0.5s, small apply < 1.5s.
+
+Single-writer-per-context stays by design — parallelism belongs to read paths
+(already safe) and to the agent layer, not to canonical writes.
