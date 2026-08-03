@@ -231,14 +231,17 @@ def test_local_source_lint_never_inspects_client_auth_link_target(
         ("Run `workctx version`.", True),
         ("Run `workctx context validate --json`.", True),
         ("Run `workctx context validate --repair`.", False),
-        ("Run `workctx brief`.", False),
-        ("Run `workctx brief` (planned).", True),
+        # `workctx secrets export` is the evergreen unimplemented fixture: the
+        # product invariant forbidding stored secret values guarantees this
+        # command can never become real, unlike past fixtures that went live.
+        ("Run `workctx secrets export`.", False),
+        ("Run `workctx secrets export` (planned).", True),
         ("Call MCP tool `context_lookup`.", False),
         ("Call MCP tool `context_lookup` (planned).", True),
         ("Call MCP tool `context_info`.", True),
         ("Call `mcp__workctx__transaction_apply` MCP tool.", True),
         (
-            "Use `workctx agent install` (planned), then `workctx context migrate`.",
+            "Use `workctx version` (planned), then `workctx secrets export`.",
             False,
         ),
     ),

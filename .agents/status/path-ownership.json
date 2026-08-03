@@ -1,25 +1,18 @@
 {
   "schema_version": 1,
-  "wave": 4,
-  "baseline_commit": "2a3bbcd",
+  "wave": 5,
+  "baseline_commit": "d406611+fixture-fix",
   "notes": [
-    "Waves 1-3 assignments are historical (Git history + integration log).",
-    "Wave 4: WP-400 || WP-410 || LEAD-W3 || DOCS-R1 in parallel, disjoint; WP-420 launches after WP-400 integrates.",
-    "cli.py: LEAD-W3 only. mcp/application.py: WP-410 only (inbox_list/artifact_register placeholders). Briefs under .agents/plan/2026-08-02_195036-wave4/.",
+    "Waves 1-4 assignments are historical (Git history + integration log).",
+    "Wave 5: WP-510 || WP-520 in parallel, disjoint; WP-530 launches after WP-510 integrates.",
+    "cli.py: WP-510 only (migrate group). tests/e2e: WP-520 only. Briefs under .agents/plan/2026-08-02_231022-wave5/.",
     "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
   ],
   "frozen_paths": [
-    "src/workctx/adapters/__init__.py",
-    "src/workctx/adapters/sqlite/**",
-    "src/workctx/domain/** (except WP-300's new transactions.py)",
-    "src/workctx/models/**",
-    "src/workctx/presentation/**",
-    "src/workctx/retrieval/**",
-    "src/workctx/services/**",
-    "src/workctx/validation/**",
-    "src/workctx/resources/**",
+    "src/workctx/** except src/workctx/migration/** and the WP-510 migrate group in cli.py",
     "templates/**",
-    "schemas/** (except WP-300's transaction-proposal and audit-event)",
+    "schemas/**",
+    "tests/** except tests/migration/** (WP-510) and tests/e2e/** (WP-520)",
     ".agents/plan/**",
     ".agents/templates/**",
     ".agents/skills/**",
@@ -29,77 +22,47 @@
     "docs/adr/**"
   ],
   "frozen_interfaces": [
-    "All Wave 1/2 public APIs consumed as-is: WorkctxUri, services.contexts four functions, validate_workspace + report fields, SQLiteProjection queries/rebuild/readiness_trigger, retrieval resolve/related/trace/build_pack, filesystem store/lock/staging/registry",
-    "WP-300's apply result object becomes a frozen interface for WP-310/WP-330 at its integration (committed revision, applied targets, ledger event id/hash, projection status)"
+    "All Wave 1-4 public APIs consumed as-is: domain models, services.contexts, validation engine (incl. contains_possible_secret), SQLiteProjection, retrieval, filesystem store/lock/staging/registry, transactions apply/verify_ledger/authenticate_apply_result, ingestion, evidence rails, TaskService, views, drafting, MCP application",
+    "CLI envelope schema and D-015 exit codes are frozen; new commands conform"
   ],
   "assignments": [
     {
-      "work_order_id": "WP-400-tasks-views",
+      "work_order_id": "WP-510-migration",
       "mode": "write",
       "paths": [
-        "src/workctx/tasks/**",
-        "src/workctx/views/**",
-        "tests/tasks_views/**",
-        "docs/reference/views.md"
+        "src/workctx/migration/**",
+        "tests/migration/**",
+        "src/workctx/cli.py (migrate group + lazy import only)",
+        "docs/reference/migration.md",
+        "docs/reference/cli-envelope.md (one command-table row)"
       ],
-      "branch": "agent/WP-400-tasks-views",
-      "worktree": ".worktrees/WP-400",
+      "branch": "agent/WP-510-migration",
+      "worktree": ".worktrees/WP-510",
       "status": "assigned"
     },
     {
-      "work_order_id": "WP-410-evidence-workflow",
+      "work_order_id": "WP-520-acceptance",
       "mode": "write",
       "paths": [
-        "src/workctx/evidence/**",
-        "src/workctx/mcp/application.py (inbox_list/artifact_register only)",
-        "tests/evidence/**",
-        "tests/mcp/test_ingestion_tools.py",
-        "docs/reference/evidence-workflow.md"
+        "tests/e2e/**"
       ],
-      "branch": "agent/WP-410-evidence-workflow",
-      "worktree": ".worktrees/WP-410",
+      "branch": "agent/WP-520-acceptance",
+      "worktree": ".worktrees/WP-520",
       "status": "assigned"
     },
     {
-      "work_order_id": "LEAD-W3-inbox-cli",
-      "mode": "write",
-      "paths": [
-        "src/workctx/cli.py",
-        "tests/cli/test_inbox_cli.py",
-        "docs/reference/cli-envelope.md"
-      ],
-      "branch": "lead/inbox-cli",
-      "worktree": ".worktrees/LEAD-W3-inbox-cli",
-      "status": "assigned"
-    },
-    {
-      "work_order_id": "DOCS-R1-refresh",
+      "work_order_id": "WP-530-release-docs",
       "mode": "write",
       "paths": [
         "README.md",
         "CHANGELOG.md",
         "ROADMAP.md",
-        "docs/concepts.md",
-        "docs/guides/**",
-        "docs/reference/canonical-store.md",
-        "docs/reference/projections.md",
-        "docs/reference/agent-adapters.md",
-        "docs/reference/skill-adapters.md"
+        "docs/** except docs/adr/**, docs/reference/migration.md, docs/reference/cli-envelope.md"
       ],
-      "branch": "(claude worktree)",
+      "branch": "agent/WP-530-release-docs",
       "worktree": "(claude worktree)",
-      "status": "assigned"
-    },
-    {
-      "work_order_id": "WP-420-drafting-outbox",
-      "mode": "write",
-      "paths": [
-        "src/workctx/drafting/** (planned)"
-      ],
-      "branch": "agent/WP-420-drafting-outbox",
-      "worktree": ".worktrees/WP-420",
       "status": "proposed",
-      "note": "Launches after WP-400 integrates."
+      "note": "Launches after WP-510 integrates."
     }
   ]
 }

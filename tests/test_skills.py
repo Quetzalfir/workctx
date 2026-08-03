@@ -759,8 +759,11 @@ def test_skill_lint_rejects_broken_or_escaping_links(
         ("Run `workctx context validate`.", False),
         ("Run `workctx context validate --json`.", False),
         ("Run `workctx context validate --repair`.", True),
-        ("Run `workctx brief`.", True),
-        ("Run `workctx brief` (planned).", False),
+        # `workctx secrets export` is the evergreen unimplemented fixture: the
+        # product invariant forbidding stored secret values guarantees this
+        # command can never become real, unlike past fixtures that went live.
+        ("Run `workctx secrets export`.", True),
+        ("Run `workctx secrets export` (planned).", False),
         ("Call MCP tool `context_lookup`.", True),
         ("Call MCP tool `context_lookup` (planned).", False),
         ("Call MCP tool `mcp__workctx__lookup`.", True),
@@ -780,11 +783,11 @@ def test_product_reference_lint_requires_planned_marker(
 
 def test_planned_marker_applies_only_to_the_preceding_product_reference() -> None:
     issues = _product_reference_issues(
-        "Use `workctx agent install` (planned), then `workctx context migrate`."
+        "Use `workctx version` (planned), then `workctx secrets export`."
     )
 
     assert len(issues) == 1
-    assert "workctx context migrate" in issues[0]
+    assert "workctx secrets export" in issues[0]
 
 
 @pytest.mark.parametrize(
