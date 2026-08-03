@@ -178,10 +178,41 @@ class ContextLock:
         *,
         stale_after: timedelta,
     ) -> None:
+        root = canonical_context_root(context_root)
+        lock_path = resolve_context_path(
+            root,
+            "98_state/lock.json",
+            allowed_prefixes=("98_state",),
+        )
+        self._initialize(root, lock_path, metadata, stale_after=stale_after)
+
+    def _initialize(
+        self,
+        context_root: Path,
+        lock_path: Path,
+        metadata: LockMetadata,
+        *,
+        stale_after: timedelta,
+    ) -> None:
         self._context_root = context_root
+        self._state_dir = lock_path.parent
+        self._lock_path = lock_path
         self._metadata = metadata
         self._stale_after = stale_after
         self._released = False
+
+    @classmethod
+    def _from_acquired_paths(
+        cls,
+        context_root: Path,
+        lock_path: Path,
+        metadata: LockMetadata,
+        *,
+        stale_after: timedelta,
+    ) -> Self:
+        holder = cls.__new__(cls)
+        holder._initialize(context_root, lock_path, metadata, stale_after=stale_after)
+        return holder
 
     @classmethod
     def acquire(
@@ -249,7 +280,12 @@ class ContextLock:
                         continue
                     continue
                 _fsync_directory(state_dir)
-                return cls(root, metadata, stale_after=stale_after)
+                return cls._from_acquired_paths(
+                    root,
+                    lock_path,
+                    metadata,
+                    stale_after=stale_after,
+                )
             raise LockHeldError("Unable to acquire the context write lock after concurrent changes")
         finally:
             _release_mutation_guard(guard)
@@ -260,11 +296,8 @@ class ContextLock:
 
     @property
     def lock_path(self) -> Path:
-        return resolve_context_path(
-            self._context_root,
-            "98_state/lock.json",
-            allowed_prefixes=("98_state",),
-        )
+        _require_plain_runtime_directory(self._state_dir)
+        return self._lock_path
 
     @property
     def metadata(self) -> LockMetadata:
@@ -283,7 +316,7 @@ class ContextLock:
 
         if self._released:
             raise LockFenceError("The context lock lease has already been released")
-        return verify_lock_fence(self._context_root, self.nonce)
+        return _verify_lock_fence_at_path(self.lock_path, self.nonce)
 
     def heartbeat(self) -> LockMetadata:
         """Atomically refresh the heartbeat while preserving owner identity."""
@@ -297,11 +330,7 @@ class ContextLock:
             heartbeat_at=_utc_now(),
             nonce=self._metadata.nonce,
         )
-        tmp_path = resolve_context_path(
-            self._context_root,
-            "98_state/lock.json.tmp",
-            allowed_prefixes=("98_state",),
-        )
+        tmp_path = self._state_dir / "lock.json.tmp"
         guard = _acquire_mutation_guard(self._context_root)
         try:
             self.verify_fence()
@@ -363,6 +392,10 @@ def verify_lock_fence(context_root: Path, expected_nonce: str) -> LockMetadata:
 
     root = canonical_context_root(context_root)
     lock_path = resolve_context_path(root, "98_state/lock.json", allowed_prefixes=("98_state",))
+    return _verify_lock_fence_at_path(lock_path, expected_nonce)
+
+
+def _verify_lock_fence_at_path(lock_path: Path, expected_nonce: str) -> LockMetadata:
     snapshot = _read_snapshot(lock_path)
     if snapshot is None:
         raise LockFenceError("The context write lock is absent")
@@ -789,6 +822,19 @@ def _reject_unsafe_file_leaf(path: Path, *, allow_missing: bool) -> None:
         raise ContextBoundaryError(f"Runtime file must not be a symlink or junction: {path.name}")
     if not stat.S_ISREG(mode):
         raise ContextBoundaryError(f"Runtime path must be a regular file: {path.name}")
+
+
+def _require_plain_runtime_directory(path: Path) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except OSError as exc:
+        raise ContextBoundaryError(
+            f"Unable to inspect runtime directory {path.name}: {exc}"
+        ) from exc
+    if stat.S_ISLNK(mode) or (hasattr(path, "is_junction") and path.is_junction()):
+        raise ContextBoundaryError(f"Runtime directory must not be a link: {path.name}")
+    if not stat.S_ISDIR(mode):
+        raise ContextBoundaryError(f"Runtime path must be a directory: {path.name}")
 
 
 def _utc_now() -> datetime:

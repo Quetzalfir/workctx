@@ -11,7 +11,7 @@ import threading
 import time
 import unicodedata
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -167,6 +167,15 @@ class _BuildCounter:
     fts_records: int = 0
 
 
+@dataclass(slots=True)
+class _LockedOperationState:
+    preflight_rebuild_seen: bool = False
+    preflight_current: bool = False
+    preflight_report: RebuildReport | None = None
+    reader: sqlite3.Connection | None = None
+    reader_context: AbstractContextManager[sqlite3.Connection] | None = None
+
+
 class _UnsupportedDocument(ValueError):
     pass
 
@@ -203,6 +212,7 @@ class SQLiteProjection:
         self._state_path = resolved_state
         self._database_path = resolved_state / _DATABASE_NAME
         self._gate = _gate_for(self._database_path)
+        self._locked_operation: _LockedOperationState | None = None
         self._verify_database_target()
 
     @property
@@ -220,6 +230,8 @@ class SQLiteProjection:
     def ensure_ready(self) -> RebuildReport | None:
         """Build when absent or fully rebuild when projection metadata is incompatible."""
 
+        if self._locked_preflight_is_current():
+            return None
         config = self._load_bound_config()
         trigger = self._readiness_trigger(config)
         if trigger is None:
@@ -245,7 +257,21 @@ class SQLiteProjection:
         projection is present and compatible.
         """
 
+        if self._locked_preflight_is_current():
+            return None
         return self._readiness_trigger(self._load_bound_config())
+
+    def _begin_locked_operation(self) -> None:
+        if self._locked_operation is not None:
+            raise RuntimeError("Projection operation state is already active")
+        self._locked_operation = _LockedOperationState()
+
+    def _end_locked_operation(self) -> None:
+        self._close_operation_reader()
+        self._locked_operation = None
+
+    def _locked_preflight_is_current(self) -> bool:
+        return self._locked_operation is not None and self._locked_operation.preflight_current
 
     def invalidate(self) -> None:
         """Durably mark the live projection stale without rebuilding.
@@ -257,6 +283,9 @@ class SQLiteProjection:
         rebuild-not-migrate path; sidecars are cleaned with it.
         """
 
+        if self._locked_operation is not None:
+            self._close_operation_reader()
+            self._locked_operation.preflight_current = False
         with self._gate.writer_lock:
             for suffix in ("", *_LIVE_SIDECAR_SUFFIXES):
                 candidate = self._database_path.with_name(self._database_path.name + suffix)
@@ -617,6 +646,18 @@ class SQLiteProjection:
         )
 
     def _rebuild_locked(self, trigger: RebuildTrigger, config: ContextConfig) -> RebuildReport:
+        operation = self._locked_operation
+        preflight_rebuild = operation is not None and not operation.preflight_rebuild_seen
+        if preflight_rebuild:
+            assert operation is not None
+            operation.preflight_rebuild_seen = True
+        elif operation is not None:
+            self._close_operation_reader()
+            if self._preflight_projection_still_current():
+                if operation.preflight_report is None:  # pragma: no cover - state invariant
+                    raise AssertionError("Projection preflight report is unavailable")
+                return operation.preflight_report
+
         file_descriptor: int | None = None
         temporary_path: Path | None = None
         try:
@@ -676,12 +717,35 @@ class SQLiteProjection:
             if temporary_path is not None:
                 _remove_temporary_database(temporary_path, self._state_path)
 
-        return RebuildReport(
+        report = RebuildReport(
             trigger=trigger,
             metadata=metadata,
             counts=counts,
             skipped_documents=tuple(sorted(skipped, key=lambda item: (item.path, item.reason))),
         )
+        if preflight_rebuild:
+            if operation is None:  # pragma: no cover - preflight invariant
+                raise AssertionError("Projection operation state is unavailable")
+            operation.preflight_current = True
+            operation.preflight_report = report
+        return report
+
+    def _preflight_projection_still_current(self) -> bool:
+        operation = self._locked_operation
+        if operation is None or operation.preflight_report is None:
+            return False
+        try:
+            sources, scan_skips = self._collect_sources()
+            return (
+                not scan_skips
+                and self._source_fingerprint(
+                    sources,
+                    scan_skips,
+                )
+                == operation.preflight_report.metadata.source_fingerprint
+            )
+        except (OSError, RuntimeError, ValueError):
+            return False
 
     def _build_temporary_database(
         self,
@@ -1729,8 +1793,50 @@ class SQLiteProjection:
             ).fetchall()
         )
 
+    def _operation_reader(self) -> sqlite3.Connection | None:
+        if self._locked_operation is None:
+            return None
+        return self._locked_operation.reader
+
+    def _open_operation_reader(self) -> None:
+        operation = self._locked_operation
+        if operation is None:
+            raise RuntimeError("Projection operation state is not active")
+        if operation.reader is not None or operation.reader_context is not None:
+            raise RuntimeError("Projection operation reader is already active")
+        reader_context = self._standalone_reader_connection()
+        connection = reader_context.__enter__()
+        operation.reader_context = reader_context
+        operation.reader = connection
+
+    def _close_operation_reader(self) -> None:
+        operation = self._locked_operation
+        if operation is None:
+            return
+        reader_context = operation.reader_context
+        operation.reader = None
+        operation.reader_context = None
+        if reader_context is not None:
+            reader_context.__exit__(None, None, None)
+
     @contextmanager
     def _reader_connection(self) -> Iterator[sqlite3.Connection]:
+        operation_reader = self._operation_reader()
+        if operation_reader is not None:
+            yield operation_reader
+            return
+        if self._locked_preflight_is_current():
+            self._open_operation_reader()
+            operation_reader = self._operation_reader()
+            if operation_reader is None:  # pragma: no cover - operation-state invariant
+                raise AssertionError("Projection operation reader is unavailable")
+            yield operation_reader
+            return
+        with self._standalone_reader_connection() as connection:
+            yield connection
+
+    @contextmanager
+    def _standalone_reader_connection(self) -> Iterator[sqlite3.Connection]:
         with self._gate.reader():
             connection: sqlite3.Connection | None = None
             try:
@@ -1761,32 +1867,51 @@ class SQLiteProjection:
         return config
 
     def _verify_context_configuration(self) -> Path:
-        resolved = self._require_contained_existing_path(
-            self._context_root / "context.yaml",
-            self._context_root,
-            "context configuration",
-        )
-        if not resolved.is_file():
+        context_path = self._context_root / "context.yaml"
+        if self._locked_operation is None:
+            resolved = self._require_contained_existing_path(
+                context_path,
+                self._context_root,
+                "context configuration",
+            )
+            if not resolved.is_file():
+                raise ProjectionBuildError("Context configuration must be a regular file")
+            return resolved
+        if context_path.is_symlink() or (
+            hasattr(context_path, "is_junction") and context_path.is_junction()
+        ):
+            raise ContextIsolationError("Context configuration cannot be a link")
+        if not context_path.is_file():
             raise ProjectionBuildError("Context configuration must be a regular file")
-        return resolved
+        return context_path
 
     def _verify_state_directory(self) -> None:
         state_path = self._context_root / "98_state"
-        if state_path.is_symlink():
+        if self._locked_operation is None:
+            if state_path.is_symlink():
+                raise ContextIsolationError("Projection state directory cannot be a symbolic link")
+            resolved = self._require_contained_existing_path(
+                state_path,
+                self._context_root,
+                "projection state directory",
+            )
+            if resolved != self._state_path or resolved != state_path or not resolved.is_dir():
+                raise ContextIsolationError("Projection state directory changed unexpectedly")
+            return
+        if state_path.is_symlink() or (
+            hasattr(state_path, "is_junction") and state_path.is_junction()
+        ):
             raise ContextIsolationError("Projection state directory cannot be a symbolic link")
-        resolved = self._require_contained_existing_path(
-            state_path,
-            self._context_root,
-            "projection state directory",
-        )
-        if resolved != self._state_path or resolved != state_path or not resolved.is_dir():
+        if state_path != self._state_path or not state_path.is_dir():
             raise ContextIsolationError("Projection state directory changed unexpectedly")
 
     def _verify_database_target(self) -> None:
         self._verify_state_directory()
-        if self._database_path.is_symlink():
+        if self._database_path.is_symlink() or (
+            hasattr(self._database_path, "is_junction") and self._database_path.is_junction()
+        ):
             raise ContextIsolationError("Projection database cannot be a symbolic link")
-        if self._database_path.exists():
+        if self._locked_operation is None and self._database_path.exists():
             try:
                 resolved = self._database_path.resolve(strict=True)
             except (OSError, RuntimeError) as exc:
