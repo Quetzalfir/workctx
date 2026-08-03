@@ -1,15 +1,12 @@
 {
   "schema_version": 1,
-  "wave": 3,
-  "baseline_commit": "55bc43ae7b118f15f131ed04df60e8cbf42f3129",
+  "wave": 4,
+  "baseline_commit": "2a3bbcd",
   "notes": [
-    "Wave 1 and 2 assignments are historical; see Git history of this file and the integration log.",
-    "D-024 insertion: WP-201 (filesystem staging extensions) runs before WP-300 resumes; the Wave 2 filesystem freeze is lifted for WP-201 only.",
-    "Sequencing: WP-300 and WP-320 run in parallel now (disjoint). WP-310 and WP-330 start after WP-300 integrates (their base is pinned then) and may run in parallel with each other (disjoint).",
-    "WP-330 holds the ONLY worker grants on src/workctx/cli.py (one mcp serve sub-command), pyproject.toml, and .github/workflows/ci.yml (mcp extra enablement only) \u2014 no other Wave 3 order may touch them; the grants are narrow and reviewed against their stated limits.",
-    "99_meta/audit/** runtime ownership: WP-300 (ADR 0010 ledger). 00_inbox/01_processed runtime moves: WP-310 through WP-200/WP-300 APIs only.",
-    "CLI wiring for Wave 3 engines (inbox/artifact/proposal/transaction/agent commands) is lead integration work except WP-330's granted mcp serve.",
-    "Each work order may write its own report.md and report.json inside its work-order directory."
+    "Waves 1-3 assignments are historical (Git history + integration log).",
+    "Wave 4: WP-400 || WP-410 || LEAD-W3 || DOCS-R1 in parallel, disjoint; WP-420 launches after WP-400 integrates.",
+    "cli.py: LEAD-W3 only. mcp/application.py: WP-410 only (inbox_list/artifact_register placeholders). Briefs under .agents/plan/2026-08-02_195036-wave4/.",
+    "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
   ],
   "frozen_paths": [
     "src/workctx/adapters/__init__.py",
@@ -37,88 +34,72 @@
   ],
   "assignments": [
     {
-      "work_order_id": "WP-201-staging-extensions",
+      "work_order_id": "WP-400-tasks-views",
       "mode": "write",
       "paths": [
-        "src/workctx/adapters/filesystem/**",
-        "tests/filesystem/**",
-        "docs/reference/canonical-store.md",
-        ".agents/work-orders/WP-201-staging-extensions/report.md",
-        ".agents/work-orders/WP-201-staging-extensions/report.json"
+        "src/workctx/tasks/**",
+        "src/workctx/views/**",
+        "tests/tasks_views/**",
+        "docs/reference/views.md"
       ],
-      "branch": "agent/WP-201-staging-extensions",
-      "worktree": ".worktrees/WP-201-staging-extensions",
-      "status": "verified",
-      "note": "Bounded WP-200 follow-up closing the WP-300 primitive gaps (D-024); parallel with WP-320, disjoint."
+      "branch": "agent/WP-400-tasks-views",
+      "worktree": ".worktrees/WP-400",
+      "status": "assigned"
     },
     {
-      "work_order_id": "WP-300-transaction-engine",
+      "work_order_id": "WP-410-evidence-workflow",
       "mode": "write",
       "paths": [
-        "src/workctx/domain/transactions.py",
-        "src/workctx/transactions/**",
-        "schemas/transaction-proposal.schema.json",
-        "schemas/audit-event.schema.json",
-        "tests/transactions/**",
-        "docs/reference/transactions.md",
-        ".agents/work-orders/WP-300-transaction-engine/report.md",
-        ".agents/work-orders/WP-300-transaction-engine/report.json",
-        "tests/workspace/fixtures/positive/transaction-proposal.json",
-        "tests/workspace/fixtures/positive/audit-event.json",
-        "tests/workspace/fixtures/negative/transaction-proposal-operations.json",
-        "tests/workspace/fixtures/negative/audit-event-hash.json"
+        "src/workctx/evidence/**",
+        "src/workctx/mcp/application.py (inbox_list/artifact_register only)",
+        "tests/evidence/**",
+        "tests/mcp/test_ingestion_tools.py",
+        "docs/reference/evidence-workflow.md"
       ],
-      "branch": "agent/WP-300-transaction-engine",
-      "worktree": ".worktrees/WP-300-transaction-engine",
-      "status": "verified",
-      "note": "Released after WP-201 integration; worker resumes by merging master into its existing worktree."
+      "branch": "agent/WP-410-evidence-workflow",
+      "worktree": ".worktrees/WP-410",
+      "status": "assigned"
     },
     {
-      "work_order_id": "WP-320-agent-installers",
+      "work_order_id": "LEAD-W3-inbox-cli",
       "mode": "write",
       "paths": [
-        "src/workctx/adapters/agents/**",
-        "tests/agents_setup/**",
-        "docs/reference/agent-adapters.md",
-        ".agents/work-orders/WP-320-agent-installers/report.md",
-        ".agents/work-orders/WP-320-agent-installers/report.json"
-      ],
-      "branch": "agent/WP-320-agent-installers",
-      "worktree": ".worktrees/WP-320-agent-installers",
-      "status": "ready"
-    },
-    {
-      "work_order_id": "WP-310-inbox-lifecycle",
-      "mode": "write",
-      "paths": [
-        "src/workctx/ingestion/**",
-        "tests/ingestion/**",
-        "docs/reference/inbox.md",
-        ".agents/work-orders/WP-310-inbox-lifecycle/report.md",
-        ".agents/work-orders/WP-310-inbox-lifecycle/report.json"
-      ],
-      "branch": "agent/WP-310-inbox-lifecycle",
-      "worktree": ".worktrees/WP-310-inbox-lifecycle",
-      "status": "ready",
-      "note": "Assignable after WP-300 integrates; base pinned then."
-    },
-    {
-      "work_order_id": "WP-330-mcp-server",
-      "mode": "write",
-      "paths": [
-        "src/workctx/mcp/**",
         "src/workctx/cli.py",
-        "pyproject.toml",
-        ".github/workflows/ci.yml",
-        "tests/mcp/**",
-        "docs/reference/mcp.md",
-        ".agents/work-orders/WP-330-mcp-server/report.md",
-        ".agents/work-orders/WP-330-mcp-server/report.json"
+        "tests/cli/test_inbox_cli.py",
+        "docs/reference/cli-envelope.md"
       ],
-      "branch": "agent/WP-330-mcp-server",
-      "worktree": ".worktrees/WP-330-mcp-server",
-      "status": "ready",
-      "note": "Assignable after WP-300 integrates; cli/pyproject/ci grants are narrow (mcp serve sub-command and mcp extra only)."
+      "branch": "lead/inbox-cli",
+      "worktree": ".worktrees/LEAD-W3-inbox-cli",
+      "status": "assigned"
+    },
+    {
+      "work_order_id": "DOCS-R1-refresh",
+      "mode": "write",
+      "paths": [
+        "README.md",
+        "CHANGELOG.md",
+        "ROADMAP.md",
+        "docs/concepts.md",
+        "docs/guides/**",
+        "docs/reference/canonical-store.md",
+        "docs/reference/projections.md",
+        "docs/reference/agent-adapters.md",
+        "docs/reference/skill-adapters.md"
+      ],
+      "branch": "(claude worktree)",
+      "worktree": "(claude worktree)",
+      "status": "assigned"
+    },
+    {
+      "work_order_id": "WP-420-drafting-outbox",
+      "mode": "write",
+      "paths": [
+        "src/workctx/drafting/** (planned)"
+      ],
+      "branch": "agent/WP-420-drafting-outbox",
+      "worktree": ".worktrees/WP-420",
+      "status": "proposed",
+      "note": "Launches after WP-400 integrates."
     }
   ]
 }
