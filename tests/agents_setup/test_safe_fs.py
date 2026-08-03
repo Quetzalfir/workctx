@@ -171,6 +171,10 @@ def test_list_directory_returns_sorted_safe_metadata(tmp_path: Path) -> None:
 def test_list_directory_rejects_nfc_casefold_collisions(tmp_path: Path) -> None:
     (tmp_path / "Name.txt").write_bytes(b"one")
     (tmp_path / "name.TXT").write_bytes(b"two")
+    if len(list(tmp_path.iterdir())) < 2:
+        # Case-insensitive filesystems (NTFS, default APFS) collapse the pair, so
+        # the on-disk collision this guard protects against cannot exist here.
+        pytest.skip("filesystem collapses casefold-colliding names")
 
     with pytest.raises(UnsafeFilesystemError, match="colliding"):
         SafeRoot(tmp_path).list_directory()
