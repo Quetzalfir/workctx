@@ -26,6 +26,9 @@ index and generated views are rebuild-only).
   reviewable suggestion, and adopted suggestions become versioned local skill
   or template changes that survive upgrades — engine changes remain ordinary
   open-source contributions to this repository;
+- first-class projections for everyday work data: resource directory,
+  people and teams directory, glossary, agenda and deadlines, and a status
+  report generator — all generated views over existing canonical entities;
 - context dashboard;
 - drag-and-drop inbox;
 - transaction review queue;

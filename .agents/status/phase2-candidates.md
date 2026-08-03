@@ -44,3 +44,38 @@ Intent: three explicitly separated improvement targets —
 Constraint carried from Phase 1: suggestions are data, not instructions; the
 loop must not create a channel where evidence content can smuggle behavior
 changes into skills.
+
+## C-203..C-207 — First-class homes for everyday work data (operator-requested, 2026-08-03)
+
+Origin: real JalaSoft usage surfaced the links-directory case — the data was
+representable (entities are extensible, `references` is typed) but nothing
+generates a usable projection, so each agent improvises a pattern. A sweep for
+sibling cases found the same shape everywhere. Design principle for ALL of
+these: no new entity types (D-018 vocabulary stays frozen) and no new storage —
+each is a GENERATED VIEW over canonical data the workspace can already hold.
+
+- C-203 resource directory: `04_views/resource-directory.md` generated from
+  system/service/integration entities' `references`/`access_urls`, grouped by
+  access requirement (public, SSO, VPN); includes the environments matrix
+  (dev/staging/prod URLs). Never stores credentials — pairs with Phase 3
+  secret references.
+- C-204 people and teams directory: generated from person/team entities —
+  role, team, channels, timezone, and what each person currently owns or
+  blocks (join with tasks).
+- C-205 glossary: generated from entity aliases plus first-line definitions —
+  the acronym decoder (HCM, MOI, ...) every company context needs.
+- C-206 agenda and deadlines: date-ordered view over task `due_at` and
+  waiting-on ages; the brief shows today, this shows the horizon.
+- C-207 status report generator: period summary (what committed, what moved,
+  what blocked) derived from ledger activity and task transitions, emitted as
+  a draft for the operator's manager-facing reporting. Highest-leverage of the
+  five for daily use.
+
+Recorded for the Phase 2 cut; C-203 and C-207 look like the best first pair.
+
+## C-210 — Company-over-projects federation (deferred to Phase 4)
+
+Operator asked for it during Phase 1 close: consolidated views from a company
+context across its sibling project contexts. Registered so it stops being an
+orphaned conversation item, but it crosses the context security boundary and
+belongs with Phase 4 shared-context design, not Phase 2.
