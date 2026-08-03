@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import stat
+import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
@@ -741,7 +742,7 @@ def _open_guard(path: Path) -> int:
 
 def _try_lock_guard(descriptor: int) -> bool:
     try:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             os.lseek(descriptor, 0, os.SEEK_SET)
@@ -749,10 +750,7 @@ def _try_lock_guard(descriptor: int) -> bool:
         else:
             import fcntl
 
-            fcntl.flock(  # type: ignore[attr-defined]
-                descriptor,
-                fcntl.LOCK_EX | fcntl.LOCK_NB,  # type: ignore[attr-defined]
-            )
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError as error:
         if error.errno in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
             return False
@@ -761,7 +759,7 @@ def _try_lock_guard(descriptor: int) -> bool:
 
 
 def _unlock_guard(descriptor: int) -> None:
-    if os.name == "nt":
+    if sys.platform == "win32":
         import msvcrt
 
         os.lseek(descriptor, 0, os.SEEK_SET)
@@ -769,7 +767,7 @@ def _unlock_guard(descriptor: int) -> None:
     else:
         import fcntl
 
-        fcntl.flock(descriptor, fcntl.LOCK_UN)  # type: ignore[attr-defined]
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
 
 
 def _fsync_directory(directory: Path) -> None:

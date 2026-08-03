@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import time
 from contextlib import suppress
 from dataclasses import dataclass
@@ -817,6 +818,8 @@ def _pid_is_alive(pid: int) -> bool:
 
 
 def _windows_pid_is_alive(pid: int) -> bool:
+    if sys.platform != "win32":  # pragma: no cover - windows-only helper
+        raise RuntimeError("_windows_pid_is_alive is Windows-only")
     # Import lazily so non-Windows platforms never resolve Win32 symbols.
     import ctypes
 
