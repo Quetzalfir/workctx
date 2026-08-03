@@ -36,6 +36,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `agent status` | `agent.status` | `statuses` |
 | `agent install` | `agent.install` | `applied`, `plans`, `receipts` |
 | `agent open` | `agent.open` | `session` |
+| `migrate legacy` | `migrate.legacy` | `mode`, `applied`, `report` |
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved

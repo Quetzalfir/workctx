@@ -75,12 +75,130 @@ task_app = typer.Typer(help="Query projected canonical tasks.")
 app.add_typer(task_app, name="task")
 agent_app = typer.Typer(help="Detect, install, inspect, and open supported agent clients.")
 app.add_typer(agent_app, name="agent")
+migrate_app = typer.Typer(help="Convert legacy Markdown repositories into isolated contexts.")
+app.add_typer(migrate_app, name="migrate")
 
 
 @app.command()
 def version() -> None:
     """Print the installed Work Context OS version."""
     typer.echo(__version__)
+
+
+@migrate_app.command("legacy")
+def migrate_legacy_command(
+    source_path: Annotated[
+        Path,
+        typer.Argument(help="Legacy Markdown repository to inspect without modifying."),
+    ],
+    target_context_path: Annotated[
+        Path,
+        typer.Argument(help="New or empty destination context directory."),
+    ],
+    dry_run_only: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Preview findings and mappings without writing."),
+    ] = False,
+    apply_changes: Annotated[
+        bool,
+        typer.Option("--apply", help="Build and publish the validated destination context."),
+    ] = False,
+    allow_findings: Annotated[
+        bool,
+        typer.Option(
+            "--allow-findings",
+            help="Allow apply despite blocking findings; unsafe source bytes stay excluded.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Preview by default, or apply a deterministic legacy migration."""
+    from workctx.migration import (
+        MigrationBlockedError,
+        MigrationValidationError,
+        migrate_legacy,
+        render_migration_markdown,
+    )
+
+    begin_command("migrate.legacy", json_output=json_output)
+    should_apply = apply_changes and not dry_run_only
+    try:
+        report = migrate_legacy(
+            source_path,
+            target_context_path,
+            apply_changes=should_apply,
+            allow_findings=allow_findings,
+        )
+    except (MigrationBlockedError, MigrationValidationError) as exc:
+        report = exc.report
+        result: dict[str, JsonValue] = {
+            "mode": report.mode.value,
+            "applied": report.applied,
+            "report": cast(
+                "dict[str, JsonValue]",
+                report.model_dump(mode="json", by_alias=True),
+            ),
+        }
+        code = (
+            "MIGRATION_FINDINGS_BLOCK_APPLY"
+            if isinstance(exc, MigrationBlockedError)
+            else "MIGRATION_VALIDATION_FAILED"
+        )
+        message = (
+            "Migration apply is blocked by report findings."
+            if isinstance(exc, MigrationBlockedError)
+            else "The staged migration context did not validate cleanly."
+        )
+        record_failure(
+            result=result,
+            context_id=report.target_context_id,
+            errors=[CliDiagnostic(code=code, message=message)],
+        )
+        if not json_output:
+            output_console.print(Text(render_migration_markdown(report)))
+        raise
+
+    result = {
+        "mode": report.mode.value,
+        "applied": report.applied,
+        "report": cast(
+            "dict[str, JsonValue]",
+            report.model_dump(mode="json", by_alias=True),
+        ),
+    }
+    warnings: list[CliDiagnostic] = []
+    if dry_run_only and apply_changes:
+        warnings.append(
+            CliDiagnostic(
+                code="MIGRATION_DRY_RUN_OVERRIDES_APPLY",
+                message="The explicit dry-run flag prevented migration apply.",
+            )
+        )
+    if report.blocked:
+        warnings.append(
+            CliDiagnostic(
+                code="MIGRATION_APPLY_BLOCKED",
+                message="The preview contains findings that block apply by default.",
+            )
+        )
+    if json_output:
+        emit_success(
+            result=result,
+            context_id=report.target_context_id,
+            warnings=warnings,
+        )
+    elif report.applied:
+        output_console.print(
+            Text(
+                f"Migrated context {report.target_context_id} to "
+                f"{target_context_path.expanduser().resolve()}."
+            )
+        )
+        output_console.print(Text("Reports: 99_meta/migration/report.json and report.md."))
+    else:
+        output_console.print(Text(render_migration_markdown(report)))
 
 
 @mcp_app.command("serve")
