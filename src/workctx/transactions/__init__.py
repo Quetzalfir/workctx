@@ -23,8 +23,8 @@ from workctx.transactions.ledger import (
     AuditSummary,
     LedgerVerification,
     audit_summary,
-    read_audit_events,
     authenticate_apply_result,
+    read_audit_events,
     verify_ledger,
 )
 from workctx.transactions.models import (
@@ -66,9 +66,9 @@ __all__ = [
     "TransactionError",
     "apply",
     "audit_summary",
-    "read_audit_events",
     "authenticate_apply_result",
     "dry_run",
+    "read_audit_events",
     "recover",
     "validate_proposal",
     "verify_ledger",
