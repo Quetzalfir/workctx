@@ -6,9 +6,11 @@ import hashlib
 import os
 import re
 import stat
+import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
+from contextvars import ContextVar, Token
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from threading import Event, Thread
@@ -82,6 +84,8 @@ from workctx.transactions.errors import (
 )
 from workctx.transactions.ledger import (
     LedgerVerification,
+    _read_verified_events,
+    _verification,
     append_event,
     audit_summary,
     find_event_by_proposal_id,
@@ -169,6 +173,90 @@ class _Analysis:
         )
 
 
+@dataclass(slots=True)
+class _OperationCache:
+    paths: dict[tuple[str, tuple[ContextZone, ...]], Path] = field(default_factory=dict)
+    contents: dict[Path, bytes | None] = field(default_factory=dict)
+    identities_by_path: dict[Path, frozenset[str]] = field(default_factory=dict)
+    indexed_identities: tuple[tuple[str, str], ...] | None = None
+    manifests: tuple[tuple[str, ArtifactManifest], ...] | None = None
+    outbox_identity_paths: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+    def clear(self) -> None:
+        self.paths.clear()
+        self.contents.clear()
+        self.identities_by_path.clear()
+        self.indexed_identities = None
+        self.manifests = None
+        self.outbox_identity_paths.clear()
+
+
+class _HeartbeatLease:
+    """Refresh one lock periodically for the lifetime of a public mutation."""
+
+    def __init__(self, lock: ContextLock) -> None:
+        self._lock = lock
+        self._stopped = Event()
+        self._failures: list[Exception] = []
+        self._worker: Thread | None = None
+        self._token: Token[_HeartbeatLease | None] | None = None
+
+    def start(self) -> None:
+        self._token = _ACTIVE_HEARTBEAT.set(self)
+        self._worker = Thread(
+            target=self._refresh,
+            name="workctx-transaction-heartbeat",
+            daemon=True,
+        )
+        try:
+            self._worker.start()
+        except BaseException:
+            _ACTIVE_HEARTBEAT.reset(self._token)
+            self._token = None
+            self._worker = None
+            raise
+
+    def stop(self) -> Exception | None:
+        self._stopped.set()
+        if self._worker is not None:
+            self._worker.join()
+            self._worker = None
+        if self._token is not None:
+            _ACTIVE_HEARTBEAT.reset(self._token)
+            self._token = None
+        return self._failures[0] if self._failures else None
+
+    def check(self) -> None:
+        if self._failures:
+            raise LockFenceError(
+                "The transaction heartbeat could not refresh its lease"
+            ) from self._failures[0]
+
+    def _refresh(self) -> None:
+        stale_seconds = self._lock._stale_after.total_seconds()
+        interval = min(_HEARTBEAT_INTERVAL_SECONDS, stale_seconds / 4.0)
+        while not self._stopped.wait(self._seconds_until_refresh(interval)):
+            try:
+                self._lock.heartbeat()
+            except Exception as exc:
+                self._failures.append(exc)
+                self._stopped.set()
+                return
+
+    def _seconds_until_refresh(self, interval: float) -> float:
+        age = max(
+            0.0,
+            (datetime.now(UTC) - self._lock.metadata.heartbeat_at).total_seconds(),
+        )
+        return max(0.0, interval - age)
+
+
+_ACTIVE_HEARTBEAT: ContextVar[_HeartbeatLease | None] = ContextVar(
+    "workctx_active_heartbeat",
+    default=None,
+)
+
+
 class TransactionEngine:
     """Context-bound implementation of the ADR 0006 transaction protocol."""
 
@@ -189,6 +277,7 @@ class TransactionEngine:
         self._workspace_validator = workspace_validator
         self._clock = clock or _utc_now
         self._lock_factory = lock_factory or _acquire_context_lock
+        self._operation_cache: _OperationCache | None = None
 
     @property
     def context_root(self) -> Path:
@@ -234,7 +323,12 @@ class TransactionEngine:
         )
         stager: StagedReplacement | None = None
         intent: IntentRecord | None = None
+        projection: SQLiteProjection | None = None
+        operation_cache = _OperationCache()
+        self._operation_cache = operation_cache
+        heartbeat = _HeartbeatLease(lock)
         try:
+            heartbeat.start()
             stager = _run_with_heartbeat(
                 lock,
                 lambda: self._stager_factory(self._root),
@@ -243,19 +337,17 @@ class TransactionEngine:
             if inspection.state is not RecoveryState.CLEAN:
                 raise RecoveryPendingError(inspection)
 
-            lock.heartbeat()
-            verification = _run_with_heartbeat(lock, lambda: verify_ledger(self._root))
-            _run_with_heartbeat(
+            verification, duplicate = _run_with_heartbeat(
                 lock,
-                lambda: self._raise_apply_conflicts(proposal, verification),
+                lambda: self._verify_apply_ledger(proposal.id),
             )
+            self._raise_apply_conflicts(proposal, verification, duplicate)
             projection = _run_with_heartbeat(
                 lock,
                 lambda: self._projection_factory(self._root),
             )
-            lock.heartbeat()
+            projection._begin_locked_operation()
             projection_report = _run_with_heartbeat(lock, projection.rebuild)
-            lock.heartbeat()
             analysis = _run_with_heartbeat(
                 lock,
                 lambda: self._analyze(
@@ -263,9 +355,9 @@ class TransactionEngine:
                     projection=projection,
                     verification=verification,
                     projection_report=projection_report,
+                    check_duplicate=False,
                 ),
             )
-            lock.heartbeat()
             if proposal.approval == "required" and not approved:
                 analysis = _with_diagnostic(
                     analysis,
@@ -281,7 +373,6 @@ class TransactionEngine:
             compiled = analysis.compiled
 
             lock.verify_fence()
-            lock.heartbeat()
             prepared_intent = _run_with_heartbeat(
                 lock,
                 lambda: stager.prepare(
@@ -292,7 +383,6 @@ class TransactionEngine:
                 ),
             )
             intent = prepared_intent
-            lock.heartbeat()
             if not _intent_matches_operations(
                 prepared_intent,
                 compiled.audit_operations,
@@ -304,15 +394,17 @@ class TransactionEngine:
                         operations=_intent_audit_operations(prepared_intent),
                         action="apply",
                         result="rolled_back",
+                        prev_hash=verification.head_hash,
                     ),
                 )
-                _run_with_heartbeat(
+                appended = _run_with_heartbeat(
                     lock,
                     lambda: append_event(self._root, event, lock=lock),
                 )
-                _run_with_heartbeat(lock, lambda: self._verify_appended_event(event))
-                _run_with_heartbeat(
+                self._verify_appended_event(event, appended)
+                _run_stager_step(
                     lock,
+                    stager,
                     lambda: stager.finalize_rollback_after_audit(
                         proposal.id,
                         lock=lock,
@@ -340,11 +432,12 @@ class TransactionEngine:
                     ),
                 )
                 raise PreimageChangedError(result)
-            _run_with_heartbeat(
+            _run_stager_step(
                 lock,
+                stager,
                 lambda: stager.apply(prepared_intent, lock=lock),
             )
-            lock.heartbeat()
+            operation_cache.clear()
 
             postcondition_diagnostics = _run_with_heartbeat(
                 lock,
@@ -353,7 +446,6 @@ class TransactionEngine:
                     field_name="postconditions",
                 ),
             )
-            lock.heartbeat()
             post_report = _run_with_heartbeat(
                 lock,
                 lambda: self._workspace_validator(
@@ -362,15 +454,14 @@ class TransactionEngine:
                     freshness_probe=None,
                 ),
             )
-            lock.heartbeat()
             if not post_report.ok or any(
                 item.severity is DiagnosticSeverity.ERROR for item in postcondition_diagnostics
             ):
-                _run_with_heartbeat(
+                _run_stager_step(
                     lock,
+                    stager,
                     lambda: stager.rollback(prepared_intent, lock=lock),
                 )
-                lock.heartbeat()
                 event = _run_with_heartbeat(
                     lock,
                     lambda: self._proposal_event(
@@ -378,15 +469,17 @@ class TransactionEngine:
                         operations=compiled.audit_operations,
                         action="apply",
                         result="rolled_back",
+                        prev_hash=verification.head_hash,
                     ),
                 )
-                _run_with_heartbeat(
+                appended = _run_with_heartbeat(
                     lock,
                     lambda: append_event(self._root, event, lock=lock),
                 )
-                _run_with_heartbeat(lock, lambda: self._verify_appended_event(event))
-                _run_with_heartbeat(
+                self._verify_appended_event(event, appended)
+                _run_stager_step(
                     lock,
+                    stager,
                     lambda: stager.finalize_rollback_after_audit(
                         proposal.id,
                         lock=lock,
@@ -416,15 +509,17 @@ class TransactionEngine:
                     operations=compiled.audit_operations,
                     action="apply",
                     result="committed",
+                    prev_hash=verification.head_hash,
                 ),
             )
-            _run_with_heartbeat(
+            appended = _run_with_heartbeat(
                 lock,
                 lambda: append_event(self._root, event, lock=lock),
             )
-            _run_with_heartbeat(lock, lambda: self._verify_appended_event(event))
-            _run_with_heartbeat(
+            self._verify_appended_event(event, appended)
+            _run_stager_step(
                 lock,
+                stager,
                 lambda: stager.finalize_after_audit(proposal.id, lock=lock),
             )
             intent = None
@@ -450,8 +545,21 @@ class TransactionEngine:
                     raise RecoveryPendingError(pending) from exc
             raise
         finally:
-            with suppress(LockFenceError):
-                lock.release()
+            try:
+                if projection is not None:
+                    projection._end_locked_operation()
+            finally:
+                operation_cache.clear()
+                self._operation_cache = None
+                try:
+                    heartbeat_failure = heartbeat.stop()
+                finally:
+                    with suppress(LockFenceError):
+                        lock.release()
+            if heartbeat_failure is not None and sys.exc_info()[0] is None:
+                raise LockFenceError(
+                    "The transaction heartbeat could not refresh its lease"
+                ) from heartbeat_failure
 
     def recover(
         self,
@@ -469,12 +577,13 @@ class TransactionEngine:
         )
         stager: StagedReplacement | None = None
         mutation_started = False
+        heartbeat = _HeartbeatLease(lock)
         try:
+            heartbeat.start()
             stager = _run_with_heartbeat(
                 lock,
                 lambda: self._stager_factory(self._root),
             )
-            lock.heartbeat()
             verification = _run_with_heartbeat(lock, lambda: verify_ledger(self._root))
             inspection = _run_with_heartbeat(lock, stager.inspect_recovery)
             if inspection.state is RecoveryState.CLEAN:
@@ -500,7 +609,6 @@ class TransactionEngine:
                 lambda: find_event_by_proposal_id(self._root, intent.transaction_id),
             )
             if existing is not None:
-                lock.heartbeat()
                 mutation_started = True
                 _run_with_heartbeat(
                     lock,
@@ -511,7 +619,6 @@ class TransactionEngine:
                         lock=lock,
                     ),
                 )
-                lock.heartbeat()
                 return RecoveryResult(
                     strategy=strategy,
                     outcome="already_finalized",
@@ -538,16 +645,15 @@ class TransactionEngine:
                 lock,
                 lambda: stager.rollback_recovery(intent, lock=lock),
             )
-            lock.heartbeat()
 
             current = _run_with_heartbeat(lock, lambda: verify_ledger(self._root))
             if current.head_hash != verification.head_hash:
                 raise RecoveryPendingError(_run_with_heartbeat(lock, stager.inspect_recovery))
-            _run_with_heartbeat(
+            appended = _run_with_heartbeat(
                 lock,
                 lambda: append_event(self._root, event, lock=lock),
             )
-            _run_with_heartbeat(lock, lambda: self._verify_appended_event(event))
+            self._verify_appended_event(event, appended)
             _run_with_heartbeat(
                 lock,
                 lambda: stager.finalize_rollback_after_audit(
@@ -582,8 +688,15 @@ class TransactionEngine:
                     raise RecoveryPendingError(pending) from exc
             raise
         finally:
-            with suppress(LockFenceError):
-                lock.release()
+            try:
+                heartbeat_failure = heartbeat.stop()
+            finally:
+                with suppress(LockFenceError):
+                    lock.release()
+            if heartbeat_failure is not None and sys.exc_info()[0] is None:
+                raise LockFenceError(
+                    "The transaction heartbeat could not refresh its lease"
+                ) from heartbeat_failure
 
     def _analyze_read_only(self, proposal: TransactionProposal) -> _Analysis:
         verification = verify_ledger(self._root)
@@ -602,6 +715,7 @@ class TransactionEngine:
         projection: SQLiteProjection,
         verification: LedgerVerification,
         projection_report: RebuildReport | None,
+        check_duplicate: bool = True,
     ) -> _Analysis:
         diagnostics: list[TransactionDiagnostic] = []
         if proposal.context_id != self._store.context_id:
@@ -613,8 +727,7 @@ class TransactionEngine:
                     path="context_id",
                 )
             )
-        duplicate = find_event_by_proposal_id(self._root, proposal.id)
-        if duplicate is not None:
+        if check_duplicate and find_event_by_proposal_id(self._root, proposal.id) is not None:
             diagnostics.append(
                 _diagnostic(
                     "TXN-DUPLICATE-PROPOSAL",
@@ -735,7 +848,7 @@ class TransactionEngine:
                 )
                 staged_write = self._prepare_document(operation.target, operation.payload)
                 target_path = self._resolve_operation_path(operation.target)
-                current = _read_optional_regular_file(target_path)
+                current = self._read_operation_file(target_path)
                 if isinstance(operation, CreateOperation):
                     if current is not None:
                         raise ValueError("create target exists")
@@ -818,10 +931,10 @@ class TransactionEngine:
             if isinstance(operation, MoveOperation):
                 source_path = self._resolve_operation_path(operation.source)
                 destination_path = self._resolve_operation_path(operation.destination)
-                current = _read_optional_regular_file(source_path)
+                current = self._read_operation_file(source_path)
                 if current is None or _content_hash(current) != operation.expected_hash:
                     raise ValueError("move preimage hash mismatch")
-                if _read_optional_regular_file(destination_path) is not None:
+                if self._read_operation_file(destination_path) is not None:
                     raise ValueError("move destination exists")
                 if not destination_path.parent.is_dir():
                     raise ValueError("move destination parent is missing")
@@ -857,7 +970,7 @@ class TransactionEngine:
             if not isinstance(operation, DeleteGeneratedOperation):
                 raise TypeError("unsupported transaction operation")
             target_path = self._resolve_operation_path(operation.target)
-            current = _read_optional_regular_file(target_path)
+            current = self._read_operation_file(target_path)
             if current is None or _content_hash(current) != operation.expected_hash:
                 raise ValueError("delete preimage hash mismatch")
             writes.append(StagedDelete(operation.target))
@@ -932,21 +1045,27 @@ class TransactionEngine:
 
     def _prepare_document(self, target: str, payload: DocumentPayload) -> StagedWrite:
         if isinstance(payload, EntityDocumentPayload):
-            return self._store.prepare_entity(target, payload.document, payload.body)
+            write = self._store.prepare_entity(target, payload.document, payload.body)
+            self._remember_prepared_target(write.target)
+            return write
         if isinstance(payload, TaskDocumentPayload):
-            return self._store.prepare_task(target, payload.document, payload.body)
+            write = self._store.prepare_task(target, payload.document, payload.body)
+            self._remember_prepared_target(write.target)
+            return write
         if isinstance(payload, ArtifactManifestDocumentPayload):
-            return self._store.prepare_artifact_manifest(target, payload.document)
+            write = self._store.prepare_artifact_manifest(target, payload.document)
+            self._remember_prepared_target(write.target)
+            return write
         if isinstance(payload, (ClaimDocumentPayload, ObservationDocumentPayload)):
             self._resolve_operation_path(target)
             return StagedWrite(target, render_markdown_bytes(payload.document, payload.body))
         raise TypeError("unsupported document payload")
 
     def _resolve_operation_path(self, relative_path: str) -> Path:
-        path = self._store.resolve_path(relative_path, zones=_OPERATION_ZONES)
-        ledger = self._store.resolve_path(
+        path = self._resolve_cached(relative_path, _OPERATION_ZONES)
+        ledger = self._resolve_cached(
             "99_meta/audit/ledger.jsonl",
-            zones=(ContextZone.META,),
+            (ContextZone.META,),
         )
         if ledger.exists() and path.exists():
             try:
@@ -956,6 +1075,52 @@ class TransactionEngine:
             if aliases_ledger:
                 raise ValueError("Transaction paths cannot alias the audit ledger")
         return path
+
+    def _resolve_cached(
+        self,
+        relative_path: str,
+        zones: tuple[ContextZone, ...],
+    ) -> Path:
+        cache = self._operation_cache
+        key = (relative_path, zones)
+        if cache is not None and key in cache.paths:
+            return cache.paths[key]
+        path = self._store.resolve_path(relative_path, zones=zones)
+        if cache is not None:
+            cache.paths[key] = path
+        return path
+
+    def _remember_prepared_target(self, relative_path: str | Path) -> None:
+        cache = self._operation_cache
+        if cache is None:
+            return
+        portable = PurePosixPath(relative_path).as_posix()
+        cache.paths[(portable, _OPERATION_ZONES)] = self._root.joinpath(
+            *PurePosixPath(portable).parts
+        )
+
+    def _read_operation_file(self, path: Path) -> bytes | None:
+        cache = self._operation_cache
+        if cache is not None and path in cache.contents:
+            return cache.contents[path]
+        content = _read_optional_regular_file(path)
+        if cache is not None:
+            cache.contents[path] = content
+        return content
+
+    def _operation_identities(self, path: Path) -> frozenset[str]:
+        cache = self._operation_cache
+        if cache is not None and path in cache.identities_by_path:
+            return cache.identities_by_path[path]
+        content = self._read_operation_file(path)
+        identities = (
+            frozenset()
+            if content is None
+            else _markdown_identities(content, self._store.context_id)
+        )
+        if cache is not None:
+            cache.identities_by_path[path] = identities
+        return identities
 
     def _document_has_hand_edits(
         self,
@@ -1079,7 +1244,7 @@ class TransactionEngine:
                 if isinstance(condition, ReferenceExistsCondition):
                     satisfied = self._live_reference_exists(condition.reference)
                 else:
-                    content = _read_optional_regular_file(
+                    content = self._read_operation_file(
                         self._resolve_operation_path(condition.path)
                     )
                     if isinstance(condition, PathExistsCondition):
@@ -1125,17 +1290,13 @@ class TransactionEngine:
                 ContextZone.WORK,
                 ContextZone.OUTBOX,
             ):
-                zone_path = self._store.resolve_path(zone.value, zones=(zone,))
+                zone_path = self._resolve_cached(zone.value, (zone,))
                 for path in sorted(zone_path.rglob("*.md")):
                     if path.name.casefold() == "readme.md":
                         continue
                     relative = path.relative_to(self._root).as_posix()
-                    resolved = self._store.resolve_path(relative, zones=(zone,))
-                    content = _read_optional_regular_file(resolved)
-                    if content is not None and identity in _markdown_identities(
-                        content,
-                        self._store.context_id,
-                    ):
+                    resolved = self._resolve_cached(relative, (zone,))
+                    if identity in self._operation_identities(resolved):
                         return True
             return False
         if isinstance(parsed, ArtifactReference):
@@ -1151,7 +1312,7 @@ class TransactionEngine:
     ) -> bytes | None:
         if final_state and relative_path in compiled.final_files:
             return compiled.final_files[relative_path]
-        return _read_optional_regular_file(self._resolve_operation_path(relative_path))
+        return self._read_operation_file(self._resolve_operation_path(relative_path))
 
     def _reference_diagnostics(
         self,
@@ -1318,6 +1479,8 @@ class TransactionEngine:
         self,
         projection: SQLiteProjection,
     ) -> bool:
+        if projection._locked_preflight_is_current():
+            return True
         for identity, source_path in self._canonical_indexed_identities():
             record = projection.get_document_by_uri(identity)
             if record is None or record.source_path != source_path:
@@ -1395,15 +1558,11 @@ class TransactionEngine:
 
     def _projection_record_is_current(self, identity: str, source_path: str) -> bool:
         try:
-            path = self._store.resolve_path(
+            path = self._resolve_cached(
                 source_path,
-                zones=(ContextZone.KNOWLEDGE, ContextZone.WORK),
+                (ContextZone.KNOWLEDGE, ContextZone.WORK),
             )
-            content = _read_optional_regular_file(path)
-            return content is not None and identity in _markdown_identities(
-                content,
-                self._store.context_id,
-            )
+            return identity in self._operation_identities(path)
         except (OSError, UnicodeError, ValueError):
             return False
 
@@ -1423,42 +1582,46 @@ class TransactionEngine:
         return False
 
     def _canonical_outbox_identity_paths(self, identity: str) -> tuple[str, ...]:
+        cache = self._operation_cache
+        if cache is not None and identity in cache.outbox_identity_paths:
+            return cache.outbox_identity_paths[identity]
         matches: list[str] = []
         zone = ContextZone.OUTBOX
-        zone_path = self._store.resolve_path(zone.value, zones=(zone,))
+        zone_path = self._resolve_cached(zone.value, (zone,))
         for path in sorted(zone_path.rglob("*.md")):
             if path.name.casefold() == "readme.md":
                 continue
             relative = path.relative_to(self._root).as_posix()
             try:
-                resolved = self._store.resolve_path(relative, zones=(zone,))
-                content = _read_optional_regular_file(resolved)
-                if content is not None and identity in _markdown_identities(
-                    content,
-                    self._store.context_id,
-                ):
+                resolved = self._resolve_cached(relative, (zone,))
+                if identity in self._operation_identities(resolved):
                     matches.append(relative)
             except (OSError, UnicodeError, ValueError):
                 continue
-        return tuple(matches)
+        result = tuple(matches)
+        if cache is not None:
+            cache.outbox_identity_paths[identity] = result
+        return result
 
     def _canonical_indexed_identities(self) -> tuple[tuple[str, str], ...]:
+        cache = self._operation_cache
+        if cache is not None and cache.indexed_identities is not None:
+            return cache.indexed_identities
         identities: list[tuple[str, str]] = []
         for zone in (ContextZone.KNOWLEDGE, ContextZone.WORK):
-            zone_path = self._store.resolve_path(zone.value, zones=(zone,))
+            zone_path = self._resolve_cached(zone.value, (zone,))
             for path in sorted(zone_path.rglob("*.md")):
                 if path.name.casefold() == "readme.md":
                     continue
                 relative = path.relative_to(self._root).as_posix()
-                resolved = self._store.resolve_path(relative, zones=(zone,))
-                content = _read_optional_regular_file(resolved)
-                if content is None:
-                    continue
+                resolved = self._resolve_cached(relative, (zone,))
                 identities.extend(
-                    (identity, relative)
-                    for identity in _markdown_identities(content, self._store.context_id)
+                    (identity, relative) for identity in self._operation_identities(resolved)
                 )
-        return tuple(identities)
+        result = tuple(identities)
+        if cache is not None:
+            cache.indexed_identities = result
+        return result
 
     def _artifact_digest_exists(
         self,
@@ -1494,22 +1657,9 @@ class TransactionEngine:
         excluded_paths: Iterable[str] = (),
     ) -> tuple[str, ...]:
         excluded = frozenset(excluded_paths)
-        manifests = self._store.resolve_path(
-            "00_inbox/manifests",
-            zones=(ContextZone.INBOX,),
-        )
-        if not manifests.is_dir():
-            return ()
         matches: list[str] = []
-        for path in sorted(manifests.iterdir(), key=lambda item: item.name):
-            if path.suffix.lower() not in {".json", ".yaml", ".yml"}:
-                continue
-            relative = path.relative_to(self._root).as_posix()
+        for relative, manifest in self._canonical_manifests():
             if relative in excluded:
-                continue
-            try:
-                manifest = self._store.read_artifact_manifest(relative)
-            except (OSError, ValueError):
                 continue
             if artifact_id is not None and manifest.id == artifact_id:
                 matches.append(relative)
@@ -1517,15 +1667,45 @@ class TransactionEngine:
                 matches.append(relative)
         return tuple(dict.fromkeys(matches))
 
+    def _canonical_manifests(self) -> tuple[tuple[str, ArtifactManifest], ...]:
+        cache = self._operation_cache
+        if cache is not None and cache.manifests is not None:
+            return cache.manifests
+        directory = self._resolve_cached("00_inbox/manifests", (ContextZone.INBOX,))
+        manifests: list[tuple[str, ArtifactManifest]] = []
+        if directory.is_dir():
+            for path in sorted(directory.iterdir(), key=lambda item: item.name):
+                if path.suffix.lower() not in {".json", ".yaml", ".yml"}:
+                    continue
+                relative = path.relative_to(self._root).as_posix()
+                try:
+                    manifest = self._store.read_artifact_manifest(relative)
+                except (OSError, ValueError):
+                    continue
+                manifests.append((relative, manifest))
+        result = tuple(manifests)
+        if cache is not None:
+            cache.manifests = result
+        return result
+
     def _raise_apply_conflicts(
         self,
         proposal: TransactionProposal,
         verification: LedgerVerification,
+        duplicate: AuditEvent | None,
     ) -> None:
-        if find_event_by_proposal_id(self._root, proposal.id) is not None:
+        if duplicate is not None:
             raise DuplicateProposalError()
         if proposal.base_revision != verification.head_hash:
             raise StaleRevisionError()
+
+    def _verify_apply_ledger(
+        self,
+        proposal_id: str,
+    ) -> tuple[LedgerVerification, AuditEvent | None]:
+        events = _read_verified_events(self._store)
+        duplicate = next((event for event in events if event.proposal_id == proposal_id), None)
+        return _verification(self._store, events), duplicate
 
     def _proposal_event(
         self,
@@ -1534,8 +1714,8 @@ class TransactionEngine:
         operations: Sequence[AuditOperation],
         action: Literal["apply", "recovery"],
         result: Literal["committed", "rolled_back"],
+        prev_hash: str,
     ) -> AuditEvent:
-        current = verify_ledger(self._root)
         content = AuditEventContent(
             schema_version=1,
             id=f"AUD-{proposal.id.removeprefix('TXP-')}",
@@ -1545,10 +1725,10 @@ class TransactionEngine:
             actor=proposal.actor,
             action=action,
             result=result,
-            base_revision=current.head_hash,
+            base_revision=prev_hash,
             source_refs=proposal.source_refs,
             operations=list(operations),
-            prev_hash=current.head_hash,
+            prev_hash=prev_hash,
         )
         return AuditEvent.seal(content)
 
@@ -1580,10 +1760,9 @@ class TransactionEngine:
         )
         return AuditEvent.seal(content)
 
-    def _verify_appended_event(self, event: AuditEvent) -> None:
-        verification = verify_ledger(self._root)
-        exact = find_event_by_proposal_id(self._root, event.proposal_id)
-        if exact != event or verification.head_hash != event.event_hash:
+    @staticmethod
+    def _verify_appended_event(event: AuditEvent, appended: AuditEvent) -> None:
+        if appended != event:
             raise TransactionConflictError("TXN-AUDIT-APPEND-UNCONFIRMED")
 
     def _finalize_existing_recovery(
@@ -1650,6 +1829,7 @@ class TransactionEngine:
         projection: SQLiteProjection,
         lock: ContextLock,
     ) -> ProjectionStatus:
+        projection._close_operation_reader()
         try:
             return _run_with_heartbeat(
                 lock,
@@ -2324,37 +2504,47 @@ def _run_with_heartbeat[ResultT](
     lock: ContextLock,
     operation: Callable[[], ResultT],
 ) -> ResultT:
-    """Keep a writer lease current while one opaque operation is running."""
+    """Run one step under the operation-scoped writer-lease refresher."""
 
-    lock.heartbeat()
-    stopped = Event()
-    failures: list[Exception] = []
-
-    def refresh() -> None:
-        while not stopped.wait(_HEARTBEAT_INTERVAL_SECONDS):
-            try:
-                lock.heartbeat()
-            except Exception as exc:
-                failures.append(exc)
-                stopped.set()
-
-    worker = Thread(
-        target=refresh,
-        name="workctx-transaction-heartbeat",
-        daemon=True,
-    )
-    worker.start()
-    try:
-        result = operation()
-    finally:
-        stopped.set()
-        worker.join()
-    if failures:
-        raise LockFenceError("The transaction heartbeat could not refresh its lease") from failures[
-            0
-        ]
-    lock.heartbeat()
+    heartbeat = _ACTIVE_HEARTBEAT.get()
+    if heartbeat is None or heartbeat._lock is not lock:
+        return operation()
+    heartbeat.check()
+    result = operation()
+    heartbeat.check()
     return result
+
+
+def _run_stager_step[ResultT](
+    lock: ContextLock,
+    stager: StagedReplacement,
+    operation: Callable[[], ResultT],
+) -> ResultT:
+    """Reuse intent-path validation only within one synchronous stager call."""
+
+    attribute = "_validated_intent_paths"
+    missing = object()
+    previous = stager.__dict__.get(attribute, missing)
+    validate = stager._validated_intent_paths
+    cached_intent: IntentRecord | None = None
+    cached_paths: object = missing
+
+    def validate_once(intent: IntentRecord) -> object:
+        nonlocal cached_intent, cached_paths
+        if cached_intent == intent and cached_paths is not missing:
+            return cached_paths
+        cached_intent = intent
+        cached_paths = validate(intent)
+        return cached_paths
+
+    setattr(stager, attribute, validate_once)
+    try:
+        return _run_with_heartbeat(lock, operation)
+    finally:
+        if previous is missing:
+            delattr(stager, attribute)
+        else:
+            setattr(stager, attribute, previous)
 
 
 def _utc_now() -> datetime:
