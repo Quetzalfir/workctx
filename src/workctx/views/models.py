@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue
 
-from workctx.domain import TaskPriority, TaskStatus
+from workctx.domain import EntityType, TaskPriority, TaskStatus
 
 
 class _ViewRecord(BaseModel):
@@ -22,6 +22,10 @@ class ViewName(StrEnum):
     BRIEF = "brief"
     RESOURCE_DIRECTORY = "resource-directory"
     STATUS_REPORT = "status-report"
+    PEOPLE_DIRECTORY = "people-directory"
+    GLOSSARY = "glossary"
+    AGENDA = "agenda"
+    SUGGESTIONS = "suggestions"
 
     @property
     def relative_path(self) -> str:
@@ -90,6 +94,97 @@ class ResourceDirectoryItem(_ViewRecord):
 
 class ResourceDirectoryPayload(_ViewRecord):
     resources: tuple[ResourceDirectoryItem, ...]
+
+
+class DirectoryTaskItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+
+
+class PeopleDirectoryItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    roles: tuple[str, ...]
+    teams: tuple[str, ...]
+    channels: tuple[str, ...]
+    timezone: str | None
+    owned_tasks: tuple[DirectoryTaskItem, ...]
+    blocked_tasks: tuple[DirectoryTaskItem, ...]
+    waiting_tasks: tuple[DirectoryTaskItem, ...]
+
+
+class PeopleDirectoryPayload(_ViewRecord):
+    people: tuple[PeopleDirectoryItem, ...]
+    teams: tuple[PeopleDirectoryItem, ...]
+
+
+class GlossaryOwnerItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    entity_type: EntityType
+    definition: str
+
+
+class GlossaryAliasItem(_ViewRecord):
+    alias: str
+    owners: tuple[GlossaryOwnerItem, ...]
+
+
+class GlossaryPayload(_ViewRecord):
+    aliases: tuple[GlossaryAliasItem, ...]
+
+
+class DueTaskItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    status: TaskStatus
+    due_at: AwareDatetime
+    overdue: bool
+
+
+class WaitingAgendaItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    waiting_on: str
+    display_name: str
+    person_uri: str | None
+    since: AwareDatetime
+    age_days: int = Field(ge=0)
+
+
+class AgedTaskItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    since: AwareDatetime
+    age_days: int = Field(ge=0)
+
+
+class AgendaPayload(_ViewRecord):
+    due_tasks: tuple[DueTaskItem, ...]
+    waiting_on: tuple[WaitingAgendaItem, ...]
+    blocked_tasks: tuple[AgedTaskItem, ...]
+
+
+class SuggestionItem(_ViewRecord):
+    id: str
+    uri: str
+    title: str
+    statement: str
+    signal: str
+
+
+class SuggestionsPayload(_ViewRecord):
+    stale_claims: tuple[SuggestionItem, ...]
+    broken_evidence_links: tuple[SuggestionItem, ...]
+    inactive_tasks: tuple[SuggestionItem, ...]
+    orphaned_knowledge: tuple[SuggestionItem, ...]
+    old_waiting_on: tuple[SuggestionItem, ...]
 
 
 class CompletedTaskItem(_ViewRecord):
@@ -172,12 +267,21 @@ class ViewRebuildResult(_ViewRecord):
 
 
 __all__ = [
+    "AgedTaskItem",
+    "AgendaPayload",
     "BlockedWaitingTaskItem",
     "BriefPayload",
     "CommitmentTaskItem",
     "CompletedTaskItem",
+    "DirectoryTaskItem",
+    "DueTaskItem",
     "GeneratedView",
+    "GlossaryAliasItem",
+    "GlossaryOwnerItem",
+    "GlossaryPayload",
     "LedgerActivitySummary",
+    "PeopleDirectoryItem",
+    "PeopleDirectoryPayload",
     "ProcessedArtifactItem",
     "ResourceAccess",
     "ResourceDirectoryItem",
@@ -185,9 +289,12 @@ __all__ = [
     "ResourceLinkItem",
     "StaleClaimItem",
     "StatusReportPayload",
+    "SuggestionItem",
+    "SuggestionsPayload",
     "TaskTransitionItem",
     "TaskViewItem",
     "ViewName",
     "ViewRebuildResult",
+    "WaitingAgendaItem",
     "WaitingOnGroup",
 ]

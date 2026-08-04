@@ -8,12 +8,19 @@ from datetime import UTC, datetime
 
 from workctx.validation.engine import contains_possible_secret
 from workctx.views.models import (
+    AgendaPayload,
     BriefPayload,
+    DirectoryTaskItem,
+    GlossaryPayload,
+    PeopleDirectoryItem,
+    PeopleDirectoryPayload,
     ResourceAccess,
     ResourceDirectoryPayload,
     ResourceLinkItem,
     StaleClaimItem,
     StatusReportPayload,
+    SuggestionItem,
+    SuggestionsPayload,
     TaskViewItem,
     ViewName,
     WaitingOnGroup,
@@ -29,6 +36,10 @@ def render_view(
     next_actions: Sequence[TaskViewItem],
     resource_directory: ResourceDirectoryPayload,
     status_report: StatusReportPayload,
+    people_directory: PeopleDirectoryPayload,
+    glossary: GlossaryPayload,
+    agenda: AgendaPayload,
+    suggestions: SuggestionsPayload,
 ) -> bytes:
     """Render one generated file from an already consistent structured snapshot."""
 
@@ -40,6 +51,10 @@ def render_view(
         ViewName.BRIEF: _brief(payload),
         ViewName.RESOURCE_DIRECTORY: _resource_directory(resource_directory),
         ViewName.STATUS_REPORT: _status_report(status_report),
+        ViewName.PEOPLE_DIRECTORY: _people_directory(people_directory),
+        ViewName.GLOSSARY: _glossary(glossary),
+        ViewName.AGENDA: _agenda(agenda),
+        ViewName.SUGGESTIONS: _suggestions(suggestions),
     }
     content = _header(payload) + sections[name]
     return content.encode("utf-8")
@@ -329,6 +344,185 @@ def _status_report(payload: StatusReportPayload) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _people_directory(payload: PeopleDirectoryPayload) -> str:
+    lines = ["# People directory", "", "## People", ""]
+    if payload.people:
+        for person in payload.people:
+            lines.extend(_directory_entity(person, include_tasks=True))
+    else:
+        lines.extend(("_No people._", ""))
+
+    lines.extend(("## Teams", ""))
+    if payload.teams:
+        for team in payload.teams:
+            lines.extend(_directory_entity(team, include_tasks=False))
+    else:
+        lines.append("_No teams._")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _directory_entity(
+    item: PeopleDirectoryItem,
+    *,
+    include_tasks: bool,
+) -> list[str]:
+    lines = [
+        f"### {_inline(item.title)}",
+        "",
+        f"- URI: `{_inline(item.uri)}`",
+        f"- Role: {_inline('; '.join(item.roles) or '—')}",
+        f"- Team: {_inline('; '.join(item.teams) or '—')}",
+        f"- Channels: {_inline('; '.join(item.channels) or '—')}",
+        f"- Timezone: {_inline(item.timezone or '—')}",
+    ]
+    if include_tasks:
+        lines.extend(
+            (
+                f"- Owns: {_directory_tasks(item.owned_tasks)}",
+                f"- Blocks: {_directory_tasks(item.blocked_tasks)}",
+                f"- Waiting on them: {_directory_tasks(item.waiting_tasks)}",
+            )
+        )
+    lines.append("")
+    return lines
+
+
+def _directory_tasks(tasks: Sequence[DirectoryTaskItem]) -> str:
+    return ", ".join(_record_link(task.id, task.title, task.uri) for task in tasks) or "—"
+
+
+def _glossary(payload: GlossaryPayload) -> str:
+    lines = ["# Glossary", ""]
+    excluded: set[str] = set()
+    if not payload.aliases:
+        lines.append("_No glossary aliases._")
+        return "\n".join(lines) + "\n"
+
+    for item in payload.aliases:
+        lines.extend(
+            (
+                f"## {_inline(item.alias)}",
+                "",
+                "| Entity | Type | URI | Definition |",
+                "| --- | --- | --- | --- |",
+            )
+        )
+        rendered = 0
+        for owner in item.owners:
+            row = (
+                "| "
+                + " | ".join(
+                    (
+                        _cell(owner.title),
+                        _cell(owner.entity_type.value),
+                        f"`{_cell(owner.uri)}`",
+                        _cell(owner.definition or "—"),
+                    )
+                )
+                + " |"
+            )
+            if _append_glossary_line(lines, row, excluded=excluded, entity_id=owner.id):
+                rendered += 1
+        if rendered == 0:
+            lines.append("| _No renderable entries._ | — | — | — |")
+        lines.append("")
+
+    if excluded:
+        lines.extend(("## Exclusions", ""))
+        lines.extend(
+            f"- `{_inline(entity_id)}`: excluded: possible secret" for entity_id in sorted(excluded)
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _agenda(payload: AgendaPayload) -> str:
+    lines = [
+        "# Agenda",
+        "",
+        "## Due tasks",
+        "",
+        "| Task | Status | Due | Overdue |",
+        "| --- | --- | --- | --- |",
+    ]
+    if payload.due_tasks:
+        lines.extend(
+            f"| {_record_link(item.id, item.title, item.uri)} | {item.status.value} | "
+            f"{_timestamp(item.due_at)} | {'yes' if item.overdue else 'no'} |"
+            for item in payload.due_tasks
+        )
+    else:
+        lines.append("| _No tasks with due dates._ | — | — | — |")
+
+    lines.extend(
+        (
+            "",
+            "## Waiting on",
+            "",
+            "| Task | Waiting on | Since | Age (days) |",
+            "| --- | --- | --- | --- |",
+        )
+    )
+    if payload.waiting_on:
+        for item in payload.waiting_on:
+            reference = item.person_uri or item.waiting_on
+            waiting = f"{_cell(item.display_name)} (`{_cell(reference)}`)"
+            lines.append(
+                f"| {_record_link(item.id, item.title, item.uri)} | {waiting} | "
+                f"{_timestamp(item.since)} | {item.age_days} |"
+            )
+    else:
+        lines.append("| _No waiting-on entries._ | — | — | — |")
+
+    lines.extend(
+        (
+            "",
+            "## Blocked tasks",
+            "",
+            "| Task | Blocked since | Age (days) |",
+            "| --- | --- | --- |",
+        )
+    )
+    if payload.blocked_tasks:
+        lines.extend(
+            f"| {_record_link(item.id, item.title, item.uri)} | "
+            f"{_timestamp(item.since)} | {item.age_days} |"
+            for item in payload.blocked_tasks
+        )
+    else:
+        lines.append("| _No blocked tasks._ | — | — |")
+    return "\n".join(lines) + "\n"
+
+
+def _suggestions(payload: SuggestionsPayload) -> str:
+    lines = [
+        "# Suggestions",
+        "",
+        "This advisory view reports canonical and verified audit signals only. "
+        "It never takes action automatically.",
+    ]
+    sections = (
+        ("Stale claims", payload.stale_claims),
+        ("Broken evidence links", payload.broken_evidence_links),
+        ("Inactive tasks", payload.inactive_tasks),
+        ("Orphaned knowledge", payload.orphaned_knowledge),
+        ("Old waiting-on entries", payload.old_waiting_on),
+    )
+    for heading, items in sections:
+        lines.extend(("", f"## {heading}", ""))
+        lines.extend(_suggestion_lines(items))
+    return "\n".join(lines) + "\n"
+
+
+def _suggestion_lines(items: Sequence[SuggestionItem]) -> list[str]:
+    if not items:
+        return ["_No suggestions._"]
+    return [
+        f"- {_record_link(item.id, item.title, item.uri)} — {_inline(item.statement)} "
+        f"Signal: {_inline(item.signal)}"
+        for item in items
+    ]
+
+
 def _append_resource_line(
     lines: list[str],
     line: str,
@@ -339,6 +533,20 @@ def _append_resource_line(
     if contains_possible_secret(line):
         if entity_id is not None:
             excluded.add(entity_id)
+        return False
+    lines.append(line)
+    return True
+
+
+def _append_glossary_line(
+    lines: list[str],
+    line: str,
+    *,
+    excluded: set[str],
+    entity_id: str,
+) -> bool:
+    if contains_possible_secret(line):
+        excluded.add(entity_id)
         return False
     lines.append(line)
     return True

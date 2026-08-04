@@ -24,18 +24,32 @@ from workctx.domain import (
     TaskPriority,
     TaskStatus,
 )
-from workctx.domain.transactions import AuditCreateOperation, AuditEvent, AuditUpdateOperation
+from workctx.domain.transactions import (
+    AuditCreateOperation,
+    AuditEvent,
+    AuditMoveOperation,
+    AuditUpdateOperation,
+)
 from workctx.ingestion import ArtifactRecord, list_inbox
-from workctx.retrieval import resolve
+from workctx.retrieval import resolve, trace
 from workctx.transactions import AuditSummary, audit_summary, read_audit_events
 from workctx.views.errors import ViewSourceChangedError
 from workctx.views.models import (
+    AgedTaskItem,
+    AgendaPayload,
     BlockedWaitingTaskItem,
     BriefPayload,
     CommitmentTaskItem,
     CompletedTaskItem,
+    DirectoryTaskItem,
+    DueTaskItem,
     GeneratedView,
+    GlossaryAliasItem,
+    GlossaryOwnerItem,
+    GlossaryPayload,
     LedgerActivitySummary,
+    PeopleDirectoryItem,
+    PeopleDirectoryPayload,
     ProcessedArtifactItem,
     ResourceAccess,
     ResourceDirectoryItem,
@@ -43,17 +57,26 @@ from workctx.views.models import (
     ResourceLinkItem,
     StaleClaimItem,
     StatusReportPayload,
+    SuggestionItem,
+    SuggestionsPayload,
     TaskTransitionItem,
     TaskViewItem,
     ViewName,
     ViewRebuildResult,
+    WaitingAgendaItem,
     WaitingOnGroup,
 )
 from workctx.views.rendering import render_view
 
 DEFAULT_STALE_AFTER = timedelta(days=30)
 _STATUS_REPORT_PERIOD = timedelta(days=7)
+_TASK_INACTIVITY_AFTER = timedelta(days=30)
+_OLD_WAITING_AFTER = timedelta(days=14)
 _RESOURCE_ENTITY_TYPES = frozenset({EntityType.SYSTEM, EntityType.SERVICE, EntityType.INTEGRATION})
+_DIRECTORY_ENTITY_TYPES = frozenset({EntityType.PERSON, EntityType.TEAM})
+_ORPHAN_EXCLUDED_TYPES = frozenset(
+    {EntityType.TASK, EntityType.CLAIM, EntityType.OBSERVATION, EntityType.ARTIFACT}
+)
 _RESOURCE_ACCESS_ORDER = {
     ResourceAccess.PUBLIC: 0,
     ResourceAccess.SSO: 1,
@@ -63,6 +86,15 @@ _RESOURCE_ACCESS_ORDER = {
 }
 _ACTIONABLE_STATUSES = frozenset(
     {TaskStatus.READY, TaskStatus.ACTIVE, TaskStatus.BLOCKED, TaskStatus.WAITING}
+)
+_CURRENT_TASK_STATUSES = frozenset(
+    {
+        TaskStatus.BACKLOG,
+        TaskStatus.READY,
+        TaskStatus.ACTIVE,
+        TaskStatus.BLOCKED,
+        TaskStatus.WAITING,
+    }
 )
 _PRIORITY_ORDER = {
     TaskPriority.P0: 0,
@@ -79,6 +111,10 @@ class _OperationalSnapshot:
     next_actions: tuple[TaskViewItem, ...]
     resource_directory: ResourceDirectoryPayload
     status_report: StatusReportPayload
+    people_directory: PeopleDirectoryPayload
+    glossary: GlossaryPayload
+    agenda: AgendaPayload
+    suggestions: SuggestionsPayload
 
 
 class ViewService:
@@ -160,6 +196,10 @@ class ViewService:
                     next_actions=snapshot.next_actions,
                     resource_directory=snapshot.resource_directory,
                     status_report=snapshot.status_report,
+                    people_directory=snapshot.people_directory,
+                    glossary=snapshot.glossary,
+                    agenda=snapshot.agenda,
+                    suggestions=snapshot.suggestions,
                 )
                 atomic_replace_bytes(
                     self._root,
@@ -185,7 +225,7 @@ class ViewService:
     def _snapshot(self, generated_at: datetime) -> _OperationalSnapshot:
         before = audit_summary(self._root)
         tasks = tuple(sorted(self._projection.query_tasks(), key=_task_sort_key))
-        entities = self._projection.query_entities(entity_types=_RESOURCE_ENTITY_TYPES)
+        entities = self._projection.query_entities()
         events = read_audit_events(self._root, through=generated_at)
         artifacts = list_inbox(
             self._root,
@@ -203,8 +243,21 @@ class ViewService:
         )
         waiting_on = self._waiting_on(tasks, task_items)
         stale_claims = self._stale_claims(tasks, generated_at)
-        resource_directory = self._resource_directory(entities)
+        resource_directory = self._resource_directory(
+            tuple(entity for entity in entities if entity.entity_type in _RESOURCE_ENTITY_TYPES)
+        )
         status_report = self._status_report(tasks, events, artifacts, generated_at)
+        people_directory = self._people_directory(entities, tasks)
+        glossary = self._glossary(entities)
+        agenda = self._agenda(tasks, generated_at)
+        suggestions = self._suggestions(
+            tasks,
+            entities,
+            events,
+            stale_claims,
+            agenda,
+            generated_at,
+        )
         after = audit_summary(self._root)
         if before.head_hash != after.head_hash:
             raise ViewSourceChangedError()
@@ -223,6 +276,10 @@ class ViewService:
             next_actions=next_actions,
             resource_directory=resource_directory,
             status_report=status_report,
+            people_directory=people_directory,
+            glossary=glossary,
+            agenda=agenda,
+            suggestions=suggestions,
         )
 
     def _waiting_on(
@@ -336,6 +393,348 @@ class ViewService:
                 )
             )
         )
+
+    def _people_directory(
+        self,
+        entities: tuple[EntityRecord, ...],
+        tasks: tuple[TaskRecord, ...],
+    ) -> PeopleDirectoryPayload:
+        current_tasks = tuple(task for task in tasks if task.status in _CURRENT_TASK_STATUSES)
+        tasks_by_uri = {str(task.uri): task for task in current_tasks}
+        people: list[PeopleDirectoryItem] = []
+        teams: list[PeopleDirectoryItem] = []
+
+        for entity in entities:
+            if entity.entity_type not in _DIRECTORY_ENTITY_TYPES:
+                continue
+            document = self._store.read_entity(entity.source_path)
+            frontmatter = document.frontmatter
+            extra = frontmatter.model_extra or {}
+            uri = str(entity.uri)
+            blocked = {task.id: task for task in current_tasks if uri in task.blockers}
+            for reference in frontmatter.references:
+                if reference.relation != "blocks":
+                    continue
+                task = tasks_by_uri.get(reference.target)
+                if task is not None:
+                    blocked[task.id] = task
+
+            item = PeopleDirectoryItem(
+                id=entity.id,
+                uri=uri,
+                title=entity.title,
+                roles=_extra_values(extra, "role", "roles"),
+                teams=self._team_values(frontmatter),
+                channels=_channel_values(frontmatter),
+                timezone=_extra_scalar(extra, "timezone"),
+                owned_tasks=tuple(
+                    _directory_task(task)
+                    for task in sorted(
+                        (task for task in current_tasks if task.owner == uri),
+                        key=_task_title_sort_key,
+                    )
+                ),
+                blocked_tasks=tuple(
+                    _directory_task(task)
+                    for task in sorted(blocked.values(), key=_task_title_sort_key)
+                ),
+                waiting_tasks=tuple(
+                    _directory_task(task)
+                    for task in sorted(
+                        (task for task in current_tasks if uri in task.waiting_on),
+                        key=_task_title_sort_key,
+                    )
+                ),
+            )
+            if entity.entity_type is EntityType.PERSON:
+                people.append(item)
+            else:
+                teams.append(item)
+
+        def item_key(item: PeopleDirectoryItem) -> tuple[str, str, str]:
+            return item.title.casefold(), item.title, item.id
+
+        return PeopleDirectoryPayload(
+            people=tuple(sorted(people, key=item_key)),
+            teams=tuple(sorted(teams, key=item_key)),
+        )
+
+    def _team_values(self, frontmatter: EntityFrontmatter) -> tuple[str, ...]:
+        values = list(_extra_values(frontmatter.model_extra or {}, "team", "teams"))
+        for reference in frontmatter.references:
+            if not reference.target.startswith("workctx://"):
+                continue
+            resolution = resolve(self._projection, reference.target)
+            record = resolution.record
+            if isinstance(record, EntityRecord) and record.entity_type is EntityType.TEAM:
+                values.append(f"{record.title} ({record.uri})")
+        return _unique_sorted(values)
+
+    def _glossary(self, entities: tuple[EntityRecord, ...]) -> GlossaryPayload:
+        grouped: dict[str, list[GlossaryOwnerItem]] = defaultdict(list)
+        for entity in entities:
+            owner = GlossaryOwnerItem(
+                id=entity.id,
+                uri=str(entity.uri),
+                title=entity.title,
+                entity_type=entity.entity_type,
+                definition=_first_body_line(entity.body),
+            )
+            for alias in entity.aliases:
+                grouped[alias].append(owner)
+
+        aliases: list[GlossaryAliasItem] = []
+        for alias, entries in grouped.items():
+            owners = {owner.id: owner for owner in entries}
+            aliases.append(
+                GlossaryAliasItem(
+                    alias=alias,
+                    owners=tuple(
+                        sorted(
+                            owners.values(),
+                            key=lambda item: (
+                                item.title.casefold(),
+                                item.title,
+                                item.entity_type.value,
+                                item.id,
+                            ),
+                        )
+                    ),
+                )
+            )
+        return GlossaryPayload(
+            aliases=tuple(sorted(aliases, key=lambda item: (item.alias.casefold(), item.alias)))
+        )
+
+    def _agenda(
+        self,
+        tasks: tuple[TaskRecord, ...],
+        generated_at: datetime,
+    ) -> AgendaPayload:
+        due_tasks = tuple(
+            DueTaskItem(
+                id=task.id,
+                uri=str(task.uri),
+                title=task.title,
+                status=task.status,
+                due_at=task.due_at,
+                overdue=(
+                    task.due_at < generated_at
+                    and task.status not in {TaskStatus.DONE, TaskStatus.CANCELLED}
+                ),
+            )
+            for task in sorted(
+                (task for task in tasks if task.due_at is not None),
+                key=lambda item: (item.due_at, item.id),
+            )
+            if task.due_at is not None
+        )
+
+        waiting_items: list[WaitingAgendaItem] = []
+        blocked_items: list[AgedTaskItem] = []
+        for task in tasks:
+            status_claims = tuple(
+                claim
+                for claim in self._projection.claims_for_subject(task.uri)
+                if claim.predicate == "status"
+            )
+            status_since = _current_status_since(task, status_claims)
+            waiting_since = status_since if task.status is TaskStatus.WAITING else task.updated_at
+            for value in task.waiting_on:
+                display_name, person_uri = self._waiting_party(value)
+                waiting_items.append(
+                    WaitingAgendaItem(
+                        id=task.id,
+                        uri=str(task.uri),
+                        title=task.title,
+                        waiting_on=value,
+                        display_name=display_name,
+                        person_uri=person_uri,
+                        since=waiting_since,
+                        age_days=max(0, (generated_at - waiting_since).days),
+                    )
+                )
+            if task.status is TaskStatus.BLOCKED:
+                blocked_items.append(
+                    AgedTaskItem(
+                        id=task.id,
+                        uri=str(task.uri),
+                        title=task.title,
+                        since=status_since,
+                        age_days=max(0, (generated_at - status_since).days),
+                    )
+                )
+
+        return AgendaPayload(
+            due_tasks=due_tasks,
+            waiting_on=tuple(
+                sorted(
+                    waiting_items,
+                    key=lambda item: (
+                        item.since,
+                        item.display_name.casefold(),
+                        item.id,
+                        item.waiting_on,
+                    ),
+                )
+            ),
+            blocked_tasks=tuple(sorted(blocked_items, key=lambda item: (item.since, item.id))),
+        )
+
+    def _suggestions(
+        self,
+        tasks: tuple[TaskRecord, ...],
+        entities: tuple[EntityRecord, ...],
+        events: tuple[AuditEvent, ...],
+        stale_claims: tuple[StaleClaimItem, ...],
+        agenda: AgendaPayload,
+        generated_at: datetime,
+    ) -> SuggestionsPayload:
+        stale = tuple(
+            SuggestionItem(
+                id=claim.id,
+                uri=claim.uri,
+                title=f"{claim.predicate} for {claim.subject}",
+                statement=(
+                    f"This current claim is {claim.age_days} days old; review or supersede."
+                ),
+                signal=(
+                    f"stale current claim reached the configured "
+                    f"{self._stale_after / timedelta(days=1):g}-day horizon."
+                ),
+            )
+            for claim in stale_claims
+        )
+
+        broken: list[SuggestionItem] = []
+        inactive: list[SuggestionItem] = []
+        for task in tasks:
+            traced = trace(self._projection, task.uri)
+            missing = {item.reference for item in traced.missing_observations}
+            if task.source_observations and all(
+                observation in missing for observation in task.source_observations
+            ):
+                broken.append(
+                    SuggestionItem(
+                        id=task.id,
+                        uri=str(task.uri),
+                        title=task.title,
+                        statement=(
+                            "Every canonical source observation is unresolved; "
+                            "evidence link broken."
+                        ),
+                        signal="all task source_observations references failed retrieval trace.",
+                    )
+                )
+
+            if task.status not in {TaskStatus.ACTIVE, TaskStatus.WAITING}:
+                continue
+            last_activity = self._last_task_activity(task, events)
+            baseline = task.updated_at if last_activity is None else last_activity
+            inactivity = generated_at - baseline
+            if inactivity < _TASK_INACTIVITY_AFTER:
+                continue
+            age_days = max(0, inactivity.days)
+            activity_fact = (
+                f"No committed audit activity is recorded, and the task record is "
+                f"{age_days} days old"
+                if last_activity is None
+                else f"No committed audit activity has occurred for {age_days} days"
+            )
+            inactive.append(
+                SuggestionItem(
+                    id=task.id,
+                    uri=str(task.uri),
+                    title=task.title,
+                    statement=f"{activity_fact}; confirm still real, or close.",
+                    signal="active/waiting task audit inactivity reached 30 days.",
+                )
+            )
+
+        orphaned = self._orphaned_knowledge(tasks, entities)
+        old_waiting = tuple(
+            SuggestionItem(
+                id=item.id,
+                uri=item.uri,
+                title=item.title,
+                statement=(
+                    f"This task has waited on {item.display_name} for {item.age_days} days; "
+                    "chase or drop."
+                ),
+                signal="waiting-on age exceeded 14 days.",
+            )
+            for item in agenda.waiting_on
+            if generated_at - item.since > _OLD_WAITING_AFTER
+        )
+        return SuggestionsPayload(
+            stale_claims=stale,
+            broken_evidence_links=tuple(sorted(broken, key=_suggestion_sort_key)),
+            inactive_tasks=tuple(sorted(inactive, key=_suggestion_sort_key)),
+            orphaned_knowledge=orphaned,
+            old_waiting_on=old_waiting,
+        )
+
+    def _last_task_activity(
+        self,
+        task: TaskRecord,
+        events: tuple[AuditEvent, ...],
+    ) -> datetime | None:
+        paths = {task.source_path}
+        paths.update(claim.source_path for claim in self._projection.claims_for_subject(task.uri))
+        uri = str(task.uri)
+        timestamps = [
+            event.timestamp
+            for event in events
+            if event.result == "committed"
+            and (uri in event.source_refs or paths.intersection(_audit_event_paths(event)))
+        ]
+        return max(timestamps, default=None)
+
+    def _orphaned_knowledge(
+        self,
+        tasks: tuple[TaskRecord, ...],
+        entities: tuple[EntityRecord, ...],
+    ) -> tuple[SuggestionItem, ...]:
+        task_references = {
+            value
+            for task in tasks
+            for value in (
+                task.owner,
+                task.requester,
+                *task.waiting_on,
+                *task.dependencies,
+                *task.blockers,
+            )
+            if value is not None
+        }
+        suggestions: list[SuggestionItem] = []
+        for entity in entities:
+            if entity.entity_type in _ORPHAN_EXCLUDED_TYPES:
+                continue
+            uri = str(entity.uri)
+            if uri in task_references:
+                continue
+            if self._projection.claims_for_subject(entity.uri):
+                continue
+            if self._projection.observations_for_parent(entity.uri):
+                continue
+            if self._projection.inbound_edges(entity.uri):
+                continue
+            if self._projection.outbound_edges(entity.uri):
+                continue
+            suggestions.append(
+                SuggestionItem(
+                    id=entity.id,
+                    uri=uri,
+                    title=entity.title,
+                    statement=(
+                        "No canonical task, claim, observation, or typed relation references "
+                        "this entity; orphaned knowledge: connect or archive."
+                    ),
+                    signal="no structured canonical reference was found.",
+                )
+            )
+        return tuple(sorted(suggestions, key=_suggestion_sort_key))
 
     def _status_report(
         self,
@@ -555,8 +954,86 @@ def _resource_access(value: object) -> ResourceAccess:
         return ResourceAccess.OTHER
 
 
+def _extra_values(extra: Mapping[str, object], *names: str) -> tuple[str, ...]:
+    values: list[str] = []
+    for name in names:
+        values.extend(_display_values(extra.get(name)))
+    return _unique_sorted(values)
+
+
+def _channel_values(frontmatter: EntityFrontmatter) -> tuple[str, ...]:
+    values = list(_extra_values(frontmatter.model_extra or {}, "channel", "channels"))
+    for reference in frontmatter.references:
+        if reference.relation not in {"mentions", "related_to"}:
+            continue
+        if reference.target.startswith(("workctx://", "artifact://", "repo://")):
+            continue
+        values.append(
+            f"{reference.note}: {reference.target}" if reference.note else reference.target
+        )
+    return _unique_sorted(values)
+
+
+def _display_values(value: object) -> tuple[str, ...]:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return (stripped,) if stripped else ()
+    if isinstance(value, (list, tuple)):
+        return tuple(item for entry in value for item in _display_values(entry))
+    if not isinstance(value, Mapping):
+        return ()
+
+    label = value.get("label")
+    display_value = value.get("value")
+    if isinstance(label, str) and isinstance(display_value, str):
+        label = label.strip()
+        display_value = display_value.strip()
+        if label and display_value:
+            return (f"{label}: {display_value}",)
+
+    values: list[str] = []
+    for key in sorted(value, key=lambda item: (str(item).casefold(), str(item))):
+        for item in _display_values(value[key]):
+            values.append(f"{key}: {item}")
+    return tuple(values)
+
+
+def _extra_scalar(extra: Mapping[str, object], name: str) -> str | None:
+    value = extra.get(name)
+    if not isinstance(value, str) or not (stripped := value.strip()):
+        return None
+    return stripped
+
+
+def _unique_sorted(values: list[str]) -> tuple[str, ...]:
+    unique = {value for value in values if value}
+    return tuple(sorted(unique, key=lambda item: (item.casefold(), item)))
+
+
 def _first_body_line(body: str) -> str:
     return next((line.strip() for line in body.splitlines() if line.strip()), "")
+
+
+def _directory_task(task: TaskRecord) -> DirectoryTaskItem:
+    return DirectoryTaskItem(id=task.id, uri=str(task.uri), title=task.title)
+
+
+def _task_title_sort_key(task: TaskRecord) -> tuple[str, str, str]:
+    return task.title.casefold(), task.title, task.id
+
+
+def _suggestion_sort_key(item: SuggestionItem) -> tuple[str, str, str]:
+    return item.title.casefold(), item.title, item.id
+
+
+def _audit_event_paths(event: AuditEvent) -> frozenset[str]:
+    paths: set[str] = set()
+    for operation in event.operations:
+        if isinstance(operation, (AuditCreateOperation, AuditUpdateOperation)):
+            paths.add(operation.target)
+        elif isinstance(operation, AuditMoveOperation):
+            paths.update((operation.source, operation.destination))
+    return frozenset(paths)
 
 
 def _task_status(value: object) -> TaskStatus | None:
