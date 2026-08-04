@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "wave": 8,
-  "baseline_commit": "wave2-close (post-matrix)",
+  "wave": 9,
+  "baseline_commit": "wave3-close",
   "notes": [
-    "Phase 2 waves 1-2 are historical (Git history + integration log).",
-    "Phase 2 wave 3: WP-650 || WP-660 in parallel, disjoint. Briefs under .agents/plan/2026-08-03_200758-phase2-wave3/.",
-    "cli.py: WP-660 only (inbox add section). Operator deferred secrets trial; C-202 adoption + C-212 need a lead design pass.",
+    "Phase 2 waves 1-3 historical. UI deferred (D-046).",
+    "Phase 2 wave 4: WP-680 || WP-690 parallel, disjoint; WP-700 after WP-680 integrates. Briefs under .agents/plan/2026-08-03_225124-phase2-wave4/.",
+    "cli.py: WP-680 only (suggestion group). schemas/**: WP-680 only (one new schema + fixtures).",
     "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
   ],
   "frozen_paths": [
@@ -28,32 +28,43 @@
   ],
   "assignments": [
     {
-      "work_order_id": "WP-650-more-views",
+      "work_order_id": "WP-680-suggestions",
       "mode": "write",
       "paths": [
-        "src/workctx/views/**",
+        "src/workctx/suggestions/**",
+        "src/workctx/views/** (Records section)",
+        "src/workctx/cli.py (suggestion group)",
+        "schemas/** (suggestion-record only)",
+        "tests/suggestions/**",
         "tests/tasks_views/**",
-        "docs/reference/views.md"
+        "docs/reference/suggestions.md",
+        "docs/reference/cli-envelope.md (rows)"
       ],
-      "branch": "agent/WP-650-more-views",
-      "worktree": ".worktrees/WP-650",
+      "branch": "agent/WP-680-suggestions",
+      "worktree": ".worktrees/WP-680",
       "status": "assigned"
     },
     {
-      "work_order_id": "WP-660-perf-leftovers",
+      "work_order_id": "WP-690-overrides",
       "mode": "write",
       "paths": [
-        "src/workctx/ingestion/service.py",
-        "src/workctx/cli.py (inbox add)",
-        "src/workctx/adapters/filesystem/staging.py",
-        "tests/perf/**",
-        "tests/ingestion/**",
-        "tests/cli/test_inbox_cli.py",
-        "docs/reference/inbox.md"
+        "src/workctx/adapters/agents/**",
+        "tests/agents_setup/**",
+        "docs/guides/personalization.md"
       ],
-      "branch": "agent/WP-660-perf-leftovers",
-      "worktree": ".worktrees/WP-660",
+      "branch": "agent/WP-690-overrides",
+      "worktree": ".worktrees/WP-690",
       "status": "assigned"
+    },
+    {
+      "work_order_id": "WP-700-telemetry",
+      "mode": "write",
+      "paths": [
+        "(assigned at launch, after WP-680)"
+      ],
+      "branch": "agent/WP-700-telemetry",
+      "worktree": ".worktrees/WP-700",
+      "status": "proposed"
     }
   ]
 }
