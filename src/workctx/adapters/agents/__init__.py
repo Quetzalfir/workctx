@@ -34,11 +34,29 @@ from .models import (
     OpenedContext,
     OperationAction,
     OperationResult,
+    PersonalizationLayerName,
+    PersonalizationLayerStatus,
     PlannedChange,
     SemanticVersion,
     SourceOrigin,
     SupportedVersionRange,
     TargetApproval,
+)
+from .personalization import (
+    PERSONALIZATION_END_MARKER,
+    PERSONALIZATION_FILENAME,
+    PERSONALIZATION_LAYER_MAX_BYTES,
+    PERSONALIZATION_START_MARKER,
+    PersonalizationEncodingError,
+    PersonalizationLayer,
+    PersonalizationLayerError,
+    PersonalizationLayers,
+    PersonalizationLayerTooLargeError,
+    PersonalizationSecretError,
+    load_personalization_layers,
+    render_personalization_section,
+    render_personalized_bridge,
+    user_personalization_path,
 )
 from .service import AgentAdapterService
 from .session import open_context
@@ -47,6 +65,10 @@ AgentAdapterManager = AgentAdapterService
 ComponentStatus = FeatureStatus
 
 __all__ = [
+    "PERSONALIZATION_END_MARKER",
+    "PERSONALIZATION_FILENAME",
+    "PERSONALIZATION_LAYER_MAX_BYTES",
+    "PERSONALIZATION_START_MARKER",
     "PROJECT_MARKERS",
     "SUPPORTED_VERSION_RANGES",
     "AdapterConflictError",
@@ -73,6 +95,14 @@ __all__ = [
     "OpenedContext",
     "OperationAction",
     "OperationResult",
+    "PersonalizationEncodingError",
+    "PersonalizationLayer",
+    "PersonalizationLayerError",
+    "PersonalizationLayerName",
+    "PersonalizationLayerStatus",
+    "PersonalizationLayerTooLargeError",
+    "PersonalizationLayers",
+    "PersonalizationSecretError",
     "PlannedChange",
     "RecoveryConflictError",
     "RecoveryRequiredError",
@@ -83,6 +113,10 @@ __all__ = [
     "UnsupportedClientVersionError",
     "detect_client",
     "detect_clients",
+    "load_personalization_layers",
     "open_context",
     "parse_client_version",
+    "render_personalization_section",
+    "render_personalized_bridge",
+    "user_personalization_path",
 ]

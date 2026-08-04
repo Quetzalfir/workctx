@@ -11,7 +11,7 @@ from ._safe_fs import collision_key, validate_relative_path
 from .errors import InvalidAdapterStateError
 from .models import AgentClient, McpConfigurationPath
 
-ADAPTER_VERSION = 2
+ADAPTER_VERSION = 3
 
 _CLIENT_ROOTS: dict[AgentClient, str] = {
     AgentClient.CODEX: ".agents/skills",

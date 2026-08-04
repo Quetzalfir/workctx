@@ -105,6 +105,13 @@ class SourceOrigin(StrEnum):
     PACKAGED = "packaged"
 
 
+class PersonalizationLayerName(StrEnum):
+    """The two fixed user-owned personalization layer locations."""
+
+    USER = "user"
+    CONTEXT = "context"
+
+
 @dataclass(frozen=True, order=True, slots=True)
 class SemanticVersion:
     """Minimal semantic version used for client capability checks."""
@@ -162,6 +169,25 @@ class FeatureStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class PersonalizationLayerStatus:
+    """Presence and merge state for one fixed personalization layer."""
+
+    layer: PersonalizationLayerName
+    path: str
+    present: bool
+    size_bytes: int | None
+    merged: bool
+
+    def __post_init__(self) -> None:
+        if self.present != (self.size_bytes is not None):
+            raise ValueError("A present personalization layer must report its byte size")
+        if self.size_bytes is not None and self.size_bytes < 0:
+            raise ValueError("Personalization layer byte size cannot be negative")
+        if self.merged and not self.present:
+            raise ValueError("An absent personalization layer cannot be merged")
+
+
+@dataclass(frozen=True, slots=True)
 class DriftDetail:
     """One exact drift observation."""
 
@@ -192,11 +218,12 @@ class AdapterStatus:
     )
     warnings: tuple[str, ...] = ()
     repair_blocked: bool = False
+    personalization_layers: tuple[PersonalizationLayerStatus, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class PlannedChange:
-    """One project-relative file change in a dry-run plan."""
+    """One project file change or inert external-source verification in a dry-run plan."""
 
     path: str
     operation: FileOperation
@@ -227,6 +254,7 @@ class AdapterPlan:
     plan_hash: str
     source_fingerprint: str | None = None
     blocked_reason: str | None = None
+    personalization_layers: tuple[PersonalizationLayerStatus, ...] = ()
 
     @property
     def requires_approval(self) -> bool:
@@ -234,7 +262,10 @@ class AdapterPlan:
 
     @property
     def is_noop(self) -> bool:
-        return not self.changes and self.blocked_reason is None
+        return (
+            not any(change.operation is not FileOperation.VERIFY for change in self.changes)
+            and self.blocked_reason is None
+        )
 
 
 @dataclass(frozen=True, slots=True)
