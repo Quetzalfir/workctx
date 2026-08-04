@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC
+from typing import Any, cast
 
+import workctx.usage as usage
 from workctx.adapters.sqlite import ClaimRecord, ObservationRecord, TaskRecord
 from workctx.domain import ClaimStatus, EntityType, WorkctxUri
 from workctx.errors import ContextBoundaryError as BaseContextBoundaryError
@@ -33,6 +35,8 @@ def trace(
     """Trace a focal document through claims and observations to exact source locators."""
 
     focal = resolve(reader, reference)
+    if getattr(reader, "usage_enabled", False):
+        usage.record(cast(Any, reader).context_root, "trace", focal.reference)
     if (
         focal.status is ResolutionStatus.NOT_FOUND
         or not isinstance(focal.descriptor, WorkctxReferenceDescriptor)

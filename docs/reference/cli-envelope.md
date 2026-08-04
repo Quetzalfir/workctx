@@ -36,6 +36,9 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `suggestion show` | `suggestion.show` | `suggestion` |
 | `suggestion adopt` | `suggestion.adopt` | `operation`, `suggestion`, `receipt` |
 | `suggestion reject` | `suggestion.reject` | `operation`, `suggestion`, `receipt` |
+| `usage status` | `usage.status` | `enabled`, `path`, `file_size_bytes`, `rotated_file_count`, `rotated_size_bytes`, `summary` |
+| `usage evaluate` | `usage.evaluate` | `count`, `candidates` |
+| `usage suggest` | `usage.suggest` | `candidate_count`, `created_count`, `skipped_count`, `created`, `skipped` |
 | `agent detect` | `agent.detect` | `clients` |
 | `agent status` | `agent.status` | `statuses` |
 | `agent install` | `agent.install` | `applied`, `plans`, `receipts` |
@@ -53,6 +56,8 @@ apply reports `dry_run: false` and includes the authenticated transaction receip
 `agent install` returns the complete plan without changing files unless `--yes` is present.
 `suggestion adopt` and `suggestion reject` never preview or mutate without `--yes`; omission
 returns an envelope-first usage/configuration failure with exit code 2.
+`usage suggest` likewise requires `--yes`; evaluation alone is always read-only, and each created
+record is committed through the approved suggestion transaction API.
 
 ## Envelope contract
 

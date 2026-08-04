@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from pydantic import ValidationError
 
+import workctx.usage as usage
 from workctx.adapters.filesystem import CanonicalStore
 from workctx.adapters.sqlite import (
     Fts5UnavailableError,
@@ -99,6 +100,7 @@ class McpToolService:
         store = CanonicalStore(context_root)
         self._root = store.context_root
         self._context_id = store.context_id
+        self._usage_enabled = store.read_context_config().telemetry.usage
         self._handlers: dict[str, _Handler] = {
             "context_info": self._context_info,
             "workspace_validate": self._workspace_validate,
@@ -155,6 +157,8 @@ class McpToolService:
                 )
             validated = validate_tool_arguments(contract, arguments)
             self._guard_boundaries(validated)
+            if not contract.mutation and self._usage_enabled:
+                usage.record(self._root, f"mcp.{name}", self._usage_target(name, validated))
             return self._handlers[name](validated)
         except InputContractError as exc:
             return self._failure(
@@ -219,6 +223,19 @@ class McpToolService:
 
     def _projection(self) -> SQLiteProjection:
         return SQLiteProjection(self._root)
+
+    def _usage_target(self, name: str, arguments: Mapping[str, object]) -> str:
+        if name == "search":
+            return cast(str, arguments["query"])
+        uri = arguments.get("uri")
+        if isinstance(uri, str):
+            return uri
+        task = arguments.get("task")
+        if isinstance(task, str):
+            if task.startswith("workctx://"):
+                return task
+            return str(WorkctxUri(self._context_id, EntityType.TASK, task))
+        return json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
 
     def _context_info(self, arguments: dict[str, Any]) -> ToolResponse:
         del arguments

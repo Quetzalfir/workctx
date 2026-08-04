@@ -8,10 +8,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from pydantic import JsonValue
 
+import workctx.usage as usage
 from workctx.adapters.sqlite import (
     ClaimRecord,
     EdgeRecord,
@@ -133,6 +134,8 @@ def build_pack(
     normalized_query = None if query is None or not query.strip() else query.strip()
 
     initial = resolve(reader, reference)
+    if getattr(reader, "usage_enabled", False):
+        usage.record(cast(Any, reader).context_root, "build_pack", initial.reference)
     if initial.status is ResolutionStatus.NOT_FOUND:
         return PackBuildResult(
             status=PackBuildStatus.NOT_FOUND,
