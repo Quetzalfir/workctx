@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "SUG-invalid",
+  "entity_type": "investigation",
+  "title": "Invalid fictional suggestion identity",
+  "uri": "workctx://fictional-context/investigation/SUG-invalid",
+  "aliases": [],
+  "status": "open",
+  "confidence": "high",
+  "tags": [
+    "suggestion",
+    "engine_proposal"
+  ],
+  "references": [],
+  "created_at": "2026-08-03T12:00:00Z",
+  "updated_at": "2026-08-03T12:00:00Z",
+  "type": "engine_proposal",
+  "rationale": "Reject an invalid fictional suggestion identity",
+  "signal": "The identifier does not follow the public grammar.",
+  "source_refs": [
+    "workctx://fictional-context/task/TASK-2026-001"
+  ],
+  "proposal": null,
+  "actor": {
+    "type": "human",
+    "id": "fictional-operator",
+    "agent": null,
+    "model": null
+  },
+  "supersedes": null,
+  "superseded_by": null
+}

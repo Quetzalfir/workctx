@@ -20,6 +20,7 @@ from workctx.views.models import (
     StaleClaimItem,
     StatusReportPayload,
     SuggestionItem,
+    SuggestionRecordItem,
     SuggestionsPayload,
     TaskViewItem,
     ViewName,
@@ -499,7 +500,13 @@ def _suggestions(payload: SuggestionsPayload) -> str:
         "",
         "This advisory view reports canonical and verified audit signals only. "
         "It never takes action automatically.",
+        "",
+        "## Records",
+        "",
+        "| Suggestion | Type | Age (days) | Rationale |",
+        "| --- | --- | --- | --- |",
     ]
+    lines.extend(_suggestion_record_lines(payload.records))
     sections = (
         ("Stale claims", payload.stale_claims),
         ("Broken evidence links", payload.broken_evidence_links),
@@ -511,6 +518,16 @@ def _suggestions(payload: SuggestionsPayload) -> str:
         lines.extend(("", f"## {heading}", ""))
         lines.extend(_suggestion_lines(items))
     return "\n".join(lines) + "\n"
+
+
+def _suggestion_record_lines(items: Sequence[SuggestionRecordItem]) -> list[str]:
+    if not items:
+        return ["| _No open suggestion records._ | — | — | — |"]
+    return [
+        f"| [{_cell(item.id)}]({_inline(item.uri)}) | {item.type} | "
+        f"{item.age_days} | {_cell(item.rationale)} |"
+        for item in items
+    ]
 
 
 def _suggestion_lines(items: Sequence[SuggestionItem]) -> list[str]:

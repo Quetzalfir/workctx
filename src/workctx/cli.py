@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from workctx.domain.transactions import AuditEvent, TransactionProposal
     from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
     from workctx.retrieval.records import ResolutionResult
+    from workctx.suggestions import SuggestionDocument, SuggestionMutationResult
     from workctx.transactions.models import DryRunResult, TransactionDiagnostic
     from workctx.views import BriefPayload
 
@@ -49,6 +50,7 @@ from workctx.presentation import (
     sanitize_message,
 )
 from workctx.services.contexts import initialize_context, load_context_config
+from workctx.suggestions import SuggestionStatus
 from workctx.validation.workspace import ValidationIssue, ValidationReport, validate_workspace
 
 app = typer.Typer(
@@ -77,6 +79,8 @@ transaction_app = typer.Typer(help="Preview, apply, and inspect canonical transa
 app.add_typer(transaction_app, name="transaction")
 task_app = typer.Typer(help="Query projected canonical tasks.")
 app.add_typer(task_app, name="task")
+suggestion_app = typer.Typer(help="Inspect and review canonical suggestion records.")
+app.add_typer(suggestion_app, name="suggestion")
 agent_app = typer.Typer(help="Detect, install, inspect, and open supported agent clients.")
 app.add_typer(agent_app, name="agent")
 migrate_app = typer.Typer(help="Convert legacy Markdown repositories into isolated contexts.")
@@ -1762,6 +1766,127 @@ def task_show(
         output_console.print(Text(f"{task.id} [{task.status.value}]: {task.title}"))
 
 
+@suggestion_app.command("list")
+def suggestion_list(
+    statuses: Annotated[
+        list[SuggestionStatus] | None,
+        typer.Option("--status", help="Restrict to a suggestion status; repeatable."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List canonical suggestion records in deterministic order."""
+
+    from workctx.suggestions import list_suggestions
+
+    begin_command("suggestion.list", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    documents = list_suggestions(
+        root,
+        statuses=None if statuses is None else frozenset(statuses),
+    )
+    result: dict[str, JsonValue] = {
+        "count": len(documents),
+        "suggestions": [_suggestion_summary_payload(document) for document in documents],
+    }
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(Text(f"Found {len(documents)} suggestion records."))
+
+
+@suggestion_app.command("show")
+def suggestion_show(
+    suggestion_id: Annotated[
+        str,
+        typer.Argument(help="Suggestion ID or canonical investigation URI."),
+    ],
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Show one canonical suggestion record and its Markdown body."""
+
+    from workctx.suggestions import get_suggestion
+
+    begin_command("suggestion.show", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    document = get_suggestion(root, suggestion_id)
+    result: dict[str, JsonValue] = {"suggestion": _suggestion_document_payload(document)}
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(
+            Text(
+                f"{document.record.id} [{document.record.status.value}] "
+                f"{document.record.type.value}: {document.record.rationale}"
+            )
+        )
+
+
+@suggestion_app.command("adopt")
+def suggestion_adopt(
+    suggestion_id: Annotated[str, typer.Argument(help="Suggestion ID or local URI.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve and atomically adopt the reviewed suggestion."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Adopt one reviewed suggestion; explicit --yes is mandatory."""
+
+    from workctx.suggestions import adopt_suggestion
+
+    begin_command("suggestion.adopt", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    _require_suggestion_yes(root, suggestion_id=suggestion_id, yes=yes)
+    mutation = adopt_suggestion(root, suggestion_id, approved=yes)
+    _complete_suggestion_mutation(mutation, json_output=json_output)
+
+
+@suggestion_app.command("reject")
+def suggestion_reject(
+    suggestion_id: Annotated[str, typer.Argument(help="Suggestion ID or local URI.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve rejection of the reviewed suggestion."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Reject one reviewed suggestion; explicit --yes is mandatory."""
+
+    from workctx.suggestions import reject_suggestion
+
+    begin_command("suggestion.reject", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    _require_suggestion_yes(root, suggestion_id=suggestion_id, yes=yes)
+    mutation = reject_suggestion(root, suggestion_id, approved=yes)
+    _complete_suggestion_mutation(mutation, json_output=json_output)
+
+
 @agent_app.command("detect")
 def agent_detect(
     context_path: Annotated[
@@ -2260,6 +2385,79 @@ def _task_payload(task: TaskRecord) -> dict[str, JsonValue]:
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
     }
+
+
+def _suggestion_summary_payload(document: SuggestionDocument) -> dict[str, JsonValue]:
+    record = document.record
+    return {
+        "id": record.id,
+        "uri": record.uri,
+        "type": record.type.value,
+        "status": record.status.value,
+        "rationale": record.rationale,
+        "signal": record.signal,
+        "source_refs": list(record.source_refs),
+        "supersedes": record.supersedes,
+        "superseded_by": record.superseded_by,
+        "created_at": record.created_at.isoformat(),
+        "updated_at": record.updated_at.isoformat(),
+        "path": document.path,
+    }
+
+
+def _suggestion_document_payload(document: SuggestionDocument) -> dict[str, JsonValue]:
+    return {
+        **cast("dict[str, JsonValue]", document.record.model_dump(mode="json")),
+        "body": document.body,
+        "path": document.path,
+    }
+
+
+def _require_suggestion_yes(root: Path, *, suggestion_id: str, yes: bool) -> None:
+    if yes:
+        return
+    context_id = load_context_config(root).id
+    error = CliDiagnostic(
+        code="SUGGESTION_APPROVAL_REQUIRED",
+        message="Suggestion adoption and rejection require explicit --yes approval.",
+        path="$.yes",
+    )
+    record_failure(
+        result={"suggestion_id": suggestion_id},
+        context_id=context_id,
+        errors=[error],
+    )
+    raise UsageConfigurationError(error.message)
+
+
+def _complete_suggestion_mutation(
+    mutation: SuggestionMutationResult,
+    *,
+    json_output: bool,
+) -> None:
+    receipt = mutation.receipt
+    result: dict[str, JsonValue] = {
+        "operation": mutation.operation,
+        "suggestion": _suggestion_document_payload(mutation.suggestion),
+        "receipt": cast("dict[str, JsonValue]", receipt.model_dump(mode="json")),
+    }
+    warnings: list[CliDiagnostic] = []
+    if receipt.projection.state.value == "stale":
+        warnings.append(
+            CliDiagnostic(
+                code=receipt.projection.diagnostic_code or "TXN-PROJECTION-STALE",
+                message="The suggestion committed but its derived projection is stale.",
+            )
+        )
+    if json_output:
+        emit_success(result=result, context_id=receipt.context_id, warnings=warnings)
+    else:
+        output_console.print(
+            Text(
+                f"{mutation.operation.title()} {mutation.suggestion.record.id}; "
+                f"ledger event {receipt.ledger_event_id}."
+            )
+        )
 
 
 def _agent_clients(selection: str | None, *, allow_all: bool = True) -> tuple[AgentClient, ...]:

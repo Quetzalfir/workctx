@@ -32,6 +32,7 @@ from workctx.domain.transactions import (
 )
 from workctx.ingestion import ArtifactRecord, list_inbox
 from workctx.retrieval import resolve, trace
+from workctx.suggestions import SuggestionStatus, list_suggestions
 from workctx.transactions import AuditSummary, audit_summary, read_audit_events
 from workctx.views.errors import ViewSourceChangedError
 from workctx.views.models import (
@@ -58,6 +59,7 @@ from workctx.views.models import (
     StaleClaimItem,
     StatusReportPayload,
     SuggestionItem,
+    SuggestionRecordItem,
     SuggestionsPayload,
     TaskTransitionItem,
     TaskViewItem,
@@ -250,6 +252,7 @@ class ViewService:
         people_directory = self._people_directory(entities, tasks)
         glossary = self._glossary(entities)
         agenda = self._agenda(tasks, generated_at)
+        suggestion_records = self._suggestion_records(generated_at)
         suggestions = self._suggestions(
             tasks,
             entities,
@@ -257,6 +260,7 @@ class ViewService:
             stale_claims,
             agenda,
             generated_at,
+            suggestion_records,
         )
         after = audit_summary(self._root)
         if before.head_hash != after.head_hash:
@@ -589,6 +593,7 @@ class ViewService:
         stale_claims: tuple[StaleClaimItem, ...],
         agenda: AgendaPayload,
         generated_at: datetime,
+        records: tuple[SuggestionRecordItem, ...],
     ) -> SuggestionsPayload:
         stale = tuple(
             SuggestionItem(
@@ -667,12 +672,33 @@ class ViewService:
             if generated_at - item.since > _OLD_WAITING_AFTER
         )
         return SuggestionsPayload(
+            records=records,
             stale_claims=stale,
             broken_evidence_links=tuple(sorted(broken, key=_suggestion_sort_key)),
             inactive_tasks=tuple(sorted(inactive, key=_suggestion_sort_key)),
             orphaned_knowledge=orphaned,
             old_waiting_on=old_waiting,
         )
+
+    def _suggestion_records(
+        self,
+        generated_at: datetime,
+    ) -> tuple[SuggestionRecordItem, ...]:
+        records = (
+            SuggestionRecordItem(
+                id=document.record.id,
+                uri=document.record.uri,
+                type=document.record.type.value,
+                rationale=document.record.rationale,
+                created_at=document.record.created_at,
+                age_days=max(0, (generated_at - document.record.created_at).days),
+            )
+            for document in list_suggestions(
+                self._root,
+                statuses=frozenset({SuggestionStatus.OPEN}),
+            )
+        )
+        return tuple(sorted(records, key=lambda item: (item.created_at, item.id)))
 
     def _last_task_activity(
         self,

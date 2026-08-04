@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "SUG-20260803-missing-proposal-01",
+  "entity_type": "investigation",
+  "title": "Invalid data fix without a proposal",
+  "uri": "workctx://fictional-context/investigation/SUG-20260803-missing-proposal-01",
+  "aliases": [],
+  "status": "open",
+  "confidence": "high",
+  "tags": [
+    "suggestion",
+    "data_fix"
+  ],
+  "references": [],
+  "created_at": "2026-08-03T12:00:00Z",
+  "updated_at": "2026-08-03T12:00:00Z",
+  "type": "data_fix",
+  "rationale": "Reject a data fix without a concrete proposal",
+  "signal": "No mutation targets were supplied.",
+  "source_refs": [
+    "workctx://fictional-context/task/TASK-2026-001"
+  ],
+  "proposal": null,
+  "actor": {
+    "type": "human",
+    "id": "fictional-operator",
+    "agent": null,
+    "model": null
+  },
+  "supersedes": null,
+  "superseded_by": null
+}

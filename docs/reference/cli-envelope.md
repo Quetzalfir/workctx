@@ -32,6 +32,10 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `search` | `search` | `query`, `count`, `hits` |
 | `task list` | `task.list` | `count`, `tasks` |
 | `task show` | `task.show` | `task` |
+| `suggestion list` | `suggestion.list` | `count`, `suggestions` |
+| `suggestion show` | `suggestion.show` | `suggestion` |
+| `suggestion adopt` | `suggestion.adopt` | `operation`, `suggestion`, `receipt` |
+| `suggestion reject` | `suggestion.reject` | `operation`, `suggestion`, `receipt` |
 | `agent detect` | `agent.detect` | `clients` |
 | `agent status` | `agent.status` | `statuses` |
 | `agent install` | `agent.install` | `applied`, `plans`, `receipts` |
@@ -47,6 +51,8 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
 apply reports `dry_run: false` and includes the authenticated transaction receipt. Likewise,
 `agent install` returns the complete plan without changing files unless `--yes` is present.
+`suggestion adopt` and `suggestion reject` never preview or mutate without `--yes`; omission
+returns an envelope-first usage/configuration failure with exit code 2.
 
 ## Envelope contract
 

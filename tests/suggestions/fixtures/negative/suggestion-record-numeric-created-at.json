@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "SUG-20260803-numeric-time-01",
+  "entity_type": "investigation",
+  "title": "Invalid numeric creation time",
+  "uri": "workctx://fictional-context/investigation/SUG-20260803-numeric-time-01",
+  "aliases": [],
+  "status": "open",
+  "confidence": "high",
+  "tags": [
+    "suggestion",
+    "engine_proposal"
+  ],
+  "references": [],
+  "created_at": 1785758400,
+  "updated_at": "2026-08-03T12:00:00Z",
+  "type": "engine_proposal",
+  "rationale": "Reject a numeric timestamp",
+  "signal": "Canonical timestamps must be RFC 3339 strings.",
+  "source_refs": [
+    "workctx://fictional-context/task/TASK-2026-001"
+  ],
+  "proposal": null,
+  "actor": {
+    "type": "human",
+    "id": "fictional-operator",
+    "agent": null,
+    "model": null
+  },
+  "supersedes": null,
+  "superseded_by": null
+}
