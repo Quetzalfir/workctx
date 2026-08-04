@@ -114,10 +114,11 @@ gh auth login
 
 `gh` stores the resulting token in the operating system's credential store. The token
 must never appear anywhere else: not in chat with an agent, not in canonical files, not
-in evidence, not in logs or reports. Today workctx enforces the workspace side of this
+in evidence, not in logs or reports. workctx enforces the workspace side of this
 guardrail — validation rejects secret values and the inbox quarantines suspected
-secrets. First-class secret references, where a canonical file names a secret and a
-local resolver supplies it at use time, are the workctx-native path and are planned.
+secrets. For secrets workctx itself manages, use first-class
+[secret references](../reference/secrets.md): a canonical file names a secret with
+`secret_ref` and a local resolver supplies it at use time.
 
 ## Investigations from the user's side
 

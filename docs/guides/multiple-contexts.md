@@ -68,7 +68,8 @@ Each context has independent:
 - canonical files;
 - SQLite and search state;
 - plugin instances (planned for Phase 3);
-- secret references (planned for Phase 3; today only a validation rule that
-  rejects secret values);
+- [secret references](../reference/secrets.md) resolve on this machine; names
+  are machine-global in this release, so prefix them per project when contexts
+  could collide;
 - agent project configuration;
 - audit records.
