@@ -43,8 +43,11 @@ index and generated views are rebuild-only).
 - thin named adapters on top of the runtime where a source needs real logic
   (GitHub, Jira, Confluence, Dynatrace, Rally, Teams, email — built on
   demand, not by catalog);
-- Graphify and CodeGraph adapters;
-- approval workflows and background synchronization.
+- Graphify and CodeGraph integration on demand: exports enter as ordinary
+  evidence or connector manifests today; named adapters only on proven need;
+- scheduled connector synchronization;
+- one approval-gated outbox send channel at a time (draft -> preview ->
+  per-operation approval -> audited delivery), GitHub first.
 
 ## Phase 4 — Team and enterprise capabilities
 
