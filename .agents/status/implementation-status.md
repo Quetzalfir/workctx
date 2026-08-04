@@ -10,13 +10,14 @@
 
 ## Current wave
 
-Phase 2 wave 1 CLOSED (2026-08-03): WP-600 (resource-directory and status-report
-views, C-203/C-207) and WP-610 (mutation-path performance, C-208) integrated with
-the lead read-API additions (query_entities, read_audit_events). Registration
-dropped from ~4s to ~1.05s (lead-verified); full suite runtime fell ~30%. Released
-earlier the same day: v0.1.0-alpha (tag + GitHub release, private). Next cut
-proposed to the operator: C-211 secrets, C-209 repo guide + curation tiering,
-C-201 personalization layers.
+Phase 2 wave 2 CLOSED (2026-08-03): WP-620 (secret references, ADR 0013), WP-630
+(personalization layers, D-044), WP-640 (code-repositories guide + curation
+tiering) all integrated; final gate 1523 tests. Lead fixes this wave: renamed the
+stdlib-shadowing secrets test package (314-failure class now banned by a layout
+guard test) and freshened guide mentions after secrets landed. Next-cut queue:
+C-202 assisted improvement loop, C-204/205/206 directory/glossary/agenda views,
+C-212 usage-driven relevance, WP-610 leftovers (batch inbox add, staging
+resolutions).
 
 ## Work-package status
 
@@ -45,6 +46,9 @@ C-201 personalization layers.
 | WP-530 | verified | WP-510 | Claude agent | worktree-agent (captured) | accepted | Integrated at 47283d0; packaging install-test passed |
 | WP-600 | verified | lead read APIs | Codex worker | agent/WP-600-phase2-views | accepted (1 blocker round) | Integrated; resource-directory + status-report views |
 | WP-610 | verified | — | Codex worker | agent/WP-610-performance | accepted | Integrated at 5f4a9e8; lead re-measured all counts |
+| WP-620 | verified | keyring (D-043) | Codex worker | agent/WP-620-secrets | accepted | Integrated at 0289e43; ADR 0013; lead renamed test package |
+| WP-630 | verified | D-044 | Codex worker | agent/WP-630-personalization | accepted | Integrated at 479001d; adapter v3 |
+| WP-640 | verified | — | Claude agent | worktree-agent (captured) | accepted | Integrated; guide + tier rule in two skills |
 
 ## Validation status
 

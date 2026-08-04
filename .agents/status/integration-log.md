@@ -34,3 +34,7 @@
 | 2026-08-03 | LEAD-P2-view-count-fix | lead fix | in WP-600 branch | migration view-count anchored to ViewName enum | committed c221fa0 | prevents recurrence |
 | 2026-08-03 | WP-600-phase2-views | capture 5b88036 | merge | combined gate 1462; lead reran outside sandbox | accepted+integrated | C-203+C-207 live; 1 blocker round (read APIs) |
 | 2026-08-03 | WP-610-performance | capture | merge 5f4a9e8 | combined gate 1463; lead re-measured 4s->1.05s, 133->9 fsyncns, zero fsync sites removed | accepted+integrated | C-208; suite runtime -30% |
+| 2026-08-03 | WP-620-secrets | capture 7898b40 | merge 0289e43 | full gate 1511 in worktree; lead forensic review (SecretValue, argv, index lock); ADR 0013 authored | accepted+integrated | lead fix: tests/secrets renamed (stdlib shadowing, 314 fails) |
+| 2026-08-03 | WP-630-personalization | capture cc39515 | merge 479001d | focused 297 in worktree; combined gate 1523 on master | accepted+integrated | adapter v3; sandbox ran zero test bodies, lead ran all |
+| 2026-08-03 | WP-640-repo-guide | capture aa1d3fb | merge | worker full gate 1463 own-branch; wave gate 1523 | accepted+integrated | .agents/skills mirror deviation accepted; lead freshness fix on secrets mentions |
+| 2026-08-03 | LEAD-P2W2-layout-guard | lead addition | direct | tests/test_layout.py bans stdlib-shadowing test packages | committed | prevents the 314-failure class permanently |
