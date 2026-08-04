@@ -6,7 +6,8 @@ import json
 import re
 import secrets
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -14,15 +15,20 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
+import workctx.transactions.engine as _transaction_engine
 from workctx.adapters.filesystem import (
     CanonicalStore,
     ContextLock,
     ContextZone,
+    IntentRecord,
     IntentTargetKind,
+    LockFenceError,
     RecoveryState,
     StagedMove,
     StagedReplacement,
 )
+from workctx.adapters.sqlite import SQLiteProjection
+from workctx.adapters.sqlite.models import RebuildReport
 from workctx.domain.artifacts import ArtifactManifest, ArtifactStatus
 from workctx.domain.references import ArtifactReference
 from workctx.domain.transactions import (
@@ -57,11 +63,19 @@ from workctx.ingestion.models import (
 from workctx.ingestion.scanning import ArtifactScan, hash_preserved_file, scan_artifact
 from workctx.transactions import (
     ApplyResult,
+    DiagnosticSeverity,
+    PostconditionRollbackError,
+    PreimageChangedError,
+    ProposalValidationError,
+    RecoveryPendingError,
+    RecoveryResult,
+    RecoveryStrategy,
     StaleRevisionError,
     apply,
     authenticate_apply_result,
     verify_ledger,
 )
+from workctx.transactions.ledger import append_event
 
 _MAX_TRANSACTION_RETRIES = 4
 _MANIFEST_SUFFIXES = frozenset({".json", ".yaml", ".yml"})
@@ -98,6 +112,41 @@ class _MoveOutcome:
     recovered: bool
 
 
+@dataclass(frozen=True, slots=True)
+class BatchRegistrationOutcome:
+    """One attempted or skipped item in an ordered registration batch."""
+
+    request: RegisterRequest
+    registration: RegistrationResult | None = None
+    duplicate: ArtifactRecord | None = None
+    error: Exception | None = None
+    attempted: bool = True
+
+    def __post_init__(self) -> None:
+        populated = sum(
+            value is not None for value in (self.registration, self.duplicate, self.error)
+        )
+        if self.attempted and populated != 1:
+            raise ValueError("An attempted batch item must have exactly one outcome")
+        if not self.attempted and populated:
+            raise ValueError("A not-attempted batch item cannot have an outcome")
+
+
+@dataclass(frozen=True, slots=True)
+class BatchRegistrationResult:
+    """Ordered batch outcomes with at most one hard per-file failure."""
+
+    outcomes: tuple[BatchRegistrationOutcome, ...]
+
+    @property
+    def failure(self) -> BatchRegistrationOutcome | None:
+        return next((outcome for outcome in self.outcomes if outcome.error is not None), None)
+
+    @property
+    def registration_count(self) -> int:
+        return sum(outcome.registration is not None for outcome in self.outcomes)
+
+
 class IngestionService:
     """Application service bound to one isolated Work Context root."""
 
@@ -115,7 +164,9 @@ class IngestionService:
         self._policy = policy or IngestionPolicy()
         self._clock = clock or _utc_now
         self._transaction_apply = transaction_apply
+        self._uses_default_transaction_apply = transaction_apply is apply
         self._stager_factory = stager_factory
+        self._batch_operation: _BatchTransactionOperation | None = None
 
     @property
     def context_root(self) -> Path:
@@ -254,6 +305,78 @@ class IngestionService:
             receipts=tuple(receipts),
             recovered_move=recovered_move,
         )
+
+    def register_batch(
+        self,
+        requests: Iterable[RegisterRequest],
+        *,
+        session_id: str | None = None,
+    ) -> BatchRegistrationResult:
+        """Register requests in order, stopping after the first hard failure.
+
+        Duplicate refusal is represented as a per-file outcome. Every other
+        exception is attached to the failing item, and later requests are
+        returned as not attempted. With the default transaction adapter, all
+        attempted items share one lock, heartbeat lease, and projection
+        preflight while retaining an independent durable commit per file.
+        """
+
+        ordered = tuple(requests)
+        if not ordered:
+            return BatchRegistrationResult(())
+        if self._batch_operation is not None:
+            raise RuntimeError("Nested ingestion registration batches are not supported")
+
+        session = session_id or f"ingestion-register-batch-{secrets.token_hex(8)}"
+        if not self._uses_default_transaction_apply:
+            return self._register_batch_requests(ordered, session_id=session)
+
+        with _BatchTransactionOperation(
+            self._root,
+            session_id=session,
+            clock=self._clock,
+            stager_factory=self._stager_factory,
+        ) as operation:
+            self._batch_operation = operation
+            try:
+                return self._register_batch_requests(ordered, session_id=session)
+            finally:
+                self._batch_operation = None
+
+    def _register_batch_requests(
+        self,
+        requests: tuple[RegisterRequest, ...],
+        *,
+        session_id: str,
+    ) -> BatchRegistrationResult:
+        outcomes: list[BatchRegistrationOutcome] = []
+        for index, request in enumerate(requests):
+            item_session = f"{session_id}-{index + 1}"
+            try:
+                registration = self.register(request, session_id=item_session)
+            except DuplicateArtifactError as exc:
+                try:
+                    duplicate = self._record_by_id(exc.duplicate_of)
+                except Exception as error:
+                    outcomes.append(BatchRegistrationOutcome(request=request, error=error))
+                    outcomes.extend(
+                        BatchRegistrationOutcome(request=remaining, attempted=False)
+                        for remaining in requests[index + 1 :]
+                    )
+                    break
+                outcomes.append(BatchRegistrationOutcome(request=request, duplicate=duplicate))
+            except Exception as error:
+                outcomes.append(BatchRegistrationOutcome(request=request, error=error))
+                outcomes.extend(
+                    BatchRegistrationOutcome(request=remaining, attempted=False)
+                    for remaining in requests[index + 1 :]
+                )
+                break
+            else:
+                outcomes.append(
+                    BatchRegistrationOutcome(request=request, registration=registration)
+                )
+        return BatchRegistrationResult(tuple(outcomes))
 
     def list_inbox(
         self,
@@ -596,7 +719,12 @@ class IngestionService:
                 approval="not_required",
             )
             try:
-                return self._transaction_apply(
+                transaction_apply = (
+                    self._batch_operation.apply
+                    if self._batch_operation is not None
+                    else self._transaction_apply
+                )
+                return transaction_apply(
                     self._root,
                     proposal,
                     approved=False,
@@ -639,54 +767,83 @@ class IngestionService:
         session_id: str,
     ) -> _MoveOutcome:
         reference = _artifact_reference(manifest)
-        with ContextLock.acquire(self._root, session_id=f"{session_id}-move") as lock:
-            self._authenticate_receipt(receipt, reference)
-            stager = self._stager_factory(self._root)
-            inspection = stager.inspect_recovery()
-            if inspection.state is RecoveryState.CLEAN:
-                state = self._move_state(specs)
-                if state == "applied":
-                    return _MoveOutcome(already_applied=True, recovered=False)
-                if state != "pending":
-                    raise ArtifactStateError("Evidence move paths are in a conflicting state.")
-                intent = stager.prepare(
-                    transaction_id,
-                    lock.nonce,
-                    tuple(StagedMove(spec.source, spec.destination) for spec in specs),
-                    lock=lock,
+        batch_operation = self._batch_operation
+        if batch_operation is not None:
+            return batch_operation.run(
+                lambda: self._move_with_receipt_under_lock(
+                    receipt,
+                    reference,
+                    specs,
+                    transaction_id=transaction_id,
+                    lock=batch_operation.lock,
                 )
-                if not _intent_matches_specs(intent, specs):
-                    stager.rollback(intent, lock=lock)
-                    self._authenticate_receipt(receipt, reference)
-                    stager.finalize_rollback_after_audit(transaction_id, lock=lock)
-                    raise ArtifactStateError("Evidence changed while its move was staged.")
-                try:
-                    stager.apply(intent, lock=lock)
-                    self._authenticate_receipt(receipt, reference)
-                    # D-036: the authenticated WP-300 event audits the manifest
-                    # state; the separate WP-201 intent carries only physical moves.
-                    stager.finalize_after_audit(transaction_id, lock=lock)
-                    return _MoveOutcome(already_applied=False, recovered=False)
-                except Exception as error:
-                    self._raise_move_recovery(stager, receipt, error)
+            )
+        with ContextLock.acquire(self._root, session_id=f"{session_id}-move") as lock:
+            return self._move_with_receipt_under_lock(
+                receipt,
+                reference,
+                specs,
+                transaction_id=transaction_id,
+                lock=lock,
+            )
+        raise AssertionError("evidence move did not produce a result")
 
-            if inspection.intent is None or inspection.intent.transaction_id != transaction_id:
-                raise ArtifactStateError("Another staged context mutation requires recovery.")
-            if not _intent_matches_specs(inspection.intent, specs):
-                raise ArtifactStateError("The staged evidence move does not match this artifact.")
-            try:
-                if inspection.state in {
-                    RecoveryState.PREPARED,
-                    RecoveryState.PARTIALLY_APPLIED,
-                }:
-                    stager.complete_recovery(inspection.intent, lock=lock)
-                elif inspection.state is not RecoveryState.FULLY_REPLACED_AWAITING_AUDIT:
-                    raise ArtifactStateError("The staged evidence move cannot be recovered safely.")
+    def _move_with_receipt_under_lock(
+        self,
+        receipt: ApplyResult,
+        reference: str,
+        specs: tuple[_MoveSpec, ...],
+        *,
+        transaction_id: str,
+        lock: ContextLock,
+    ) -> _MoveOutcome:
+        self._authenticate_receipt(receipt, reference)
+        stager = self._stager_factory(self._root)
+        inspection = stager.inspect_recovery()
+        if inspection.state is RecoveryState.CLEAN:
+            state = self._move_state(specs)
+            if state == "applied":
+                return _MoveOutcome(already_applied=True, recovered=False)
+            if state != "pending":
+                raise ArtifactStateError("Evidence move paths are in a conflicting state.")
+            intent = stager.prepare(
+                transaction_id,
+                lock.nonce,
+                tuple(StagedMove(spec.source, spec.destination) for spec in specs),
+                lock=lock,
+            )
+            if not _intent_matches_specs(intent, specs):
+                stager.rollback(intent, lock=lock)
                 self._authenticate_receipt(receipt, reference)
-                stager.finalize_recovery_after_audit(transaction_id, lock=lock)
-                return _MoveOutcome(already_applied=False, recovered=True)
+                stager.finalize_rollback_after_audit(transaction_id, lock=lock)
+                raise ArtifactStateError("Evidence changed while its move was staged.")
+            try:
+                stager.apply(intent, lock=lock)
+                self._authenticate_receipt(receipt, reference)
+                # D-036: the authenticated WP-300 event audits the manifest
+                # state; the separate WP-201 intent carries only physical moves.
+                stager.finalize_after_audit(transaction_id, lock=lock)
+                return _MoveOutcome(already_applied=False, recovered=False)
             except Exception as error:
                 self._raise_move_recovery(stager, receipt, error)
+
+        if inspection.intent is None or inspection.intent.transaction_id != transaction_id:
+            raise ArtifactStateError("Another staged context mutation requires recovery.")
+        if not _intent_matches_specs(inspection.intent, specs):
+            raise ArtifactStateError("The staged evidence move does not match this artifact.")
+        try:
+            if inspection.state in {
+                RecoveryState.PREPARED,
+                RecoveryState.PARTIALLY_APPLIED,
+            }:
+                stager.complete_recovery(inspection.intent, lock=lock)
+            elif inspection.state is not RecoveryState.FULLY_REPLACED_AWAITING_AUDIT:
+                raise ArtifactStateError("The staged evidence move cannot be recovered safely.")
+            self._authenticate_receipt(receipt, reference)
+            stager.finalize_recovery_after_audit(transaction_id, lock=lock)
+            return _MoveOutcome(already_applied=False, recovered=True)
+        except Exception as error:
+            self._raise_move_recovery(stager, receipt, error)
         raise AssertionError("evidence move did not produce a result")
 
     def _raise_move_recovery(
@@ -738,6 +895,342 @@ class IngestionService:
         if not any(portable.startswith(f"{prefix}/") for prefix in prefixes):
             raise ArtifactStateError("Artifact metadata names an invalid evidence zone.")
         return path
+
+
+class _BatchTransactionOperation:
+    """Apply ingestion-only proposals under one transaction operation scope."""
+
+    def __init__(
+        self,
+        context_root: Path,
+        *,
+        session_id: str,
+        clock: Callable[[], datetime],
+        stager_factory: Callable[[Path], StagedReplacement],
+    ) -> None:
+        self._root = context_root
+        self._session_id = session_id
+        self._engine = _transaction_engine.TransactionEngine(
+            context_root,
+            stager_factory=stager_factory,
+            clock=clock,
+        )
+        self._lock: ContextLock | None = None
+        self._heartbeat: _transaction_engine._HeartbeatLease | None = None
+        self._stager: StagedReplacement | None = None
+        self._projection: SQLiteProjection | None = None
+        self._projection_report: RebuildReport | None = None
+        self._operation_cache: _transaction_engine._OperationCache | None = None
+        self._closed = False
+
+    @property
+    def lock(self) -> ContextLock:
+        if self._lock is None or self._closed:
+            raise RuntimeError("The ingestion batch operation is not active")
+        return self._lock
+
+    def __enter__(self) -> _BatchTransactionOperation:
+        if self._lock is not None:
+            raise RuntimeError("The ingestion batch operation is already active")
+        self._lock = ContextLock.acquire(self._root, session_id=self._session_id)
+        self._heartbeat = _transaction_engine._HeartbeatLease(self._lock)
+        self._operation_cache = _transaction_engine._OperationCache()
+        self._engine._operation_cache = self._operation_cache
+        try:
+            self._heartbeat.start()
+            self._stager = self.run(lambda: self._engine._stager_factory(self._root))
+            inspection = self.run(self._stager.inspect_recovery)
+            if inspection.state is not RecoveryState.CLEAN:
+                raise RecoveryPendingError(inspection)
+            self._projection = self.run(lambda: self._engine._projection_factory(self._root))
+            self._projection._begin_locked_operation()
+            self._projection_report = self.run(self._projection.rebuild)
+            return self
+        except Exception:
+            self._close(raise_heartbeat_failure=False)
+            raise
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: object,
+    ) -> None:
+        del exc, traceback
+        self._close(raise_heartbeat_failure=exc_type is None)
+
+    def run[ResultT](self, operation: Callable[[], ResultT]) -> ResultT:
+        """Run one opaque batch step while checking the shared heartbeat."""
+
+        return _transaction_engine._run_with_heartbeat(self.lock, operation)
+
+    def apply(
+        self,
+        context_root: Path,
+        proposal: TransactionProposal,
+        *,
+        approved: bool = False,
+        session_id: str | None = None,
+    ) -> ApplyResult:
+        """Commit one file's proposal without reopening batch-wide resources."""
+
+        del session_id
+        if context_root != self._root:
+            raise ValueError("The batch proposal belongs to another context root")
+        self._require_ingestion_only(proposal)
+        lock = self.lock
+        stager = self._require_stager()
+        projection = self._require_projection()
+        projection_report = self._require_projection_report()
+        operation_cache = self._require_operation_cache()
+        operation_cache.clear()
+        intent: IntentRecord | None = None
+        try:
+            inspection = self.run(stager.inspect_recovery)
+            if inspection.state is not RecoveryState.CLEAN:
+                raise RecoveryPendingError(inspection)
+
+            verification, duplicate = self.run(
+                lambda: self._engine._verify_apply_ledger(proposal.id)
+            )
+            self._engine._raise_apply_conflicts(proposal, verification, duplicate)
+            analysis = self.run(
+                lambda: self._engine._analyze(
+                    proposal,
+                    projection=projection,
+                    verification=verification,
+                    projection_report=projection_report,
+                    check_duplicate=False,
+                )
+            )
+            if proposal.approval == "required" and not approved:
+                analysis = _transaction_engine._with_diagnostic(
+                    analysis,
+                    _transaction_engine._diagnostic(
+                        "TXN-APPROVAL-REQUIRED",
+                        DiagnosticSeverity.ERROR,
+                        "The proposal requires explicit runtime approval.",
+                        repair_action="Approve the reviewed proposal and retry.",
+                    ),
+                )
+            if not analysis.valid or analysis.compiled is None:
+                raise ProposalValidationError(
+                    _transaction_engine._validation_result(proposal, analysis)
+                )
+            compiled = analysis.compiled
+
+            lock.verify_fence()
+            prepared_intent = self.run(
+                lambda: stager.prepare(
+                    proposal.id,
+                    lock.nonce,
+                    compiled.writes,
+                    lock=lock,
+                )
+            )
+            intent = prepared_intent
+            if not _transaction_engine._intent_matches_operations(
+                prepared_intent,
+                compiled.audit_operations,
+            ):
+                event = self.run(
+                    lambda: self._engine._proposal_event(
+                        proposal,
+                        operations=_transaction_engine._intent_audit_operations(prepared_intent),
+                        action="apply",
+                        result="rolled_back",
+                        prev_hash=verification.head_hash,
+                    )
+                )
+                appended = self.run(lambda: append_event(self._root, event, lock=lock))
+                self._engine._verify_appended_event(event, appended)
+                _transaction_engine._run_stager_step(
+                    lock,
+                    stager,
+                    lambda: stager.finalize_rollback_after_audit(
+                        proposal.id,
+                        lock=lock,
+                    ),
+                )
+                intent = None
+                result = RecoveryResult(
+                    strategy=RecoveryStrategy.ROLLBACK,
+                    outcome="rolled_back",
+                    transaction_id=proposal.id,
+                    committed_revision=event.event_hash,
+                    applied_targets=(),
+                    ledger_event_id=event.id,
+                    ledger_event_hash=event.event_hash,
+                    projection=_transaction_engine._fresh_projection_status(),
+                    diagnostics=(
+                        _transaction_engine._diagnostic(
+                            "TXN-PREIMAGE-CHANGED",
+                            DiagnosticSeverity.ERROR,
+                            "A target changed after validation; the proposal was rolled back.",
+                            repair_action=(
+                                "Rebase the proposal on the committed rollback revision."
+                            ),
+                        ),
+                    ),
+                )
+                raise PreimageChangedError(result)
+
+            _transaction_engine._run_stager_step(
+                lock,
+                stager,
+                lambda: stager.apply(prepared_intent, lock=lock),
+            )
+            operation_cache.clear()
+
+            postcondition_diagnostics = self.run(
+                lambda: self._engine._live_condition_diagnostics(
+                    proposal.postconditions,
+                    field_name="postconditions",
+                )
+            )
+            post_report = self.run(
+                lambda: self._engine._workspace_validator(
+                    self._root,
+                    strict=True,
+                    freshness_probe=None,
+                )
+            )
+            if not post_report.ok or any(
+                item.severity is DiagnosticSeverity.ERROR for item in postcondition_diagnostics
+            ):
+                _transaction_engine._run_stager_step(
+                    lock,
+                    stager,
+                    lambda: stager.rollback(prepared_intent, lock=lock),
+                )
+                event = self.run(
+                    lambda: self._engine._proposal_event(
+                        proposal,
+                        operations=compiled.audit_operations,
+                        action="apply",
+                        result="rolled_back",
+                        prev_hash=verification.head_hash,
+                    )
+                )
+                appended = self.run(lambda: append_event(self._root, event, lock=lock))
+                self._engine._verify_appended_event(event, appended)
+                _transaction_engine._run_stager_step(
+                    lock,
+                    stager,
+                    lambda: stager.finalize_rollback_after_audit(
+                        proposal.id,
+                        lock=lock,
+                    ),
+                )
+                intent = None
+                recovery_result = RecoveryResult(
+                    strategy=RecoveryStrategy.ROLLBACK,
+                    outcome="rolled_back",
+                    transaction_id=proposal.id,
+                    committed_revision=event.event_hash,
+                    applied_targets=(),
+                    ledger_event_id=event.id,
+                    ledger_event_hash=event.event_hash,
+                    projection=_transaction_engine._fresh_projection_status(),
+                    diagnostics=(
+                        *postcondition_diagnostics,
+                        *_transaction_engine._workspace_diagnostics(post_report),
+                    ),
+                )
+                raise PostconditionRollbackError(recovery_result)
+
+            event = self.run(
+                lambda: self._engine._proposal_event(
+                    proposal,
+                    operations=compiled.audit_operations,
+                    action="apply",
+                    result="committed",
+                    prev_hash=verification.head_hash,
+                )
+            )
+            appended = self.run(lambda: append_event(self._root, event, lock=lock))
+            self._engine._verify_appended_event(event, appended)
+            _transaction_engine._run_stager_step(
+                lock,
+                stager,
+                lambda: stager.finalize_after_audit(proposal.id, lock=lock),
+            )
+            intent = None
+
+            return ApplyResult(
+                proposal_id=proposal.id,
+                context_id=proposal.context_id,
+                base_revision=proposal.base_revision,
+                committed_revision=event.event_hash,
+                applied_targets=_transaction_engine._applied_targets(compiled.effects),
+                ledger_event_id=event.id,
+                ledger_event_hash=event.event_hash,
+                ledger_source_refs=tuple(event.source_refs),
+                # Ingestion proposals mutate only manifests; SQLite indexes
+                # neither inbox manifests nor evidence paths, so the one
+                # verified preflight remains current throughout this batch.
+                projection=_transaction_engine._fresh_projection_status(),
+            )
+        except PostconditionRollbackError:
+            raise
+        except Exception as exc:
+            if intent is not None:
+                pending = stager.inspect_recovery()
+                if pending.state is not RecoveryState.CLEAN:
+                    raise RecoveryPendingError(pending) from exc
+            raise
+        finally:
+            operation_cache.clear()
+
+    @staticmethod
+    def _require_ingestion_only(proposal: TransactionProposal) -> None:
+        for operation in proposal.operations:
+            if not isinstance(operation, (CreateOperation, UpdateOperation)) or not (
+                operation.target.startswith("00_inbox/manifests/")
+            ):
+                raise ValueError("A registration batch may mutate only artifact manifests")
+
+    def _require_stager(self) -> StagedReplacement:
+        if self._stager is None:
+            raise RuntimeError("The ingestion batch stager is unavailable")
+        return self._stager
+
+    def _require_projection(self) -> SQLiteProjection:
+        if self._projection is None:
+            raise RuntimeError("The ingestion batch projection is unavailable")
+        return self._projection
+
+    def _require_projection_report(self) -> RebuildReport:
+        if self._projection_report is None:
+            raise RuntimeError("The ingestion batch projection preflight is unavailable")
+        return self._projection_report
+
+    def _require_operation_cache(self) -> _transaction_engine._OperationCache:
+        if self._operation_cache is None:
+            raise RuntimeError("The ingestion batch operation cache is unavailable")
+        return self._operation_cache
+
+    def _close(self, *, raise_heartbeat_failure: bool) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        heartbeat_failure: Exception | None = None
+        try:
+            if self._projection is not None:
+                self._projection._end_locked_operation()
+        finally:
+            if self._operation_cache is not None:
+                self._operation_cache.clear()
+            self._engine._operation_cache = None
+            if self._heartbeat is not None:
+                heartbeat_failure = self._heartbeat.stop()
+            if self._lock is not None:
+                with suppress(LockFenceError):
+                    self._lock.release()
+        if heartbeat_failure is not None and raise_heartbeat_failure:
+            raise LockFenceError(
+                "The transaction heartbeat could not refresh its lease"
+            ) from heartbeat_failure
 
 
 def register(

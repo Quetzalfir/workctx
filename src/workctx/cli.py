@@ -978,7 +978,6 @@ def inbox_add(
 
     from workctx.domain import ArtifactSourceType
     from workctx.ingestion import (
-        DuplicateArtifactError,
         IngestionService,
         RegisterRequest,
     )
@@ -1001,14 +1000,19 @@ def inbox_add(
             ArtifactSourceType.OTHER,
         )
 
-    outcomes: list[dict[str, JsonValue]] = []
-    for file in files:
-        relative_path = _raw_artifact_path(root, file)
-        if not relative_path.startswith("00_inbox/raw/"):
-            raise UserCorrectableError(
-                f"Inbox artifacts must live under 00_inbox/raw/ inside the context, "
-                f"not at: {relative_path}"
-            )
+    requests: list[RegisterRequest] = []
+    input_failure: tuple[int, str, Exception] | None = None
+    for index, file in enumerate(files):
+        try:
+            relative_path = _raw_artifact_path(root, file)
+            if not relative_path.startswith("00_inbox/raw/"):
+                raise UserCorrectableError(
+                    f"Inbox artifacts must live under 00_inbox/raw/ inside the context, "
+                    f"not at: {relative_path}"
+                )
+        except Exception as exc:
+            input_failure = (index, file.as_posix(), exc)
+            break
         try:
             request = RegisterRequest(
                 path=relative_path,
@@ -1017,15 +1021,29 @@ def inbox_add(
                 event_at=event_at,
                 event_at_inferred=event_at_inferred,
             )
-        except ValidationError as exc:
-            raise UserCorrectableError("Inbox artifact metadata is invalid.") from exc
-        try:
-            registration = service.register(request)
-        except DuplicateArtifactError as exc:
-            duplicate = _resolve_artifact_record(service, exc.duplicate_of)
+        except ValidationError:
+            input_failure = (
+                index,
+                relative_path,
+                UserCorrectableError("Inbox artifact metadata is invalid."),
+            )
+            break
+        requests.append(request)
+
+    batch = service.register_batch(requests)
+    outcomes: list[dict[str, JsonValue]] = []
+    failure: tuple[str, Exception] | None = None
+    for outcome in batch.outcomes:
+        if outcome.registration is not None:
+            outcomes.append(
+                _registration_outcome_payload(outcome.request.path, outcome.registration)
+            )
+            continue
+        if outcome.duplicate is not None:
+            duplicate = outcome.duplicate
             outcomes.append(
                 {
-                    "path": relative_path,
+                    "path": outcome.request.path,
                     "outcome": "duplicate",
                     "disposition": "duplicate_refused",
                     "artifact_id": duplicate.manifest.id,
@@ -1036,18 +1054,83 @@ def inbox_add(
                 }
             )
             continue
-        outcomes.append(_registration_outcome_payload(relative_path, registration))
+        item_outcome = "failed" if outcome.attempted else "not_attempted"
+        outcomes.append(
+            {
+                "path": outcome.request.path,
+                "outcome": item_outcome,
+                "disposition": None,
+                "artifact_id": None,
+                "reference": None,
+                "status": None,
+                "duplicate_of": None,
+                "diagnostics": [],
+            }
+        )
+        if outcome.error is not None:
+            failure = (outcome.request.path, outcome.error)
+
+    if input_failure is not None:
+        failure_index, failure_path, failure_error = input_failure
+        outcomes.append(
+            {
+                "path": failure_path,
+                "outcome": "failed",
+                "disposition": None,
+                "artifact_id": None,
+                "reference": None,
+                "status": None,
+                "duplicate_of": None,
+                "diagnostics": [],
+            }
+        )
+        outcomes.extend(
+            {
+                "path": remaining.as_posix(),
+                "outcome": "not_attempted",
+                "disposition": None,
+                "artifact_id": None,
+                "reference": None,
+                "status": None,
+                "duplicate_of": None,
+                "diagnostics": [],
+            }
+            for remaining in files[failure_index + 1 :]
+        )
+        failure = (failure_path, failure_error)
 
     result: dict[str, JsonValue] = {
         "count": len(outcomes),
         "outcomes": cast(JsonValue, outcomes),
     }
+    if failure is not None:
+        failure_path, failure_error = failure
+        record_failure(
+            result=result,
+            context_id=context_id,
+            errors=[
+                CliDiagnostic(
+                    code="INBOX_REGISTRATION_FAILED",
+                    message=sanitize_message(failure_error),
+                    path=failure_path,
+                )
+            ],
+        )
+        if not json_output:
+            for payload_outcome in outcomes:
+                output_console.print(
+                    Text(f"{payload_outcome['path']}: {payload_outcome['outcome']}")
+                )
+        raise failure_error
     if json_output:
         emit_success(result=result, context_id=context_id)
     else:
-        for outcome in outcomes:
+        for payload_outcome in outcomes:
             output_console.print(
-                Text(f"{outcome['path']}: {outcome['outcome']} ({outcome['artifact_id']})")
+                Text(
+                    f"{payload_outcome['path']}: {payload_outcome['outcome']} "
+                    f"({payload_outcome['artifact_id']})"
+                )
             )
 
 

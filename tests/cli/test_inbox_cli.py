@@ -172,6 +172,54 @@ def test_add_reports_duplicate_and_quarantine_as_success_outcomes(tmp_path: Path
     assert (root / preserved_path).read_bytes() == suspicious
 
 
+def test_add_hard_failure_reports_committed_prefix_and_not_attempted_remainder(
+    tmp_path: Path,
+) -> None:
+    root = _initialize(tmp_path / "context")
+    _write_raw(root, "first.txt", b"Fictional first note.\n")
+    third = _write_raw(root, "third.txt", b"Fictional third note.\n")
+
+    payload = _envelope(
+        runner.invoke(
+            app,
+            [
+                "inbox",
+                "add",
+                "00_inbox/raw/first.txt",
+                "00_inbox/raw/missing.txt",
+                "00_inbox/raw/third.txt",
+                "--context",
+                str(root),
+                "--json",
+            ],
+        ),
+        exit_code=1,
+        command="inbox.add",
+    )
+
+    assert payload["result"]["count"] == 3
+    assert [item["outcome"] for item in payload["result"]["outcomes"]] == [
+        "registered",
+        "failed",
+        "not_attempted",
+    ]
+    assert payload["errors"][0]["code"] == "INBOX_REGISTRATION_FAILED"
+    assert payload["errors"][0]["path"] == "00_inbox/raw/missing.txt"
+    assert third.is_file()
+
+    listing = _envelope(
+        runner.invoke(
+            app,
+            ["inbox", "list", "--context", str(root), "--json"],
+        ),
+        exit_code=0,
+        command="inbox.list",
+    )
+    assert [item["manifest"]["original_name"] for item in listing["result"]["artifacts"]] == [
+        "first.txt"
+    ]
+
+
 def test_verify_reports_match_then_user_correctable_mismatch_after_tampering(
     tmp_path: Path,
 ) -> None:

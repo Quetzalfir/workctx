@@ -340,11 +340,15 @@ class StagedReplacement:
             "98_state/staging",
             allowed_prefixes=("98_state",),
         )
-        self._intent_path = resolve_context_path(
-            self.context_root,
-            "98_state/staging/intent.json",
-            allowed_prefixes=("98_state/staging",),
-        )
+        # The resolved staging root proves these fixed descendants' lexical
+        # containment. Each use still rejects changed link/junction parents
+        # and unsafe leaves before reading or mutating them.
+        self._intent_path = self._staging_root / "intent.json"
+        self._transactions_root = self._staging_root / "transactions"
+        self._resolution_cache_nonce: str | None = None
+        self._active_resolution_nonce: str | None = None
+        self._resolved_targets: dict[str, Path] = {}
+        self._resolved_staging_paths: dict[str, Path] = {}
 
     def prepare(
         self,
@@ -360,7 +364,8 @@ class StagedReplacement:
             raise ValueError("transaction_id must not be empty")
         if _NONCE.fullmatch(nonce) is None:
             raise ValueError("nonce must be a lowercase 128-bit hexadecimal value")
-        _ensure_runtime_directories(self.context_root)
+        self._activate_resolution_cache(lock, expected_nonce=nonce)
+        self._ensure_runtime_directories()
         _reject_unsafe_file(self._intent_path, allow_missing=True)
         if self._intent_path.exists():
             raise RecoveryRequiredError("A staged-write intent already requires recovery")
@@ -375,12 +380,19 @@ class StagedReplacement:
             f"98_state/staging/transactions/{stage_id}",
             allowed_prefixes=("98_state/staging/transactions",),
         )
+        self._remember_staging_path(transaction_dir)
         transaction_dir.mkdir(exist_ok=False)
 
         targets: list[IntentTarget] = []
         published = False
         try:
             for index, operation in enumerate(resolved):
+                _require_plain_parent_chain(self.context_root, operation.target_path)
+                if operation.destination_path is not None:
+                    _require_plain_parent_chain(
+                        self.context_root,
+                        operation.destination_path,
+                    )
                 backup_candidate = transaction_dir / f"{index:08d}.backup"
                 backup_relative: str | None = None
                 # Bounded memory (D-035): the preimage backup streams in chunks
@@ -396,6 +408,7 @@ class StagedReplacement:
                     if _hash_regular_file(backup_candidate) != preimage_hash:
                         raise StagingError("A staged preimage failed hash verification")
                     backup_relative = backup_candidate.relative_to(self.context_root).as_posix()
+                    self._remember_staging_path(backup_candidate)
 
                 staged_relative: str | None = None
                 expected_hash: str | None = None
@@ -408,6 +421,7 @@ class StagedReplacement:
                     if _hash_regular_file(staged_path) != expected_hash:
                         raise StagingError("A staged postimage failed hash verification")
                     staged_relative = staged_path.relative_to(self.context_root).as_posix()
+                    self._remember_staging_path(staged_path)
                 elif operation.kind is IntentTargetKind.MOVE:
                     expected_hash = preimage_hash
                 targets.append(
@@ -435,10 +449,12 @@ class StagedReplacement:
         finally:
             if not published and not self._intent_path.exists():
                 _remove_owned_directory(transaction_dir)
+                self._clear_resolution_cache()
 
     def apply(self, intent: IntentRecord, *, lock: ContextLock) -> IntentRecord:
         """Apply postimages in intent order and leave the intent for audit finalization."""
 
+        self._activate_resolution_cache(lock, expected_nonce=intent.nonce)
         durable = self._load_intent()
         if durable != intent:
             raise InvalidIntentError("The durable intent differs from the requested transaction")
@@ -453,6 +469,7 @@ class StagedReplacement:
     def complete_recovery(self, intent: IntentRecord, *, lock: ContextLock) -> IntentRecord:
         """Complete an interrupted intent under an explicitly verified recovery holder."""
 
+        self._activate_resolution_cache(lock, expected_nonce=None)
         durable = self._load_intent()
         if durable != intent:
             raise InvalidIntentError("The durable intent differs from the requested transaction")
@@ -466,6 +483,7 @@ class StagedReplacement:
     def rollback(self, intent: IntentRecord, *, lock: ContextLock) -> IntentRecord:
         """Restore every target to its recorded preimage under the intent holder."""
 
+        self._activate_resolution_cache(lock, expected_nonce=intent.nonce)
         durable = self._load_intent()
         if durable != intent:
             raise InvalidIntentError("The durable intent differs from the requested transaction")
@@ -479,6 +497,7 @@ class StagedReplacement:
     def rollback_recovery(self, intent: IntentRecord, *, lock: ContextLock) -> IntentRecord:
         """Roll back an interrupted intent under an explicitly verified recovery holder."""
 
+        self._activate_resolution_cache(lock, expected_nonce=None)
         durable = self._load_intent()
         if durable != intent:
             raise InvalidIntentError("The durable intent differs from the requested transaction")
@@ -497,6 +516,7 @@ class StagedReplacement:
     ) -> None:
         """Remove a fully applied intent only after the caller's durable audit append."""
 
+        self._activate_resolution_cache(lock, expected_nonce=None)
         self._finalize_applied(
             transaction_id,
             lock=lock,
@@ -511,6 +531,7 @@ class StagedReplacement:
     ) -> None:
         """Finalize a completed recovery under the current verified lock holder."""
 
+        self._activate_resolution_cache(lock, expected_nonce=None)
         self._finalize_applied(
             transaction_id,
             lock=lock,
@@ -525,6 +546,7 @@ class StagedReplacement:
     ) -> None:
         """Finalize a verified rollback after its durable audit record is appended."""
 
+        self._activate_resolution_cache(lock, expected_nonce=None)
         intent = self._load_intent()
         if intent.transaction_id != transaction_id:
             raise InvalidIntentError("The durable intent belongs to another transaction")
@@ -599,16 +621,19 @@ class StagedReplacement:
         self,
         validated: tuple[_ValidatedIntentTarget, ...],
     ) -> None:
+        _require_plain_parent_chain(self.context_root, self._intent_path)
         self._intent_path.unlink()
         _fsync_directory(self._staging_root)
 
         transaction_dirs = {operation.transaction_dir for operation in validated}
         for transaction_dir in transaction_dirs:
             _remove_owned_directory(transaction_dir)
+        self._clear_resolution_cache()
 
     def inspect_recovery(self) -> RecoveryInspection:
         """Classify an interrupted staged replacement without changing any files."""
 
+        self._active_resolution_nonce = None
         orphan_staging = self._orphan_transaction_dirs(active=None)
         try:
             _reject_unsafe_file(self._intent_path, allow_missing=True)
@@ -904,7 +929,18 @@ class StagedReplacement:
 
     def _require_operation_parents(self, operation: _ValidatedIntentTarget) -> None:
         intent_target = operation.intent
-        if intent_target.kind is not IntentTargetKind.REPLACE:
+        if operation.staged_path is not None:
+            _require_plain_parent_chain(self.context_root, operation.staged_path)
+        if operation.backup_path is not None:
+            _require_plain_parent_chain(self.context_root, operation.backup_path)
+        if intent_target.kind is IntentTargetKind.REPLACE:
+            try:
+                _require_plain_parent_chain(self.context_root, operation.target_path)
+            except (ContextBoundaryError, OSError) as exc:
+                raise RecoveryRequiredError(
+                    f"Target parent is unavailable for {intent_target.target}"
+                ) from exc
+        else:
             try:
                 _revalidate_owned_file(
                     self.context_root,
@@ -988,6 +1024,81 @@ class StagedReplacement:
                 f"Preimage backup is unavailable for target {intent_target.target}"
             )
 
+    def _activate_resolution_cache(
+        self,
+        lock: ContextLock,
+        *,
+        expected_nonce: str | None,
+    ) -> None:
+        # Cache identity is tied to the acquired lease object and nonce. The
+        # existing on-disk fence checks still run before every canonical
+        # commit/retry; cached paths receive dynamic parent and leaf checks.
+        if not isinstance(lock, ContextLock):
+            raise LockFenceError("Staged mutation requires an acquired context lock")
+        if lock.context_root != self.context_root:
+            raise LockFenceError("The context lock belongs to another context")
+        if lock.released:
+            raise LockFenceError("The context lock lease has already been released")
+        nonce = lock.nonce
+        if expected_nonce is not None and not secrets.compare_digest(nonce, expected_nonce):
+            raise LockFenceError("The verified context lock does not own the intent nonce")
+        if self._resolution_cache_nonce != nonce:
+            self._clear_resolution_cache()
+            self._resolution_cache_nonce = nonce
+        self._active_resolution_nonce = nonce
+
+    def _clear_resolution_cache(self) -> None:
+        self._resolution_cache_nonce = None
+        self._active_resolution_nonce = None
+        self._resolved_targets.clear()
+        self._resolved_staging_paths.clear()
+
+    def _resolve_target(self, target: str | Path) -> Path:
+        key = os.fspath(target)
+        if self._active_resolution_nonce is not None and key in self._resolved_targets:
+            return self._resolved_targets[key]
+        resolved = _resolve_target(self.context_root, target)
+        if self._active_resolution_nonce is not None:
+            canonical = resolved.relative_to(self.context_root).as_posix()
+            self._resolved_targets[canonical] = resolved
+        return resolved
+
+    def _resolve_staging_path(self, relative_path: str) -> Path:
+        if (
+            self._active_resolution_nonce is not None
+            and relative_path in self._resolved_staging_paths
+        ):
+            return self._resolved_staging_paths[relative_path]
+        resolved = resolve_context_path(
+            self.context_root,
+            relative_path,
+            allowed_prefixes=("98_state/staging/transactions",),
+        )
+        if self._active_resolution_nonce is not None:
+            self._resolved_staging_paths[relative_path] = resolved
+        return resolved
+
+    def _remember_staging_path(self, path: Path) -> None:
+        if self._active_resolution_nonce is None:
+            return
+        relative = path.relative_to(self.context_root).as_posix()
+        self._resolved_staging_paths[relative] = path
+
+    def _ensure_runtime_directories(self) -> None:
+        state = self._staging_root.parent
+        state.mkdir(exist_ok=True)
+        _require_plain_directory(state)
+        _reject_nested_context_marker(self.context_root, state)
+        _fsync_directory(self.context_root)
+        self._staging_root.mkdir(exist_ok=True)
+        _require_plain_directory(self._staging_root)
+        _reject_nested_context_marker(self.context_root, self._staging_root)
+        _fsync_directory(state)
+        self._transactions_root.mkdir(exist_ok=True)
+        _require_plain_directory(self._transactions_root)
+        _reject_nested_context_marker(self.context_root, self._transactions_root)
+        _fsync_directory(self._staging_root)
+
     def _resolve_operations(
         self,
         writes: tuple[StagedWrite | StagedMove | StagedDelete, ...],
@@ -1008,7 +1119,7 @@ class StagedReplacement:
             if isinstance(write, StagedWrite):
                 if not isinstance(write.content, bytes):
                     raise TypeError("Staged content must be bytes")
-                target_path = _resolve_target(self.context_root, write.target)
+                target_path = self._resolve_target(write.target)
                 if not target_path.parent.is_dir():
                     raise StagingError(f"Target parent directory does not exist: {write.target}")
                 _reject_unsafe_file(target_path, allow_missing=True)
@@ -1023,8 +1134,8 @@ class StagedReplacement:
                     )
                 )
             elif isinstance(write, StagedMove):
-                source_path = _resolve_target(self.context_root, write.source)
-                destination_path = _resolve_target(self.context_root, write.destination)
+                source_path = self._resolve_target(write.source)
+                destination_path = self._resolve_target(write.destination)
                 if not source_path.parent.is_dir() or not destination_path.parent.is_dir():
                     raise StagingError("Move source and destination parents must exist")
                 _reject_unsafe_file(source_path, allow_missing=False)
@@ -1047,7 +1158,7 @@ class StagedReplacement:
                     )
                 )
             elif isinstance(write, StagedDelete):
-                target_path = _resolve_target(self.context_root, write.target)
+                target_path = self._resolve_target(write.target)
                 if not target_path.parent.is_dir():
                     raise StagingError(f"Target parent directory does not exist: {write.target}")
                 _reject_unsafe_file(target_path, allow_missing=False)
@@ -1068,6 +1179,7 @@ class StagedReplacement:
     def _publish_intent(self, intent: IntentRecord, transaction_dir: Path) -> None:
         temp_path = transaction_dir / "intent.complete.tmp"
         _write_fsynced(temp_path, _encode_intent(intent), exclusive=True)
+        _require_plain_parent_chain(self.context_root, self._intent_path)
         descriptor = os.open(self._intent_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(descriptor)
         _fsync_directory(self._staging_root)
@@ -1080,6 +1192,7 @@ class StagedReplacement:
         _fsync_directory(self._staging_root)
 
     def _load_intent(self) -> IntentRecord:
+        _require_plain_parent_chain(self.context_root, self._intent_path)
         _reject_unsafe_file(self._intent_path, allow_missing=False)
         try:
             with self._intent_path.open("rb") as stream:
@@ -1100,7 +1213,7 @@ class StagedReplacement:
         transaction_dir: Path | None = None
         validated: list[_ValidatedIntentTarget] = []
         for index, item in enumerate(intent.targets):
-            target_path = _resolve_target(self.context_root, item.target)
+            target_path = self._resolve_target(item.target)
             canonical_target = target_path.relative_to(self.context_root).as_posix()
             if item.target != canonical_target:
                 raise InvalidIntentError("Intent target path is not canonical")
@@ -1108,11 +1221,7 @@ class StagedReplacement:
             staged_parent: Path | None = None
             stage_name = f"{index:08d}.stage"
             if item.staged is not None:
-                staged_path = resolve_context_path(
-                    self.context_root,
-                    item.staged,
-                    allowed_prefixes=("98_state/staging/transactions",),
-                )
+                staged_path = self._resolve_staging_path(item.staged)
                 relative_staged = PurePosixPath(item.staged)
                 if (
                     len(relative_staged.parts) != 5
@@ -1125,11 +1234,7 @@ class StagedReplacement:
             backup_path: Path | None = None
             backup_parent: Path | None = None
             if item.backup is not None:
-                backup_path = resolve_context_path(
-                    self.context_root,
-                    item.backup,
-                    allowed_prefixes=("98_state/staging/transactions",),
-                )
+                backup_path = self._resolve_staging_path(item.backup)
                 relative_backup = PurePosixPath(item.backup)
                 if (
                     len(relative_backup.parts) != 5
@@ -1152,7 +1257,7 @@ class StagedReplacement:
             destination_path: Path | None = None
             claimed_paths = [item.target]
             if item.destination is not None:
-                destination_path = _resolve_target(self.context_root, item.destination)
+                destination_path = self._resolve_target(item.destination)
                 canonical_destination = destination_path.relative_to(self.context_root).as_posix()
                 if item.destination != canonical_destination:
                     raise InvalidIntentError("Intent move destination path is not canonical")
@@ -1341,17 +1446,15 @@ def atomic_append_line_bytes(
 
     root = canonical_context_root(context_root)
     target_path = _resolve_target(root, target)
-    target_relative = target_path.relative_to(root).as_posix()
     _verify_lock(root, lock, expected_nonce=nonce)
     _validate_active_intent_if_present(root)
     staging_root = _ensure_runtime_directories(root)
     _ensure_target_parent_directories(
         root,
-        target_relative,
+        target_path,
         lock=lock,
         expected_nonce=nonce,
     )
-    target_path = _resolve_target(root, target_relative)
     _revalidate_owned_file(root, target_path, allow_missing=True)
     _require_same_volume(staging_root, target_path.parent)
     preimage = _read_optional_regular_file(target_path)
@@ -1406,10 +1509,11 @@ def _resolve_target(root: Path, target: str | Path) -> Path:
 
 
 def _validate_active_intent_if_present(root: Path) -> None:
-    stager = StagedReplacement(root)
-    _reject_unsafe_file(stager._intent_path, allow_missing=True)
-    if stager._intent_path.exists():
-        stager._load_intent()
+    intent_path = root / "98_state" / "staging" / "intent.json"
+    _require_plain_existing_parent_chain(root, intent_path)
+    _reject_unsafe_file(intent_path, allow_missing=True)
+    if intent_path.exists():
+        StagedReplacement(root)._load_intent()
 
 
 def _revalidate_owned_file(root: Path, path: Path, *, allow_missing: bool) -> None:
@@ -1417,16 +1521,19 @@ def _revalidate_owned_file(root: Path, path: Path, *, allow_missing: bool) -> No
         relative = path.relative_to(root).as_posix()
     except ValueError as exc:  # pragma: no cover - internal path invariant
         raise ContextBoundaryError(f"Owned path escapes the context root: {path}") from exc
-    if relative == "98_state/staging" or relative.startswith("98_state/staging/"):
-        resolved = resolve_context_path(
-            root,
-            relative,
-            allowed_prefixes=("98_state/staging",),
+    # Callers cache only paths that completed full resolution earlier in the
+    # same locked operation. Recheck the lexical zone plus every mutable
+    # parent and leaf here so retry-time link substitutions still fail closed.
+    if not (
+        relative == "98_state/staging"
+        or relative.startswith("98_state/staging/")
+        or relative in _ROOT_TARGETS
+        or any(
+            relative == prefix or relative.startswith(f"{prefix}/")
+            for prefix in _CANONICAL_TARGET_PREFIXES
         )
-    else:
-        resolved = _resolve_target(root, relative)
-    if resolved != path:
-        raise ContextBoundaryError(f"Owned path changed during resolution: {relative}")
+    ):
+        raise ContextBoundaryError(f"Owned path is outside a writable context zone: {relative}")
     _require_plain_parent_chain(root, path)
     _reject_unsafe_file(path, allow_missing=allow_missing)
 
@@ -1439,45 +1546,64 @@ def _require_plain_parent_chain(root: Path, path: Path) -> None:
             raise ContextBoundaryError(f"File parent must not be a symlink or junction: {current}")
         if not current.is_dir():
             raise ContextBoundaryError(f"File parent must be a directory: {current}")
+        if (current / "context.yaml").is_file():
+            relative = current.relative_to(root).as_posix()
+            raise ContextBoundaryError(f"Path crosses nested context boundary: {relative}")
+
+
+def _require_plain_existing_parent_chain(root: Path, path: Path) -> None:
+    current = root
+    for part in path.relative_to(root).parts[:-1]:
+        current /= part
+        if current.is_symlink() or _is_junction(current):
+            raise ContextBoundaryError(f"File parent must not be a symlink or junction: {current}")
+        if not current.exists():
+            return
+        if not current.is_dir():
+            raise ContextBoundaryError(f"File parent must be a directory: {current}")
+        if (current / "context.yaml").is_file():
+            relative = current.relative_to(root).as_posix()
+            raise ContextBoundaryError(f"Path crosses nested context boundary: {relative}")
 
 
 def _ensure_runtime_directories(root: Path) -> Path:
-    state = resolve_context_path(root, "98_state", allowed_prefixes=("98_state",))
+    # ``root`` is canonical at both call sites. These are fixed descendants;
+    # plain-directory and nested-context checks replace redundant resolution
+    # without trusting any filesystem object merely because its name matches.
+    state = root / "98_state"
     state.mkdir(exist_ok=True)
     _require_plain_directory(state)
+    _reject_nested_context_marker(root, state)
     _fsync_directory(root)
-    staging = resolve_context_path(root, "98_state/staging", allowed_prefixes=("98_state",))
+    staging = state / "staging"
     staging.mkdir(exist_ok=True)
     _require_plain_directory(staging)
+    _reject_nested_context_marker(root, staging)
     _fsync_directory(state)
-    transactions = resolve_context_path(
-        root,
-        "98_state/staging/transactions",
-        allowed_prefixes=("98_state/staging",),
-    )
+    transactions = staging / "transactions"
     transactions.mkdir(exist_ok=True)
     _require_plain_directory(transactions)
+    _reject_nested_context_marker(root, transactions)
     _fsync_directory(staging)
     return staging
 
 
 def _ensure_target_parent_directories(
     root: Path,
-    target: str,
+    target_path: Path,
     *,
     lock: ContextLock,
     expected_nonce: str,
 ) -> None:
-    target_path = _resolve_target(root, target)
+    # ``target_path`` already passed full boundary and nested-context
+    # resolution. Parent creation stays under the held lock and rechecks each
+    # component's link/junction, directory, and nested-context state.
     current = root
     for part in target_path.relative_to(root).parts[:-1]:
         current /= part
-        relative = current.relative_to(root).as_posix()
-        resolved = _resolve_target(root, relative)
-        if resolved != current:
-            raise ContextBoundaryError(f"Append parent changed during resolution: {relative}")
         if current.exists() or current.is_symlink() or _is_junction(current):
             _require_plain_directory(current)
+            _reject_nested_context_marker(root, current)
             continue
         _verify_lock(root, lock, expected_nonce=expected_nonce)
         try:
@@ -1487,8 +1613,7 @@ def _ensure_target_parent_directories(
         else:
             _fsync_directory(current.parent)
         _require_plain_directory(current)
-        if _resolve_target(root, relative) != current:
-            raise ContextBoundaryError(f"Append parent changed during creation: {relative}")
+        _reject_nested_context_marker(root, current)
 
 
 def _require_plain_directory(path: Path) -> None:
@@ -1496,6 +1621,12 @@ def _require_plain_directory(path: Path) -> None:
         raise ContextBoundaryError(f"Runtime directory must not be a symlink or junction: {path}")
     if not path.is_dir():
         raise ContextBoundaryError(f"Runtime path must be a directory: {path}")
+
+
+def _reject_nested_context_marker(root: Path, directory: Path) -> None:
+    if (directory / "context.yaml").is_file():
+        relative = directory.relative_to(root).as_posix()
+        raise ContextBoundaryError(f"Path crosses nested context boundary: {relative}")
 
 
 def _is_junction(path: Path) -> bool:
