@@ -57,7 +57,7 @@ _NATIVE_SOURCE_PATH_PATTERN = re.compile(
     r"(?!.*(?:/\.\.?)(?:/|$))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
 )
 _GENERATED_PATH_PATTERN = re.compile(
-    r"^\.(?:codex|claude|gemini)/(?!\.\.?(?:/|$))"
+    r"^\.(?:agents|codex|claude|gemini)/(?!\.\.?(?:/|$))"
     r"(?!.*(?:/\.\.?)(?:/|$))(?!.*//)[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
 )
 _MANAGED_PATH_PATTERN = re.compile(
@@ -347,7 +347,10 @@ class AdapterManifest(_StrictManifestModel):
                 continue
 
             for generated in skill.generated or ():
-                if not generated.path.startswith(expected_prefix):
+                is_codex_override_primary = (
+                    self.adapter == "codex" and generated.path == expected_canonical
+                )
+                if not (generated.path.startswith(expected_prefix) or is_codex_override_primary):
                     raise ValueError("generated path does not belong to the selected adapter")
                 key = collision_key(generated.path)
                 if key in output_keys:

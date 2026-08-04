@@ -277,13 +277,14 @@ def render_skill(
     canonical_content: bytes,
     side_effect_class: str,
     resource_contents: tuple[tuple[str, bytes], ...] = (),
+    force_generated: bool = False,
 ) -> RenderedSkill:
     """Render or native-verify one canonical skill for the selected client."""
 
     canonical_path = f".agents/skills/{name}/SKILL.md"
     canonical_digest = content_hash(canonical_content)
     target_path = skill_target_path(client, name)
-    if client is AgentClient.CODEX:
+    if client is AgentClient.CODEX and not force_generated:
         return RenderedSkill(
             name=name,
             canonical_path=canonical_path,
@@ -292,6 +293,20 @@ def render_skill(
             target_path=canonical_path,
             target_hash=canonical_digest,
             content=None,
+        )
+    if client is AgentClient.CODEX:
+        # A per-context override replaces an installer-owned packaged seed at
+        # the native Codex path. Keeping it as a generated primary gives
+        # removal a precise ownership record without claiming packaged
+        # auxiliary resources as adapter-owned files.
+        return RenderedSkill(
+            name=name,
+            canonical_path=canonical_path,
+            canonical_hash=canonical_digest,
+            mode="generated",
+            target_path=target_path,
+            target_hash=canonical_digest,
+            content=canonical_content,
         )
     rendered = _render_skill_primary(
         canonical_content,

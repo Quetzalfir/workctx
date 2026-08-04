@@ -86,7 +86,12 @@ from .models import (
     OperationResult,
     PersonalizationLayerStatus,
     PlannedChange,
+    SkillOverrideStatus,
     TargetApproval,
+)
+from .overrides import (
+    SkillOverrides,
+    skill_override_status_message,
 )
 from .personalization import (
     PersonalizationLayerError,
@@ -108,8 +113,12 @@ from .sources import (
     CanonicalInputMissingError,
     CanonicalRegistryInvalidError,
     CanonicalRegistryMissingError,
+    CanonicalSkill,
     CanonicalSourceSet,
     load_canonical_sources,
+    load_context_skill_overrides,
+    load_packaged_skill_primary,
+    restore_packaged_skill_sources,
 )
 
 Clock = Callable[[], datetime]
@@ -126,6 +135,7 @@ class _PreparedPlan:
     install_record: InstallRecordObservation | None
     next_manifest_digest: str | None
     operations_digest: str | None
+    codex_restore_names: frozenset[str]
 
 
 def _utc_now() -> datetime:
@@ -353,6 +363,27 @@ def _personalization_plan_changes(
     )
 
 
+def _skill_override_status_warnings(overrides: SkillOverrides) -> tuple[str, ...]:
+    """Surface every observed override through the existing CLI warning payload."""
+
+    return tuple(skill_override_status_message(status) for status in overrides.statuses)
+
+
+def _skill_override_plan_changes(overrides: SkillOverrides) -> tuple[PlannedChange, ...]:
+    """List inert override inputs first in install plans without claiming ownership."""
+
+    return tuple(
+        PlannedChange(
+            path=status.path,
+            operation=FileOperation.VERIFY,
+            observed_hash=status.override_hash,
+            desired_hash=status.override_hash,
+            reason=skill_override_status_message(status),
+        )
+        for status in overrides.statuses
+    )
+
+
 def _installed_personalization_is_current(
     layout: InstallationLayout,
     layers: PersonalizationLayers,
@@ -383,7 +414,10 @@ def _installed_personalization_is_current(
 
 def _is_safe_skill_output(path: str, client: AgentClient, skill_name: str | None = None) -> bool:
     parts = path.split("/")
-    if len(parts) < 4 or parts[0] != f".{client.value}" or parts[1] != "skills":
+    if client is AgentClient.CODEX and parts[0] == ".agents":
+        return skill_name is not None and parts == [".agents", "skills", skill_name, "SKILL.md"]
+    expected_root = f".{client.value}"
+    if len(parts) < 4 or parts[0] != expected_root or parts[1] != "skills":
         return False
     if skill_name is not None and parts[2] != skill_name:
         return False
@@ -439,6 +473,56 @@ def _generated_skill_inventory(manifest: AdapterManifest | None) -> dict[str, st
         for generated in skill.generated or ():
             inventory[generated.path] = generated.content_hash
     return inventory
+
+
+def _removed_codex_override_names(
+    manifest: AdapterManifest | None,
+    sources: CanonicalSourceSet,
+) -> frozenset[str]:
+    """Find previously owned Codex override primaries whose user files were removed."""
+
+    if manifest is None or manifest.adapter != AgentClient.CODEX.value:
+        return frozenset()
+    active = {status.skill for status in sources.skill_overrides.statuses}
+    removed: set[str] = set()
+    for skill in manifest.skills:
+        expected_path = f".agents/skills/{skill.name}/SKILL.md"
+        generated_paths = {item.path for item in skill.generated or ()}
+        if (
+            skill.effective_mode == "generated"
+            and generated_paths == {expected_path}
+            and skill.name not in active
+        ):
+            removed.add(skill.name)
+    return frozenset(removed)
+
+
+def _codex_override_takeover_hashes(
+    manifest: AdapterManifest | None,
+    sources: CanonicalSourceSet,
+) -> dict[str, str]:
+    """Authorize takeover only from an authenticated native packaged adoption hash."""
+
+    if manifest is None or manifest.adapter != AgentClient.CODEX.value:
+        return {}
+    recorded = {skill.name: skill for skill in manifest.skills}
+    takeovers: dict[str, str] = {}
+    for skill in sources.skills:
+        override = skill.override
+        entry = recorded.get(skill.name)
+        if override is None or entry is None or entry.effective_mode != "native-verified":
+            continue
+        adoption_hash = override.packaged_at_adoption_hash
+        if adoption_hash is None or entry.canonical.content_hash != adoption_hash:
+            continue
+        path = f".agents/skills/{skill.name}/SKILL.md"
+        source_hashes = {
+            source.path: source.content_hash
+            for source in (() if entry.source_set is None else entry.source_set.files)
+        }
+        if source_hashes.get(path) == adoption_hash:
+            takeovers[path] = adoption_hash
+    return takeovers
 
 
 def _generated_inventory(manifest: AdapterManifest | None) -> dict[str, str]:
@@ -517,15 +601,7 @@ def _verified_renderer_hashes(
         entry = recorded.get(skill.name)
         if entry is None:
             continue
-        rendered = render_skill(
-            client,
-            name=skill.name,
-            canonical_content=skill.content,
-            side_effect_class=skill.side_effect_class,
-            resource_contents=tuple(
-                (resource.relative_path, resource.content) for resource in skill.resources
-            ),
-        )
+        rendered = _render_source_skill(client, skill)
         if rendered.mode == "generated":
             recorded_by_path = {
                 generated.path: generated.content_hash for generated in entry.generated or ()
@@ -540,6 +616,21 @@ def _verified_renderer_hashes(
             ):
                 verified.update(current_by_path)
     return verified
+
+
+def _render_source_skill(client: AgentClient, skill: CanonicalSkill) -> RenderedSkill:
+    """Render one effective source, owning only Codex override primaries."""
+
+    return render_skill(
+        client,
+        name=skill.name,
+        canonical_content=skill.content,
+        side_effect_class=skill.side_effect_class,
+        resource_contents=tuple(
+            (resource.relative_path, resource.content) for resource in skill.resources
+        ),
+        force_generated=client is AgentClient.CODEX and skill.override is not None,
+    )
 
 
 class AgentAdapterService:
@@ -579,7 +670,7 @@ class AgentAdapterService:
         )
 
     def status(self, root: Path, client: AgentClient) -> AdapterStatus:
-        """Derive adapter and personalization status without writing either trust domain."""
+        """Derive adapter, personalization, and override status without writing."""
 
         layout = derive_layout(root, client)
         try:
@@ -587,7 +678,11 @@ class AgentAdapterService:
                 layout.root,
                 include_context=layout.is_context,
             )
-        except PersonalizationLayerError as error:
+            skill_overrides = load_context_skill_overrides(
+                layout.root,
+                include_context=layout.is_context,
+            )
+        except (PersonalizationLayerError, InvalidAdapterStateError) as error:
             return AdapterStatus(
                 client=client,
                 state=AdapterState.INVALID,
@@ -595,20 +690,29 @@ class AgentAdapterService:
                 warnings=(str(error),),
                 repair_blocked=True,
             )
-        derived = self._status(layout, personalization)
+        derived = self._status(layout, personalization, skill_overrides)
         layer_statuses = personalization.statuses(
             merged=_installed_personalization_is_current(layout, personalization)
         )
+        override_statuses = skill_overrides.statuses
+        override_warnings = skill_overrides.warnings
         return replace(
             derived,
-            warnings=(*derived.warnings, *_personalization_status_warnings(layer_statuses)),
+            warnings=(
+                *derived.warnings,
+                *_skill_override_status_warnings(skill_overrides),
+                *_personalization_status_warnings(layer_statuses),
+            ),
             personalization_layers=layer_statuses,
+            skill_overrides=override_statuses,
+            skill_override_warnings=override_warnings,
         )
 
     def _status(
         self,
         layout: InstallationLayout,
         personalization: PersonalizationLayers,
+        skill_overrides: SkillOverrides,
     ) -> AdapterStatus:
         """Derive status without writing, following the normative precedence order."""
 
@@ -790,6 +894,8 @@ class AgentAdapterService:
                 layout.root,
                 client,
                 personalization=personalization,
+                skill_overrides=skill_overrides,
+                include_context_overrides=layout.is_context,
             )
         except CanonicalInputMissingError as error:
             return self._status_missing_input(
@@ -817,6 +923,20 @@ class AgentAdapterService:
                 repair_blocked=True,
             )
         except (InvalidAdapterStateError, SafeFilesystemError) as error:
+            return AdapterStatus(
+                client,
+                AdapterState.INVALID,
+                layout.manifest_path,
+                drift=(DriftDetail(DriftReason.SOURCE_INVALID, detail=str(error)),),
+                instruction_bridge=FeatureStatus(FeatureState.MISSING),
+                mcp_configuration=mcp,
+                warnings=(str(error),),
+                repair_blocked=True,
+            )
+        removed_codex_overrides = _removed_codex_override_names(manifest, sources)
+        try:
+            sources = restore_packaged_skill_sources(sources, removed_codex_overrides)
+        except InvalidAdapterStateError as error:
             return AdapterStatus(
                 client,
                 AdapterState.INVALID,
@@ -1178,15 +1298,7 @@ class AgentAdapterService:
                         actual_hash=current.content_hash,
                     )
                 )
-            expected = render_skill(
-                layout.client,
-                name=name,
-                canonical_content=current.content,
-                side_effect_class=current.side_effect_class,
-                resource_contents=tuple(
-                    (resource.relative_path, resource.content) for resource in current.resources
-                ),
-            )
+            expected = _render_source_skill(layout.client, current)
             if expected.mode == "native-verified":
                 recorded_sources = {
                     source.path: source.content_hash
@@ -1550,6 +1662,7 @@ class AgentAdapterService:
         install_record: InstallRecordObservation | None = None,
         affected_paths: tuple[str, ...] = (),
         personalization: PersonalizationLayers | None = None,
+        skill_overrides: SkillOverrides | None = None,
     ) -> AdapterPlan:
         """Return a no-write plan when any D-032 authority factor fails."""
 
@@ -1566,11 +1679,14 @@ class AgentAdapterService:
         personalization_statuses = (
             () if personalization is None else personalization.statuses(merged=False)
         )
+        skill_override_statuses = () if skill_overrides is None else skill_overrides.statuses
         if personalization is not None:
             changes = (
                 *_personalization_plan_changes(personalization, personalization_statuses),
                 *changes,
             )
+        if skill_overrides is not None:
+            changes = (*_skill_override_plan_changes(skill_overrides), *changes)
         return self._save_plan(
             layout,
             action,
@@ -1582,6 +1698,7 @@ class AgentAdapterService:
             observations,
             install_record,
             personalization_layers=personalization_statuses,
+            skill_overrides=skill_override_statuses,
         )
 
     def plan_repair(self, root: Path, client: AgentClient) -> AdapterPlan:
@@ -1682,9 +1799,37 @@ class AgentAdapterService:
 
         mutations: list[FileMutation] = []
         planned: list[PlannedChange] = []
+        codex_restores: dict[str, bytes] = {}
+        if client is AgentClient.CODEX:
+            for skill in manifest.skills:
+                path = f".agents/skills/{skill.name}/SKILL.md"
+                if skill.effective_mode == "generated" and {
+                    item.path for item in skill.generated or ()
+                } == {path}:
+                    codex_restores[path] = load_packaged_skill_primary(skill.name)
 
         for path in sorted(generated_inventory):
             target = observed_outputs[path]
+            restored = codex_restores.get(path)
+            if restored is not None:
+                desired_hash = content_hash(restored)
+                if target.content_hash == desired_hash:
+                    continue
+                operation = FileOperation.REPLACE if target.exists else FileOperation.CREATE
+                mutations.append(FileMutation(path, target, restored))
+                planned.append(
+                    PlannedChange(
+                        path,
+                        operation,
+                        observed_hash=target.content_hash,
+                        desired_hash=desired_hash,
+                        reason=(
+                            "Restore the packaged Codex source while uninstalling its "
+                            "manifest-owned override output"
+                        ),
+                    )
+                )
+                continue
             if not target.exists:
                 continue
             mutations.append(FileMutation(path, target, None))
@@ -1776,9 +1921,12 @@ class AgentAdapterService:
                 layout.root,
                 client,
                 personalization=personalization,
+                include_context_overrides=layout.is_context,
             )
         except SafeFilesystemError as error:
             raise InvalidAdapterStateError(str(error)) from error
+        codex_restore_names = _removed_codex_override_names(old_manifest, sources)
+        sources = restore_packaged_skill_sources(sources, codex_restore_names)
         install_record, authority_error = self._install_record_for_plan(
             layout,
             manifest_snapshot,
@@ -1796,23 +1944,19 @@ class AgentAdapterService:
                 install_record=install_record,
                 affected_paths=affected_paths,
                 personalization=sources.personalization,
+                skill_overrides=sources.skill_overrides,
             )
 
-        rendered = tuple(
-            render_skill(
-                client,
-                name=skill.name,
-                canonical_content=skill.content,
-                side_effect_class=skill.side_effect_class,
-                resource_contents=tuple(
-                    (resource.relative_path, resource.content) for resource in skill.resources
-                ),
-            )
-            for skill in sources.skills
-        )
+        rendered = tuple(_render_source_skill(client, skill) for skill in sources.skills)
         rendered_mcp = render_mcp_configuration(client)
         desired_outputs = {
             generated.path: generated for item in rendered for generated in item.generated_files
+        }
+        codex_takeovers = _codex_override_takeover_hashes(old_manifest, sources)
+        codex_restore_outputs = {
+            f".agents/skills/{skill.name}/SKILL.md": skill.content
+            for skill in sources.skills
+            if skill.name in codex_restore_names
         }
         old_skill_outputs = _generated_skill_inventory(old_manifest)
         old_outputs = _generated_inventory(old_manifest)
@@ -1842,12 +1986,16 @@ class AgentAdapterService:
             backup_target = _observe_plan_target(safe, backup.path, observations)
             if not backup_target.exists or backup_target.content_hash != backup.content_hash:
                 authority_failures.append(backup.path)
-        untracked_conflicts = [
-            path
-            for path in sorted(desired_outputs)
-            if path not in old_skill_outputs
-            and _observe_plan_target(safe, path, observations).exists
-        ]
+        untracked_conflicts: list[str] = []
+        for path in sorted(desired_outputs):
+            if path in old_skill_outputs:
+                continue
+            target = _observe_plan_target(safe, path, observations)
+            if not target.exists:
+                continue
+            takeover_hash = codex_takeovers.get(path)
+            if takeover_hash is None or target.content_hash != takeover_hash:
+                untracked_conflicts.append(path)
         authority_failures.extend(untracked_conflicts)
         if authority_failures:
             affected_paths = tuple(
@@ -1871,6 +2019,7 @@ class AgentAdapterService:
                 install_record=install_record,
                 affected_paths=affected_paths,
                 personalization=sources.personalization,
+                skill_overrides=sources.skill_overrides,
             )
         mutations: list[FileMutation] = []
         planned: list[PlannedChange] = []
@@ -1888,7 +2037,7 @@ class AgentAdapterService:
         if client is AgentClient.CODEX and sources.origin.value == "packaged":
             seed_files = {
                 ".agents/skills/registry.yaml": sources.registry_content,
-                **{skill.path: skill.content for skill in sources.skills},
+                **{skill.path: skill.content for skill in sources.skills if skill.override is None},
                 **{
                     f".agents/skills/{skill.name}/{resource.relative_path}": resource.content
                     for skill in sources.skills
@@ -1907,6 +2056,7 @@ class AgentAdapterService:
                         install_record=install_record,
                         affected_paths=(path,),
                         personalization=sources.personalization,
+                        skill_overrides=sources.skill_overrides,
                     )
                 mutations.append(FileMutation(path, target, desired))
                 planned.append(
@@ -1920,7 +2070,7 @@ class AgentAdapterService:
 
         for path, rendered_skill in sorted(desired_outputs.items()):
             target = _observe_plan_target(safe, path, observations)
-            recorded_hash = old_skill_outputs.get(path)
+            recorded_hash = old_skill_outputs.get(path, codex_takeovers.get(path))
             if recorded_hash is None and target.exists:
                 blocked.append(f"Untracked desired target already exists: {path}")
                 planned.append(
@@ -1960,6 +2110,24 @@ class AgentAdapterService:
         for path in sorted(set(old_skill_outputs) - set(desired_outputs)):
             target = _observe_plan_target(safe, path, observations)
             if not target.exists:
+                continue
+            restored = codex_restore_outputs.get(path)
+            if restored is not None:
+                desired_hash = content_hash(restored)
+                if target.content_hash != desired_hash:
+                    mutations.append(FileMutation(path, target, restored))
+                    planned.append(
+                        PlannedChange(
+                            path,
+                            FileOperation.REPLACE,
+                            observed_hash=target.content_hash,
+                            desired_hash=desired_hash,
+                            reason=(
+                                "Restore the current packaged skill after its per-context "
+                                "override was removed"
+                            ),
+                        )
+                    )
                 continue
             mutations.append(FileMutation(path, target, None))
             planned.append(
@@ -2036,6 +2204,7 @@ class AgentAdapterService:
             merged=bridge_ownership == "generated" and blocked_reason is None
         )
         planned = [
+            *_skill_override_plan_changes(sources.skill_overrides),
             *_personalization_plan_changes(
                 sources.personalization,
                 personalization_statuses,
@@ -2053,6 +2222,8 @@ class AgentAdapterService:
             observations,
             install_record,
             personalization_layers=personalization_statuses,
+            skill_overrides=sources.skill_overrides.statuses,
+            codex_restore_names=codex_restore_names,
         )
 
     def _plan_bridge(
@@ -2286,6 +2457,8 @@ class AgentAdapterService:
         install_record: InstallRecordObservation | None = None,
         *,
         personalization_layers: tuple[PersonalizationLayerStatus, ...] = (),
+        skill_overrides: tuple[SkillOverrideStatus, ...] = (),
+        codex_restore_names: frozenset[str] = frozenset(),
     ) -> AdapterPlan:
         for mutation in mutations:
             observed = observations.get(mutation.path)
@@ -2330,6 +2503,7 @@ class AgentAdapterService:
             source_fingerprint=source_fingerprint,
             blocked_reason=blocked_reason,
             personalization_layers=personalization_layers,
+            skill_overrides=skill_overrides,
         )
         self._prepared[digest] = _PreparedPlan(
             plan=plan,
@@ -2340,6 +2514,7 @@ class AgentAdapterService:
             install_record=install_record,
             next_manifest_digest=next_manifest_digest,
             operations_digest=operations_digest,
+            codex_restore_names=codex_restore_names,
         )
         return plan
 
@@ -2445,6 +2620,11 @@ class AgentAdapterService:
                     plan.root,
                     plan.client,
                     personalization=locked_personalization,
+                    include_context_overrides=prepared.layout.is_context,
+                )
+                locked_sources = restore_packaged_skill_sources(
+                    locked_sources,
+                    prepared.codex_restore_names,
                 )
                 if locked_sources.fingerprint != plan.source_fingerprint:
                     raise AdapterConflictError(

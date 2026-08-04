@@ -6,7 +6,7 @@ import posixpath
 import re
 import shlex
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from functools import cache, partial
 from importlib import resources
 from pathlib import Path
@@ -28,6 +28,12 @@ from ._safe_fs import (
 from .errors import InvalidAdapterStateError
 from .manifest import source_set_aggregate_hash
 from .models import AgentClient, SourceOrigin
+from .overrides import (
+    ResolvedSkillOverride,
+    SkillOverrides,
+    discover_skill_override_files,
+    resolve_skill_overrides,
+)
 from .personalization import (
     PersonalizationLayers,
     load_personalization_layers,
@@ -197,6 +203,7 @@ class CanonicalSkill:
     content: bytes
     content_hash: str
     resources: tuple[CanonicalResource, ...] = ()
+    override: ResolvedSkillOverride | None = None
 
     @property
     def path(self) -> str:
@@ -242,6 +249,7 @@ class CanonicalSourceSet:
     bridge_template_hash: str
     bridge_path: str
     personalization: PersonalizationLayers
+    skill_overrides: SkillOverrides = field(default_factory=SkillOverrides)
 
     @property
     def fingerprint(self) -> str:
@@ -261,6 +269,16 @@ class CanonicalSourceSet:
                     )
                 ),
                 self.bridge_hash,
+                *(
+                    value
+                    for override in self.skill_overrides.statuses
+                    for value in (
+                        override.path,
+                        override.override_hash,
+                        override.packaged_at_adoption_hash or "",
+                        override.packaged_now_hash or "",
+                    )
+                ),
             ]
         )
         return content_hash(joined.encode("utf-8"))
@@ -894,15 +912,44 @@ def _local_sources(
     return registry_snapshot.content, contents, resource_sets
 
 
+def load_context_skill_overrides(
+    root: Path,
+    *,
+    include_context: bool,
+) -> SkillOverrides:
+    """Resolve discovered context overrides against the live packaged skill hashes."""
+
+    files = discover_skill_override_files(root, include_context=include_context)
+    if not files:
+        return SkillOverrides()
+    registry_content = _packaged_file("skills", "registry.yaml")
+    entries = _registry_entries(registry_content)
+    packaged_hashes = {
+        name: content_hash(_packaged_file("skills", name, "SKILL.md"))
+        for name, _side_effect in entries
+    }
+    return resolve_skill_overrides(files, packaged_hashes)
+
+
 def load_canonical_sources(
     root: Path,
     client: AgentClient,
     *,
     personalization: PersonalizationLayers | None = None,
+    skill_overrides: SkillOverrides | None = None,
+    include_context_overrides: bool = False,
 ) -> CanonicalSourceSet:
     """Prefer a complete local canonical inventory, otherwise use the packaged kit."""
 
     physical_root = root.resolve(strict=True)
+    selected_overrides = (
+        load_context_skill_overrides(
+            physical_root,
+            include_context=include_context_overrides,
+        )
+        if skill_overrides is None
+        else skill_overrides
+    )
     local = _local_sources(physical_root)
     if local is None:
         origin = SourceOrigin.PACKAGED
@@ -916,8 +963,10 @@ def load_canonical_sources(
         entries = _registry_entries(registry_content)
     skills: list[CanonicalSkill] = []
     local_safe = SafeRoot(physical_root) if origin is SourceOrigin.LOCAL else None
+    overrides_by_name = selected_overrides.by_name
     for name, side_effect in entries:
-        content = contents[name]
+        selected_override = overrides_by_name.get(name)
+        content = contents[name] if selected_override is None else selected_override.file.content
         if origin is SourceOrigin.LOCAL:
             assert local_safe is not None
             source_path = f".agents/skills/{name}/SKILL.md"
@@ -935,6 +984,7 @@ def load_canonical_sources(
                 content=content,
                 content_hash=content_hash(content),
                 resources=resource_sets[name],
+                override=selected_override,
             )
         )
     selected_bridge = bridge_path(client)
@@ -956,4 +1006,67 @@ def load_canonical_sources(
         bridge_template_hash=content_hash(bridge_template),
         bridge_path=selected_bridge,
         personalization=selected_personalization,
+        skill_overrides=selected_overrides,
     )
+
+
+def restore_packaged_skill_sources(
+    sources: CanonicalSourceSet,
+    names: frozenset[str],
+) -> CanonicalSourceSet:
+    """Select current packaged primaries for authenticated removed Codex overrides."""
+
+    if not names:
+        return sources
+    registry_content = _packaged_file("skills", "registry.yaml")
+    packaged_entries = dict(_registry_entries(registry_content))
+    missing = sorted(names - set(packaged_entries))
+    if missing:
+        raise InvalidAdapterStateError(
+            f"Removed Codex override no longer names a packaged skill: {missing[0]}"
+        )
+    selected: list[CanonicalSkill] = []
+    found: set[str] = set()
+    for skill in sources.skills:
+        if skill.name not in names:
+            selected.append(skill)
+            continue
+        found.add(skill.name)
+        content = _packaged_file("skills", skill.name, "SKILL.md")
+        source_path = f"skills/{skill.name}/SKILL.md"
+        _validate_skill(
+            skill.name,
+            content,
+            link_exists=partial(_packaged_link_exists, source_path),
+        )
+        selected.append(
+            replace(
+                skill,
+                side_effect_class=packaged_entries[skill.name],
+                content=content,
+                content_hash=content_hash(content),
+                override=None,
+            )
+        )
+    absent = sorted(names - found)
+    if absent:
+        raise InvalidAdapterStateError(
+            f"Removed Codex override is absent from the selected inventory: {absent[0]}"
+        )
+    return replace(sources, skills=tuple(selected))
+
+
+def load_packaged_skill_primary(name: str) -> bytes:
+    """Load and lint one named packaged primary for owned Codex restoration."""
+
+    entries = dict(_registry_entries(_packaged_file("skills", "registry.yaml")))
+    if name not in entries:
+        raise InvalidAdapterStateError(f"Packaged skill is unavailable: {name}")
+    content = _packaged_file("skills", name, "SKILL.md")
+    source_path = f"skills/{name}/SKILL.md"
+    _validate_skill(
+        name,
+        content,
+        link_exists=partial(_packaged_link_exists, source_path),
+    )
+    return content

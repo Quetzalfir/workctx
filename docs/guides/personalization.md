@@ -71,3 +71,78 @@ entries before approval, including whether each will be merged. `workctx agent s
 reports each layer's path, byte size, and current merged state. A changed layer makes an
 authenticated generated bridge stale; rerun installation to refresh it from the current layer
 files.
+
+## Per-context skill overrides
+
+A context can replace the `SKILL.md` body of one packaged Work Context skill without changing the
+packaged kit. Overrides are context-local only; there is no user-level override layer. The fixed
+location is:
+
+```text
+06_overrides/skills/<skill-name>/SKILL.md
+```
+
+The file is user-owned. Work Context never creates, overwrites, deletes, executes, or silently
+merges it. Installation reads the current bytes, applies the same skill lint used for packaged
+skills, and writes the override content to the selected client's installed skill output. Packaged
+auxiliary resources and the registry classification remain in effect.
+
+### Adopt an override
+
+Start from the packaged skill version you intend to customize. After its YAML frontmatter and
+before its authored body, add the exact adoption provenance block:
+
+```markdown
+---
+name: fictional-review
+description: Use when reviewing a fictional project change with traceable evidence.
+---
+<!-- workctx-skill-override:start -->
+source: 06_overrides/skills/fictional-review/SKILL.md
+packaged-at-adoption: sha256:<64 lowercase hexadecimal characters>
+<!-- workctx-skill-override:end -->
+
+# Fictional review override
+
+Use the context-specific review sequence.
+```
+
+The `packaged-at-adoption` value must be the exact-byte SHA-256 content hash of the packaged
+`SKILL.md` used as the starting point, including the `sha256:` prefix. After an ordinary packaged
+install, the applicable `98_state/agent-adapters/<client>/skill-manifest.json` entry exposes that
+value as `skills[].canonical.content_hash`. Creating the override remains a manual or explicitly
+approved context transaction; `workctx agent install` never materializes it for you.
+
+Run `workctx agent install` without `--yes` after creating the file. Override verification entries
+appear before mutation entries and show:
+
+- `packaged-at-adoption`: the packaged content hash recorded in the user-owned provenance block;
+- `packaged-now`: the content hash shipped by the currently running Work Context kit;
+- `override`: the exact content hash of the complete user-owned override file.
+
+An override directory whose name is not in the packaged skill registry produces an
+`unknown_skill` status warning and is ignored. It does not make installation invalid merely by
+being unknown.
+
+### Packaged upgrades and intentional rebases
+
+When `packaged-at-adoption` differs from `packaged-now`, `workctx agent status` and the next install
+plan report `override written against an older packaged skill` with all three hashes. This is a
+review marker only: it does not block installation, choose changes, or perform a three-way merge.
+The installed skill continues to use the override bytes exactly as authored.
+
+To rebase intentionally, compare the old packaged version, the current packaged version, and the
+override yourself. After accepting the desired edits, update `packaged-at-adoption` to the exact
+current packaged hash. Do not change that marker merely to silence status; changing it asserts
+that the override was reviewed against those exact packaged bytes.
+
+### Remove an override
+
+Delete only `06_overrides/skills/<skill-name>/SKILL.md`, then review and approve a new
+`workctx agent install` plan. The next install restores the current packaged skill behavior. Empty
+override directories may be removed separately; uninstall and install never claim them.
+
+Each override has the same 64 KiB cap and secret scan as one personalization layer. A possible
+secret refuses loading with only the portable override file and line number in the diagnostic.
+Keep secret values out of the file, and remember that passing validation does not make authored
+Markdown executable or grant it authority over Work Context safety and approval controls.
