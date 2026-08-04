@@ -37,8 +37,13 @@ index and generated views are rebuild-only).
 
 ## Phase 3 — Plugins and connectors
 
+- a generic declarative connector runtime: one snapshot engine driven by
+  per-source manifests (endpoint, schedule, secret reference), so any
+  service — including private ones — can feed evidence without bespoke code;
+- thin named adapters on top of the runtime where a source needs real logic
+  (GitHub, Jira, Confluence, Dynatrace, Rally, Teams, email — built on
+  demand, not by catalog);
 - Graphify and CodeGraph adapters;
-- GitHub, Jira, Confluence, Dynatrace, Rally, Teams, and email connectors;
 - approval workflows and background synchronization.
 
 ## Phase 4 — Team and enterprise capabilities

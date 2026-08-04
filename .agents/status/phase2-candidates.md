@@ -199,3 +199,31 @@ public operation-session API (engine-owned object bundling lock, heartbeat
 lease, operation caches, and projection operation scope) and move ingestion
 onto it. Behavior is fully test-covered, so drift breaks loudly — the risk is
 maintenance friction, not silent corruption.
+
+## C-214 — Generic declarative connector runtime (operator direction, 2026-08-03)
+
+Operator challenged the per-service connector catalog: private/internal
+services must work without workctx shipping code for them. Adopted Phase 3
+architecture, three levels:
+
+- Level 0 (exists): the inbox IS the universal ingestion contract — any
+  source delivers evidence via 00_inbox/raw + inbox add / artifact_register,
+  with hashing, provenance, and quarantine. Nothing is blocked by a missing
+  connector.
+- Level 1 (Phase 3 spine): ONE generic snapshot engine executing declarative
+  per-source YAML manifests (name, base_url, secret_ref, snapshot endpoints/
+  queries, schedule, pagination hints). Adding a connector = writing a
+  manifest, including for private services. Snapshots carry full provenance
+  (system, query, timestamp, hash) and enter the normal evidence pipeline.
+  Responses are untrusted data; quarantine rules apply unchanged.
+- Level 2 (on demand only): thin named adapters over the runtime for sources
+  needing real logic (OAuth flows, odd pagination, binary exports, Teams).
+  Built when demand exists, never by catalog. Vendor MCP servers remain the
+  agent-side interactive path.
+
+External WRITES stay out of the runtime: drafts in 05_outbox, per-operation
+explicit approval, unchanged.
+
+Phase 3 cut consequence: first package is the manifest spec + engine +
+scheduler; the operator's 2-3 daily systems get manifests (and thin adapters
+only if the generic engine falls short).
