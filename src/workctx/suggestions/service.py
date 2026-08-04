@@ -48,7 +48,7 @@ from workctx.suggestions.models import (
     SuggestionRecord,
     SuggestionStatus,
 )
-from workctx.transactions import ApplyResult, apply, validate_proposal, verify_ledger
+from workctx.transactions import ApplyResult, validate_proposal, verify_ledger
 from workctx.transactions.models import ProposalValidationResult
 
 _SUGGESTION_ID = re.compile(SUGGESTION_ID_PATTERN)
@@ -84,14 +84,30 @@ class SuggestionService:
         context_root: Path,
         *,
         clock: Callable[[], datetime] | None = None,
-        transaction_apply: _ApplyTransaction = apply,
+        transaction_apply: _ApplyTransaction | None = None,
         proposal_validator: _ValidateProposal = validate_proposal,
     ) -> None:
         self._store = CanonicalStore(context_root)
         self._root = self._store.context_root
         self._clock = clock or _utc_now
-        self._transaction_apply = transaction_apply
+        # The default apply shares this service's clock so record frontmatter
+        # and the audit-ledger event carry one consistent timeline.
+        self._transaction_apply = transaction_apply or self._clock_bound_apply
         self._proposal_validator = proposal_validator
+
+    def _clock_bound_apply(
+        self,
+        context_root: Path,
+        proposal: TransactionProposal,
+        *,
+        approved: bool = False,
+    ) -> ApplyResult:
+        from workctx.transactions import TransactionEngine
+
+        return TransactionEngine(context_root, clock=self._clock).apply(
+            proposal,
+            approved=approved,
+        )
 
     @property
     def context_root(self) -> Path:
