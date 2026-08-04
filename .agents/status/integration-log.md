@@ -38,3 +38,5 @@
 | 2026-08-03 | WP-630-personalization | capture cc39515 | merge 479001d | focused 297 in worktree; combined gate 1523 on master | accepted+integrated | adapter v3; sandbox ran zero test bodies, lead ran all |
 | 2026-08-03 | WP-640-repo-guide | capture aa1d3fb | merge | worker full gate 1463 own-branch; wave gate 1523 | accepted+integrated | .agents/skills mirror deviation accepted; lead freshness fix on secrets mentions |
 | 2026-08-03 | LEAD-P2W2-layout-guard | lead addition | direct | tests/test_layout.py bans stdlib-shadowing test packages | committed | prevents the 314-failure class permanently |
+| 2026-08-03 | WP-650-more-views | capture 748be61 | merge d07e50d | worktree gate 1527; lead reran outside sandbox | accepted+integrated | 11 views total; C-204/205/206 + C-202 detection |
+| 2026-08-03 | WP-660-perf-leftovers | capture | merge | worktree gate 1528; combined 1532; 9 resolution cuts lead-reviewed | accepted+integrated | batch inbox add 1 lock/1 refresh; C-213 debt recorded |

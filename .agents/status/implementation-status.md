@@ -10,14 +10,14 @@
 
 ## Current wave
 
-Phase 2 wave 2 CLOSED (2026-08-03): WP-620 (secret references, ADR 0013), WP-630
-(personalization layers, D-044), WP-640 (code-repositories guide + curation
-tiering) all integrated; final gate 1523 tests. Lead fixes this wave: renamed the
-stdlib-shadowing secrets test package (314-failure class now banned by a layout
-guard test) and freshened guide mentions after secrets landed. Next-cut queue:
-C-202 assisted improvement loop, C-204/205/206 directory/glossary/agenda views,
-C-212 usage-driven relevance, WP-610 leftovers (batch inbox add, staging
-resolutions).
+Phase 2 wave 3 CLOSED (2026-08-03): WP-650 (people-directory, glossary, agenda,
+suggestions views — 11 generated views total) and WP-660 (batch inbox
+registration, staging ceremony cuts) integrated; final gate 1532 tests. C-213
+operation-session debt recorded with a payment condition. The C-202/C-212
+design draft awaits four operator decisions (see the wave plan folder).
+Construction pauses for operator real-usage feedback; remaining Phase 2:
+C-202/C-212 machinery wave + local UI (2-3 waves, operator to confirm
+priority).
 
 ## Work-package status
 
@@ -49,6 +49,8 @@ resolutions).
 | WP-620 | verified | keyring (D-043) | Codex worker | agent/WP-620-secrets | accepted | Integrated at 0289e43; ADR 0013; lead renamed test package |
 | WP-630 | verified | D-044 | Codex worker | agent/WP-630-personalization | accepted | Integrated at 479001d; adapter v3 |
 | WP-640 | verified | — | Claude agent | worktree-agent (captured) | accepted | Integrated; guide + tier rule in two skills |
+| WP-650 | verified | — | Codex worker | agent/WP-650-more-views | accepted | Integrated at d07e50d; four views |
+| WP-660 | verified | — | Codex worker | agent/WP-660-perf-leftovers | accepted | Integrated; batch registration; C-213 debt |
 
 ## Validation status
 
