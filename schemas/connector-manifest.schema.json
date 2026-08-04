@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/connector-manifest.schema.json",
+  "title": "Declarative connector manifest",
+  "description": "Operator-authored Level 1 connector configuration. Snapshot ids must be unique within a manifest; the runtime enforces this relational invariant in addition to this structural schema. The schedule field is metadata only in schema version 1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "name",
+    "base_url",
+    "snapshots"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "$ref": "#/$defs/kebabName"
+    },
+    "base_url": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https?://(?![^/?#]*@)[^\\s?#]+$"
+    },
+    "allow_insecure_http": {
+      "type": "boolean",
+      "default": false
+    },
+    "secret_ref": {
+      "$ref": "#/$defs/kebabName"
+    },
+    "auth_style": {
+      "oneOf": [
+        {
+          "const": "bearer"
+        },
+        {
+          "type": "string",
+          "pattern": "^header:[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+          "not": {
+            "pattern": "^header:(?:[Cc][Oo][Nn][Nn][Ee][Cc][Tt][Ii][Oo][Nn]|[Cc][Oo][Nn][Tt][Ee][Nn][Tt]-[Ll][Ee][Nn][Gg][Tt][Hh]|[Hh][Oo][Ss][Tt]|[Tt][Rr][Aa][Nn][Ss][Ff][Ee][Rr]-[Ee][Nn][Cc][Oo][Dd][Ii][Nn][Gg])$"
+          }
+        },
+        {
+          "type": "string",
+          "pattern": "^query:[A-Za-z0-9._~-]+$"
+        }
+      ]
+    },
+    "snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/snapshot"
+      }
+    },
+    "timeout_seconds": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 300,
+      "default": 30
+    },
+    "max_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 104857600,
+      "default": 10485760
+    }
+  },
+  "dependentRequired": {
+    "secret_ref": [
+      "auth_style"
+    ],
+    "auth_style": [
+      "secret_ref"
+    ]
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "base_url"
+        ],
+        "properties": {
+          "base_url": {
+            "pattern": "^http://"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "allow_insecure_http"
+        ],
+        "properties": {
+          "allow_insecure_http": {
+            "const": true
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "kebabName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "queryValue": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ]
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "path"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/kebabName"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)(?!//)(?!.*(?:^|/)\\.\\.?(?:/|$))[^?#\\\\\\u0000-\\u001F]+$"
+        },
+        "query": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9._~-]+$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/queryValue"
+          },
+          "default": {}
+        },
+        "accept": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001F]+$",
+          "default": "application/json"
+        },
+        "schedule": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001F]+$"
+        }
+      }
+    }
+  }
+}
