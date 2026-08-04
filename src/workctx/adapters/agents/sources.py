@@ -28,6 +28,11 @@ from ._safe_fs import (
 from .errors import InvalidAdapterStateError
 from .manifest import source_set_aggregate_hash
 from .models import AgentClient, SourceOrigin
+from .personalization import (
+    PersonalizationLayers,
+    load_personalization_layers,
+    render_personalized_bridge,
+)
 from .renderers import bridge_path, content_hash
 
 _SKILL_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -234,7 +239,9 @@ class CanonicalSourceSet:
     skills: tuple[CanonicalSkill, ...]
     bridge_content: bytes
     bridge_hash: str
+    bridge_template_hash: str
     bridge_path: str
+    personalization: PersonalizationLayers
 
     @property
     def fingerprint(self) -> str:
@@ -887,7 +894,12 @@ def _local_sources(
     return registry_snapshot.content, contents, resource_sets
 
 
-def load_canonical_sources(root: Path, client: AgentClient) -> CanonicalSourceSet:
+def load_canonical_sources(
+    root: Path,
+    client: AgentClient,
+    *,
+    personalization: PersonalizationLayers | None = None,
+) -> CanonicalSourceSet:
     """Prefer a complete local canonical inventory, otherwise use the packaged kit."""
 
     physical_root = root.resolve(strict=True)
@@ -926,7 +938,14 @@ def load_canonical_sources(root: Path, client: AgentClient) -> CanonicalSourceSe
             )
         )
     selected_bridge = bridge_path(client)
-    bridge_content = _packaged_file("bridges", selected_bridge)
+    selected_personalization = (
+        load_personalization_layers(physical_root) if personalization is None else personalization
+    )
+    bridge_template = _packaged_file("bridges", selected_bridge)
+    bridge_content = render_personalized_bridge(
+        bridge_template,
+        selected_personalization,
+    )
     return CanonicalSourceSet(
         origin=origin,
         registry_content=registry_content,
@@ -934,5 +953,7 @@ def load_canonical_sources(root: Path, client: AgentClient) -> CanonicalSourceSe
         skills=tuple(skills),
         bridge_content=bridge_content,
         bridge_hash=content_hash(bridge_content),
+        bridge_template_hash=content_hash(bridge_template),
         bridge_path=selected_bridge,
+        personalization=selected_personalization,
     )

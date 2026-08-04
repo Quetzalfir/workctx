@@ -7,7 +7,7 @@ import json
 import secrets
 import shutil
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
@@ -84,8 +84,15 @@ from .models import (
     OpenedContext,
     OperationAction,
     OperationResult,
+    PersonalizationLayerStatus,
     PlannedChange,
     TargetApproval,
+)
+from .personalization import (
+    PersonalizationLayerError,
+    PersonalizationLayers,
+    load_personalization_layers,
+    render_personalization_section,
 )
 from .renderers import (
     ADAPTER_VERSION,
@@ -309,6 +316,71 @@ def _manifest_from_snapshot(
     return manifest
 
 
+def _personalization_status_warnings(
+    statuses: tuple[PersonalizationLayerStatus, ...],
+) -> tuple[str, ...]:
+    """Expose present-layer status through the existing CLI warning payload seam."""
+
+    return tuple(
+        "Personalization "
+        f"{status.layer.value} layer: path={status.path}; "
+        f"size={status.size_bytes} bytes; merged={'yes' if status.merged else 'no'}"
+        for status in statuses
+        if status.present
+    )
+
+
+def _personalization_plan_changes(
+    layers: PersonalizationLayers,
+    statuses: tuple[PersonalizationLayerStatus, ...],
+) -> tuple[PlannedChange, ...]:
+    """Represent inert layer reads in plans without making them mutation targets."""
+
+    by_name = {status.layer: status for status in statuses}
+    return tuple(
+        PlannedChange(
+            path=str(layer.path),
+            operation=FileOperation.VERIFY,
+            observed_hash=layer.content_hash,
+            desired_hash=layer.content_hash,
+            reason=(
+                f"{layer.layer.value.title()} personalization layer; "
+                f"size={layer.size_bytes} bytes; "
+                f"merged={'yes' if by_name[layer.layer].merged else 'no'}"
+            ),
+        )
+        for layer in layers.present
+    )
+
+
+def _installed_personalization_is_current(
+    layout: InstallationLayout,
+    layers: PersonalizationLayers,
+) -> bool:
+    """Return whether a manifest-recorded generated bridge ends in the current exact section."""
+
+    section = render_personalization_section(layers)
+    if not section:
+        return False
+    safe = SafeRoot(layout.root)
+    try:
+        manifest_snapshot = safe.inspect_file(layout.manifest_path)
+        manifest = _manifest_from_snapshot(manifest_snapshot, layout.client)
+        if manifest is None or manifest.components is None:
+            return False
+        bridge = manifest.components.instruction_bridge
+        if bridge.ownership != "generated":
+            return False
+        target = safe.inspect_file(bridge.target.path)
+    except (
+        InvalidAdapterStateError,
+        SafeFilesystemError,
+        UnsupportedClientVersionError,
+    ):
+        return False
+    return target.content is not None and target.content.endswith(section)
+
+
 def _is_safe_skill_output(path: str, client: AgentClient, skill_name: str | None = None) -> bool:
     parts = path.split("/")
     if len(parts) < 4 or parts[0] != f".{client.value}" or parts[1] != "skills":
@@ -507,9 +579,40 @@ class AgentAdapterService:
         )
 
     def status(self, root: Path, client: AgentClient) -> AdapterStatus:
-        """Derive status without writing, following the normative precedence order."""
+        """Derive adapter and personalization status without writing either trust domain."""
 
         layout = derive_layout(root, client)
+        try:
+            personalization = load_personalization_layers(
+                layout.root,
+                include_context=layout.is_context,
+            )
+        except PersonalizationLayerError as error:
+            return AdapterStatus(
+                client=client,
+                state=AdapterState.INVALID,
+                manifest_path=layout.manifest_path,
+                warnings=(str(error),),
+                repair_blocked=True,
+            )
+        derived = self._status(layout, personalization)
+        layer_statuses = personalization.statuses(
+            merged=_installed_personalization_is_current(layout, personalization)
+        )
+        return replace(
+            derived,
+            warnings=(*derived.warnings, *_personalization_status_warnings(layer_statuses)),
+            personalization_layers=layer_statuses,
+        )
+
+    def _status(
+        self,
+        layout: InstallationLayout,
+        personalization: PersonalizationLayers,
+    ) -> AdapterStatus:
+        """Derive status without writing, following the normative precedence order."""
+
+        client = layout.client
         safe = SafeRoot(layout.root)
         mcp = _feature_mcp()
         lock = inspect_adapter_lock(layout, now=self._clock())
@@ -683,7 +786,11 @@ class AgentAdapterService:
                 repair_blocked=True,
             )
         try:
-            sources = load_canonical_sources(layout.root, client)
+            sources = load_canonical_sources(
+                layout.root,
+                client,
+                personalization=personalization,
+            )
         except CanonicalInputMissingError as error:
             return self._status_missing_input(
                 layout,
@@ -1298,6 +1405,13 @@ class AgentAdapterService:
                             actual_hash=target.content_hash,
                         )
                     )
+                elif target.content_hash != sources.bridge_hash:
+                    bridge_feature = FeatureStatus(
+                        FeatureState.DIVERGED,
+                        bridge.target.path,
+                        "Generated instruction bridge does not contain the current source "
+                        "and personalization layers.",
+                    )
                 else:
                     bridge_feature = FeatureStatus(FeatureState.CURRENT, bridge.target.path)
             elif target.content_hash != sources.bridge_hash:
@@ -1435,6 +1549,7 @@ class AgentAdapterService:
         source_fingerprint: str | None = None,
         install_record: InstallRecordObservation | None = None,
         affected_paths: tuple[str, ...] = (),
+        personalization: PersonalizationLayers | None = None,
     ) -> AdapterPlan:
         """Return a no-write plan when any D-032 authority factor fails."""
 
@@ -1448,6 +1563,14 @@ class AgentAdapterService:
             )
             for path in dict.fromkeys(paths)
         )
+        personalization_statuses = (
+            () if personalization is None else personalization.statuses(merged=False)
+        )
+        if personalization is not None:
+            changes = (
+                *_personalization_plan_changes(personalization, personalization_statuses),
+                *changes,
+            )
         return self._save_plan(
             layout,
             action,
@@ -1458,6 +1581,7 @@ class AgentAdapterService:
             (),
             observations,
             install_record,
+            personalization_layers=personalization_statuses,
         )
 
     def plan_repair(self, root: Path, client: AgentClient) -> AdapterPlan:
@@ -1644,7 +1768,15 @@ class AgentAdapterService:
                 observations,
             )
             old_manifest = _manifest_from_snapshot(manifest_snapshot, client)
-            sources = load_canonical_sources(layout.root, client)
+            personalization = load_personalization_layers(
+                layout.root,
+                include_context=layout.is_context,
+            )
+            sources = load_canonical_sources(
+                layout.root,
+                client,
+                personalization=personalization,
+            )
         except SafeFilesystemError as error:
             raise InvalidAdapterStateError(str(error)) from error
         install_record, authority_error = self._install_record_for_plan(
@@ -1663,6 +1795,7 @@ class AgentAdapterService:
                 source_fingerprint=sources.fingerprint,
                 install_record=install_record,
                 affected_paths=affected_paths,
+                personalization=sources.personalization,
             )
 
         rendered = tuple(
@@ -1737,6 +1870,7 @@ class AgentAdapterService:
                 source_fingerprint=sources.fingerprint,
                 install_record=install_record,
                 affected_paths=affected_paths,
+                personalization=sources.personalization,
             )
         mutations: list[FileMutation] = []
         planned: list[PlannedChange] = []
@@ -1772,6 +1906,7 @@ class AgentAdapterService:
                         source_fingerprint=sources.fingerprint,
                         install_record=install_record,
                         affected_paths=(path,),
+                        personalization=sources.personalization,
                     )
                 mutations.append(FileMutation(path, target, desired))
                 planned.append(
@@ -1897,6 +2032,16 @@ class AgentAdapterService:
                 )
             )
         blocked_reason = "; ".join(blocked) or None
+        personalization_statuses = sources.personalization.statuses(
+            merged=bridge_ownership == "generated" and blocked_reason is None
+        )
+        planned = [
+            *_personalization_plan_changes(
+                sources.personalization,
+                personalization_statuses,
+            ),
+            *planned,
+        ]
         return self._save_plan(
             layout,
             action,
@@ -1907,6 +2052,7 @@ class AgentAdapterService:
             (),
             observations,
             install_record,
+            personalization_layers=personalization_statuses,
         )
 
     def _plan_bridge(
@@ -2111,7 +2257,11 @@ class AgentAdapterService:
                     ownership=bridge_ownership,
                     source=BridgeSource(
                         path=bridge_name,
-                        content_hash=sources.bridge_hash,
+                        content_hash=(
+                            sources.bridge_hash
+                            if bridge_ownership == "generated"
+                            else sources.bridge_template_hash
+                        ),
                     ),
                     target=BridgeTarget(
                         path=bridge_name,
@@ -2134,6 +2284,8 @@ class AgentAdapterService:
         backup_paths: tuple[str, ...],
         observations: dict[str, FileSnapshot],
         install_record: InstallRecordObservation | None = None,
+        *,
+        personalization_layers: tuple[PersonalizationLayerStatus, ...] = (),
     ) -> AdapterPlan:
         for mutation in mutations:
             observed = observations.get(mutation.path)
@@ -2177,6 +2329,7 @@ class AgentAdapterService:
             plan_hash=digest,
             source_fingerprint=source_fingerprint,
             blocked_reason=blocked_reason,
+            personalization_layers=personalization_layers,
         )
         self._prepared[digest] = _PreparedPlan(
             plan=plan,
@@ -2284,7 +2437,15 @@ class AgentAdapterService:
             if plan.action in {OperationAction.INSTALL, OperationAction.REPAIR}:
                 self._require_supported(prepared.layout)
             if plan.source_fingerprint is not None:
-                locked_sources = load_canonical_sources(plan.root, plan.client)
+                locked_personalization = load_personalization_layers(
+                    prepared.layout.root,
+                    include_context=prepared.layout.is_context,
+                )
+                locked_sources = load_canonical_sources(
+                    plan.root,
+                    plan.client,
+                    personalization=locked_personalization,
+                )
                 if locked_sources.fingerprint != plan.source_fingerprint:
                     raise AdapterConflictError(
                         "Canonical sources changed before lock-held preflight; replan"
