@@ -20,6 +20,7 @@ from typing import Any, cast
 import yaml
 from pydantic import JsonValue, ValidationError
 
+import workctx.usage as usage
 from workctx.adapters.sqlite.models import (
     ClaimRecord,
     ContextIsolationError,
@@ -209,6 +210,7 @@ class SQLiteProjection:
 
         self._context_root = root
         self._context_id = config.id
+        self._usage_enabled = config.telemetry.usage
         self._state_path = resolved_state
         self._database_path = resolved_state / _DATABASE_NAME
         self._gate = _gate_for(self._database_path)
@@ -222,6 +224,10 @@ class SQLiteProjection:
     @property
     def context_id(self) -> str:
         return self._context_id
+
+    @property
+    def usage_enabled(self) -> bool:
+        return self._usage_enabled
 
     @property
     def database_path(self) -> Path:
@@ -662,6 +668,8 @@ class SQLiteProjection:
                 ).fetchall()
         except sqlite3.Error as exc:
             raise ProjectionQueryError("Full-text search failed") from exc
+        if self._usage_enabled:
+            usage.record(self._context_root, "search", query)
         return tuple(
             SearchHit(
                 id=cast(str, row["record_id"]),

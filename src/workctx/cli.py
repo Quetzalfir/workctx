@@ -23,6 +23,8 @@ if TYPE_CHECKING:
     from workctx.retrieval.records import ResolutionResult
     from workctx.suggestions import SuggestionDocument, SuggestionMutationResult
     from workctx.transactions.models import DryRunResult, TransactionDiagnostic
+    from workctx.usage import UsageCandidate
+    from workctx.usage.suggestions import UsageSuggestionResult
     from workctx.views import BriefPayload
 
 import typer
@@ -81,6 +83,8 @@ task_app = typer.Typer(help="Query projected canonical tasks.")
 app.add_typer(task_app, name="task")
 suggestion_app = typer.Typer(help="Inspect and review canonical suggestion records.")
 app.add_typer(suggestion_app, name="suggestion")
+usage_app = typer.Typer(help="Inspect opt-in local usage signals and create advisory records.")
+app.add_typer(usage_app, name="usage")
 agent_app = typer.Typer(help="Detect, install, inspect, and open supported agent clients.")
 app.add_typer(agent_app, name="agent")
 migrate_app = typer.Typer(help="Convert legacy Markdown repositories into isolated contexts.")
@@ -1960,6 +1964,100 @@ def suggestion_reject(
     _complete_suggestion_mutation(mutation, json_output=json_output)
 
 
+@usage_app.command("status")
+def usage_status_command(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Show opt-in state, retained bytes, and rolling URI-use windows."""
+
+    from workctx.usage import usage_status
+
+    begin_command("usage.status", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    status = usage_status(root)
+    result = cast("dict[str, JsonValue]", status.model_dump(mode="json"))
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        state = "enabled" if status.enabled else "disabled"
+        output_console.print(
+            Text(
+                f"Usage telemetry is {state}; {status.file_size_bytes} bytes in the "
+                f"current file; {len(status.summary.targets)} URI targets summarized."
+            )
+        )
+
+
+@usage_app.command("evaluate")
+def usage_evaluate_command(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Evaluate advisory promotion and decay candidates without writing records."""
+
+    from workctx.usage import evaluate_usage
+
+    begin_command("usage.evaluate", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    candidates = evaluate_usage(root)
+    result: dict[str, JsonValue] = {
+        "count": len(candidates),
+        "candidates": [_usage_candidate_payload(candidate) for candidate in candidates],
+    }
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(Text(f"Found {len(candidates)} advisory usage candidates."))
+
+
+@usage_app.command("suggest")
+def usage_suggest_command(
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve creation of canonical suggestion records."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Create approved WP-680 records for candidates not already open."""
+
+    from workctx.usage import suggest_usage
+
+    begin_command("usage.suggest", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    _require_usage_yes(root, yes=yes)
+    outcome = suggest_usage(root, approved=yes)
+    result = _usage_suggestion_payload(outcome)
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(
+            Text(
+                f"Created {len(outcome.created)} suggestion records; "
+                f"skipped {len(outcome.skipped)} already-open candidates."
+            )
+        )
+
+
 @agent_app.command("detect")
 def agent_detect(
     context_path: Annotated[
@@ -2531,6 +2629,48 @@ def _complete_suggestion_mutation(
                 f"ledger event {receipt.ledger_event_id}."
             )
         )
+
+
+def _usage_candidate_payload(candidate: UsageCandidate) -> dict[str, JsonValue]:
+    return cast("dict[str, JsonValue]", candidate.model_dump(mode="json"))
+
+
+def _require_usage_yes(root: Path, *, yes: bool) -> None:
+    if yes:
+        return
+    context_id = load_context_config(root).id
+    error = CliDiagnostic(
+        code="USAGE_APPROVAL_REQUIRED",
+        message="Usage suggestion creation requires explicit --yes approval.",
+        path="$.yes",
+    )
+    record_failure(
+        result={"operation": "suggest"},
+        context_id=context_id,
+        errors=[error],
+    )
+    raise UsageConfigurationError(error.message)
+
+
+def _usage_suggestion_payload(outcome: UsageSuggestionResult) -> dict[str, JsonValue]:
+    created: list[dict[str, JsonValue]] = []
+    for mutation in outcome.created:
+        created.append(
+            {
+                "suggestion": _suggestion_document_payload(mutation.suggestion),
+                "receipt": cast(
+                    "dict[str, JsonValue]",
+                    mutation.receipt.model_dump(mode="json"),
+                ),
+            }
+        )
+    return {
+        "candidate_count": len(outcome.candidates),
+        "created_count": len(outcome.created),
+        "skipped_count": len(outcome.skipped),
+        "created": cast(JsonValue, created),
+        "skipped": [_usage_candidate_payload(candidate) for candidate in outcome.skipped],
+    }
 
 
 def _agent_clients(selection: str | None, *, allow_all: bool = True) -> tuple[AgentClient, ...]:

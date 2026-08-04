@@ -127,6 +127,29 @@
     "updated_at": {
       "type": "string",
       "format": "date-time"
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Opt-in machine-local usage telemetry; absent means fully disabled.",
+      "properties": {
+        "usage": {
+          "type": "boolean",
+          "default": false
+        },
+        "promotion_uses": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 5
+        },
+        "decay_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650,
+          "default": 60
+        }
+      }
     }
   }
 }

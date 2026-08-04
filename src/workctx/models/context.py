@@ -68,6 +68,16 @@ class ContextPolicies(BaseModel):
         return False
 
 
+class TelemetryConfig(BaseModel):
+    """Opt-in machine-local usage telemetry knobs (D-045: default off)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    usage: bool = False
+    promotion_uses: int = Field(default=5, ge=1, le=1000)
+    decay_days: int = Field(default=60, ge=1, le=3650)
+
+
 class ContextConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -81,6 +91,7 @@ class ContextConfig(BaseModel):
     classification: DataClassification
     security_boundary: str = Field(pattern="^isolated$")
     policies: ContextPolicies
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     created_at: AwareDatetime
     updated_at: AwareDatetime
 

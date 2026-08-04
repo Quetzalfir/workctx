@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
+import workctx.usage as usage
 from workctx.domain import (
     ArtifactReference,
     EntityType,
@@ -36,6 +39,11 @@ def resolve(reader: ProjectionReader, reference: ResolvableReference) -> Resolut
         except ValueError as exc:
             raise ValueError(f"Unknown Work Context entity type: {parsed.entity_type!r}") from exc
         _require_context(parsed, reader.context_id)
+    elif not isinstance(parsed, (ArtifactReference, RepoReference)):
+        raise ValueError("Retrieval supports only workctx://, artifact://, and repo:// references")
+    if getattr(reader, "usage_enabled", False):
+        usage.record(cast(Any, reader).context_root, "resolve", str(parsed))
+    if isinstance(parsed, WorkctxUri):
         descriptor = WorkctxReferenceDescriptor(uri=parsed)
         try:
             record = reader.get_document_by_uri(parsed)
@@ -60,7 +68,7 @@ def resolve(reader: ProjectionReader, reference: ResolvableReference) -> Resolut
             status=ResolutionStatus.RESOLVED,
             descriptor=RepoReferenceDescriptor.from_reference(parsed),
         )
-    raise ValueError("Retrieval supports only workctx://, artifact://, and repo:// references")
+    raise AssertionError("supported durable reference was not handled")  # pragma: no cover
 
 
 def _parse_reference(
