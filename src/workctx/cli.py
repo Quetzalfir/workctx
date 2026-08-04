@@ -32,7 +32,11 @@ from rich.text import Text
 from workctx import __version__
 from workctx.doctor import DoctorCheck, run_doctor
 from workctx.domain import EntityType, TaskStatus
-from workctx.errors import UnavailableDependencyError, UserCorrectableError
+from workctx.errors import (
+    UnavailableDependencyError,
+    UsageConfigurationError,
+    UserCorrectableError,
+)
 from workctx.models.context import ContextKind, ContextProfile
 from workctx.presentation import (
     CliDiagnostic,
@@ -77,12 +81,357 @@ agent_app = typer.Typer(help="Detect, install, inspect, and open supported agent
 app.add_typer(agent_app, name="agent")
 migrate_app = typer.Typer(help="Convert legacy Markdown repositories into isolated contexts.")
 app.add_typer(migrate_app, name="migrate")
+secret_app = typer.Typer(help="Manage machine-global secret references without printing values.")
+app.add_typer(secret_app, name="secret")
 
 
 @app.command()
 def version() -> None:
     """Print the installed Work Context OS version."""
     typer.echo(__version__)
+
+
+@secret_app.command(
+    "set",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def secret_set(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Lowercase kebab-case secret name.")],
+    from_env: Annotated[
+        str | None,
+        typer.Option("--from-env", help="Read the value from this environment variable."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Prompt for a value, or read one from an environment variable, then store it."""
+    import os
+
+    from workctx.secrets import SecretBackendUnavailableError, SecretRef, store
+
+    begin_command("secret.set", json_output=json_output)
+    if ctx.args:
+        error = CliDiagnostic(
+            code="SECRET_VALUE_ON_ARGV",
+            message=(
+                "Secret values cannot be passed on argv; use the masked prompt or --from-env."
+            ),
+        )
+        record_failure(result={}, errors=[error])
+        raise UsageConfigurationError(error.message)
+
+    ref = SecretRef(name)
+    if from_env is None:
+        value = cast(
+            "str",
+            typer.prompt("Secret value", hide_input=True, err=json_output, type=str),
+        )
+    else:
+        if from_env not in os.environ:
+            error = CliDiagnostic(
+                code="SECRET_SOURCE_ENV_NOT_FOUND",
+                message="The source environment variable is not set.",
+            )
+            record_failure(result={"name": ref.name}, errors=[error])
+            raise UserCorrectableError(error.message)
+        value = os.environ[from_env]
+
+    result: dict[str, JsonValue] = {
+        "name": ref.name,
+        "stored": True,
+        "backend": "os-store",
+    }
+    try:
+        store(ref, value)
+    except SecretBackendUnavailableError:
+        _record_secret_backend_failure(result={"name": ref.name})
+        raise
+    finally:
+        del value
+
+    if json_output:
+        emit_success(result=result)
+    else:
+        output_console.print(Text(f"Stored secret reference '{ref.name}' in the OS store."))
+
+
+@secret_app.command("check")
+def secret_check(
+    name: Annotated[str, typer.Argument(help="Lowercase kebab-case secret name.")],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Check whether a reference resolves and identify the winning layer."""
+    from workctx.secrets import (
+        SecretBackendUnavailableError,
+        SecretNotFoundError,
+        SecretRef,
+        resolution_layer,
+    )
+
+    begin_command("secret.check", json_output=json_output)
+    ref = SecretRef(name)
+    try:
+        layer = resolution_layer(ref)
+    except SecretNotFoundError as exc:
+        result: dict[str, JsonValue] = {
+            "name": ref.name,
+            "resolvable": False,
+            "layer": None,
+        }
+        record_failure(
+            result=result,
+            errors=[CliDiagnostic(code="SECRET_NOT_FOUND", message=str(exc))],
+        )
+        raise
+    except SecretBackendUnavailableError:
+        _record_secret_backend_failure(result={"name": ref.name})
+        raise
+
+    result = {"name": ref.name, "resolvable": True, "layer": layer.value}
+    if json_output:
+        emit_success(result=result)
+    else:
+        output_console.print(Text(f"{ref.name}: resolvable via {layer.value}."))
+
+
+@secret_app.command("list")
+def secret_list(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List known names and resolver-layer presence without reading values into output."""
+    from workctx.secrets import (
+        SecretBackendUnavailableError,
+        environment_contains,
+        inspect_presence,
+        list_names,
+        os_store_available,
+    )
+
+    begin_command("secret.list", json_output=json_output)
+    names = list_names()
+    backend_is_available = os_store_available()
+    warnings: list[CliDiagnostic] = []
+    items: list[dict[str, JsonValue]] = []
+
+    if backend_is_available:
+        try:
+            for secret_name in names:
+                presence = inspect_presence(secret_name)
+                resolved = presence.resolved_layer
+                items.append(
+                    {
+                        "name": presence.name,
+                        "environment": presence.environment,
+                        "os_store": presence.os_store,
+                        "resolved_layer": resolved.value if resolved is not None else None,
+                    }
+                )
+        except SecretBackendUnavailableError:
+            backend_is_available = False
+
+    if not backend_is_available:
+        items = []
+        for secret_name in names:
+            environment = environment_contains(secret_name)
+            items.append(
+                {
+                    "name": secret_name,
+                    "environment": environment,
+                    "os_store": None,
+                    "resolved_layer": "env" if environment else None,
+                }
+            )
+        warnings.append(
+            CliDiagnostic(
+                code="SECRET_BACKEND_UNAVAILABLE",
+                message=(
+                    "The OS credential store is unavailable; only environment presence is known."
+                ),
+            )
+        )
+
+    result: dict[str, JsonValue] = {
+        "count": len(items),
+        "secrets": cast("list[JsonValue]", items),
+        "os_store_available": backend_is_available,
+    }
+    if json_output:
+        emit_success(result=result, warnings=warnings)
+    else:
+        table = Table(title="Secret references")
+        table.add_column("Name")
+        table.add_column("Environment")
+        table.add_column("OS store")
+        for item in items:
+            os_presence = item["os_store"]
+            table.add_row(
+                cast("str", item["name"]),
+                "yes" if item["environment"] else "no",
+                "unknown" if os_presence is None else ("yes" if os_presence else "no"),
+            )
+        output_console.print(table)
+        for warning in warnings:
+            output_console.print(Text(f"Warning: {warning.message}"))
+
+
+@secret_app.command("unset")
+def secret_unset(
+    name: Annotated[str, typer.Argument(help="Lowercase kebab-case secret name.")],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Remove a named OS-store entry; environment variables are unchanged."""
+    from workctx.secrets import (
+        SecretBackendUnavailableError,
+        SecretRef,
+        delete,
+        environment_contains,
+    )
+
+    begin_command("secret.unset", json_output=json_output)
+    ref = SecretRef(name)
+    try:
+        deleted = delete(ref)
+    except SecretBackendUnavailableError:
+        _record_secret_backend_failure(result={"name": ref.name})
+        raise
+
+    environment_present = environment_contains(ref)
+    warnings: list[CliDiagnostic] = []
+    if environment_present:
+        warnings.append(
+            CliDiagnostic(
+                code="SECRET_ENV_OVERRIDE_PRESENT",
+                message="The environment layer still satisfies this reference.",
+            )
+        )
+    result: dict[str, JsonValue] = {
+        "name": ref.name,
+        "deleted": deleted,
+        "environment_present": environment_present,
+    }
+    if json_output:
+        emit_success(result=result, warnings=warnings)
+    else:
+        status = "Removed" if deleted else "No OS-store entry existed for"
+        output_console.print(Text(f"{status} secret reference '{ref.name}'."))
+        for warning in warnings:
+            output_console.print(Text(f"Warning: {warning.message}"))
+
+
+@secret_app.command("import")
+def secret_import(
+    source_path: Annotated[
+        Path,
+        typer.Argument(help="Dotenv file to import directly into the OS credential store."),
+    ],
+    shred: Annotated[
+        bool | None,
+        typer.Option(
+            "--shred/--keep",
+            help="Securely remove or explicitly retain the source after import.",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Import a dotenv file, then securely remove it when explicitly approved."""
+    from workctx.secrets import (
+        DotenvParseError,
+        SecretBackendUnavailableError,
+        SecretImportError,
+        parse_dotenv,
+        shred_dotenv,
+        store,
+    )
+
+    begin_command("secret.import", json_output=json_output)
+    if json_output and shred is None:
+        error = CliDiagnostic(
+            code="SECRET_IMPORT_DISPOSITION_REQUIRED",
+            message="JSON mode requires an explicit --shred or --keep flag.",
+        )
+        record_failure(result={"count": 0, "names": []}, errors=[error])
+        raise UsageConfigurationError(error.message)
+
+    try:
+        entries = parse_dotenv(source_path)
+    except DotenvParseError as exc:
+        record_failure(
+            result={"count": 0, "names": []},
+            errors=[CliDiagnostic(code="DOTENV_MALFORMED", message=str(exc))],
+        )
+        raise
+
+    stored_names: list[str] = []
+    try:
+        for entry in entries:
+            store(entry.ref, entry.value)
+            stored_names.append(entry.ref.name)
+    except SecretBackendUnavailableError:
+        _record_secret_backend_failure(
+            result={
+                "count": len(stored_names),
+                "names": cast("list[JsonValue]", sorted(stored_names)),
+            },
+        )
+        raise
+
+    should_shred = (
+        typer.confirm("Securely delete the imported dotenv file now?") if shred is None else shred
+    )
+    source_deleted = False
+    if should_shred:
+        try:
+            shred_dotenv(source_path)
+            source_deleted = True
+        except SecretImportError as exc:
+            failure_result: dict[str, JsonValue] = {
+                "count": len(stored_names),
+                "names": cast("list[JsonValue]", sorted(stored_names)),
+                "source_deleted": False,
+            }
+            record_failure(
+                result=failure_result,
+                errors=[CliDiagnostic(code="SECRET_SOURCE_DELETE_FAILED", message=str(exc))],
+            )
+            raise
+
+    result: dict[str, JsonValue] = {
+        "count": len(stored_names),
+        "names": cast("list[JsonValue]", sorted(stored_names)),
+        "source_deleted": source_deleted,
+    }
+    if json_output:
+        emit_success(result=result)
+    else:
+        names = ", ".join(sorted(stored_names)) or "none"
+        output_console.print(Text(f"Imported {len(stored_names)} secret references: {names}."))
+        disposition = "securely removed" if source_deleted else "kept"
+        output_console.print(Text(f"The dotenv source was {disposition}."))
+
+
+def _record_secret_backend_failure(*, result: dict[str, JsonValue]) -> None:
+    record_failure(
+        result=result,
+        errors=[
+            CliDiagnostic(
+                code="SECRET_BACKEND_UNAVAILABLE",
+                message=(
+                    "The OS credential store is unavailable; configure keyring or use a "
+                    "WORKCTX_SECRET_* environment variable."
+                ),
+            )
+        ],
+    )
 
 
 @migrate_app.command("legacy")

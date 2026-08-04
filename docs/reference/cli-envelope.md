@@ -37,6 +37,11 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `agent install` | `agent.install` | `applied`, `plans`, `receipts` |
 | `agent open` | `agent.open` | `session` |
 | `migrate legacy` | `migrate.legacy` | `mode`, `applied`, `report` |
+| `secret set` | `secret.set` | `name`, `stored`, `backend` |
+| `secret check` | `secret.check` | `name`, `resolvable`, `layer` |
+| `secret list` | `secret.list` | `count`, `secrets`, `os_store_available` |
+| `secret unset` | `secret.unset` | `name`, `deleted`, `environment_present` |
+| `secret import` | `secret.import` | `count`, `names`, `source_deleted` |
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
