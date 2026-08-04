@@ -1,70 +1,58 @@
 {
   "schema_version": 1,
-  "wave": 7,
-  "baseline_commit": "77e42c8 (wave-1 close + keyring)",
+  "wave": 8,
+  "baseline_commit": "wave2-close (post-matrix)",
   "notes": [
-    "Phase 1 and Phase 2 wave 1 are historical (Git history + integration log).",
-    "Phase 2 wave 2: WP-620 || WP-630 || WP-640 in parallel, disjoint. Briefs under .agents/plan/2026-08-03_181056-phase2-wave2/.",
-    "cli.py: WP-620 only (secret group). pyproject frozen (keyring added by lead, D-043).",
+    "Phase 2 waves 1-2 are historical (Git history + integration log).",
+    "Phase 2 wave 3: WP-650 || WP-660 in parallel, disjoint. Briefs under .agents/plan/2026-08-03_200758-phase2-wave3/.",
+    "cli.py: WP-660 only (inbox add section). Operator deferred secrets trial; C-202 adoption + C-212 need a lead design pass.",
     "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
   ],
   "frozen_paths": [
-    "src/workctx/** except src/workctx/secrets/** (WP-620), the WP-620 secret group in cli.py, src/workctx/adapters/agents/** (WP-630), src/workctx/resources/agent_kit/skills/** (WP-640)",
-    "tests/** except tests/secrets/** (WP-620) and tests/agents_setup/** (WP-630)",
+    "src/workctx/** except src/workctx/views/** (WP-650), src/workctx/ingestion/service.py + inbox-add cli.py section + src/workctx/adapters/filesystem/staging.py (WP-660)",
+    "tests/** except tests/tasks_views/** (WP-650), tests/perf/** + tests/ingestion/** + tests/cli/test_inbox_cli.py (WP-660)",
     "templates/**",
     "schemas/**",
     "pyproject.toml",
     "uv.lock",
-    "docs/** except docs/reference/secrets.md + cli-envelope rows (WP-620), docs/guides/personalization.md (WP-630), docs/guides/code-repositories.md + one multiple-contexts line (WP-640)",
-    ".agents/plan/**",
-    ".agents/templates/**",
-    ".agents/skills/**",
+    "docs/** except docs/reference/views.md (WP-650) and docs/reference/inbox.md (WP-660)",
+    ".agents/**",
     "AGENTS.md",
     "CLAUDE.md",
     "GEMINI.md"
   ],
   "frozen_interfaces": [
-    "All existing public APIs consumed as-is; SecretValue accessor discipline per WP-620 brief becomes frozen at integration",
-    "D-044 layer locations are fixed; D-043 keyring is the only resolver backend besides env",
-    "CLI envelope schema and D-015 exit codes frozen; new secret commands conform"
+    "All existing public APIs consumed as-is; WP-660 is additive-only (register keeps its signature)",
+    "ADR 0006 durability and boundary semantics frozen; every skipped re-resolution individually justified",
+    "ViewName may gain four members (WP-650); everything else frozen"
   ],
   "assignments": [
     {
-      "work_order_id": "WP-620-secrets",
+      "work_order_id": "WP-650-more-views",
       "mode": "write",
       "paths": [
-        "src/workctx/secrets/**",
-        "src/workctx/cli.py (secret group)",
-        "tests/secrets/**",
-        "docs/reference/secrets.md",
-        "docs/reference/cli-envelope.md (rows)"
+        "src/workctx/views/**",
+        "tests/tasks_views/**",
+        "docs/reference/views.md"
       ],
-      "branch": "agent/WP-620-secrets",
-      "worktree": ".worktrees/WP-620",
+      "branch": "agent/WP-650-more-views",
+      "worktree": ".worktrees/WP-650",
       "status": "assigned"
     },
     {
-      "work_order_id": "WP-630-personalization",
+      "work_order_id": "WP-660-perf-leftovers",
       "mode": "write",
       "paths": [
-        "src/workctx/adapters/agents/**",
-        "tests/agents_setup/**",
-        "docs/guides/personalization.md"
+        "src/workctx/ingestion/service.py",
+        "src/workctx/cli.py (inbox add)",
+        "src/workctx/adapters/filesystem/staging.py",
+        "tests/perf/**",
+        "tests/ingestion/**",
+        "tests/cli/test_inbox_cli.py",
+        "docs/reference/inbox.md"
       ],
-      "branch": "agent/WP-630-personalization",
-      "worktree": ".worktrees/WP-630",
-      "status": "assigned"
-    },
-    {
-      "work_order_id": "WP-640-repo-guide",
-      "mode": "write",
-      "paths": [
-        "src/workctx/resources/agent_kit/skills/**",
-        "docs/guides/code-repositories.md",
-        "docs/guides/multiple-contexts.md (one line)"
-      ],
-      "branch": "(claude worktree)",
-      "worktree": "(claude worktree)",
+      "branch": "agent/WP-660-perf-leftovers",
+      "worktree": ".worktrees/WP-660",
       "status": "assigned"
     }
   ]
