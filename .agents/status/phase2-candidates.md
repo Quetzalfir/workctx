@@ -186,3 +186,16 @@ degradation lands as an ordinary approvable transaction — nothing mutates
 silently. Optional per-class auto-approve policy can come later, opt-in.
 Needs real design (what counts as a use, thresholds, anti-noise) — its own
 package, likely after C-202's suggestion pipeline exists.
+
+## C-213 — Public operation-session API (technical debt, 2026-08-03)
+
+WP-660's batch registration necessarily consumes private transaction-engine
+and projection internals (_HeartbeatLease, _OperationCache,
+_run_with_heartbeat, diagnostic helpers, _begin/_end_locked_operation)
+because a batch spans one lock/heartbeat/projection scope and no public
+session primitive exists. Accepted at integration with this debt note.
+Next package that touches the engine or ingestion performance MUST promote a
+public operation-session API (engine-owned object bundling lock, heartbeat
+lease, operation caches, and projection operation scope) and move ingestion
+onto it. Behavior is fully test-covered, so drift breaks loudly — the risk is
+maintenance friction, not silent corruption.
