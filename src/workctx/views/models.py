@@ -179,7 +179,17 @@ class SuggestionItem(_ViewRecord):
     signal: str
 
 
+class SuggestionRecordItem(_ViewRecord):
+    id: str
+    uri: str
+    type: Literal["data_fix", "skill_override", "engine_proposal"]
+    rationale: str
+    created_at: AwareDatetime
+    age_days: int = Field(ge=0)
+
+
 class SuggestionsPayload(_ViewRecord):
+    records: tuple[SuggestionRecordItem, ...]
     stale_claims: tuple[SuggestionItem, ...]
     broken_evidence_links: tuple[SuggestionItem, ...]
     inactive_tasks: tuple[SuggestionItem, ...]
@@ -290,6 +300,7 @@ __all__ = [
     "StaleClaimItem",
     "StatusReportPayload",
     "SuggestionItem",
+    "SuggestionRecordItem",
     "SuggestionsPayload",
     "TaskTransitionItem",
     "TaskViewItem",

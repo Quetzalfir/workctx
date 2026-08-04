@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "id": "SUG-20260803-unapproved-data-fix-01",
+  "entity_type": "investigation",
+  "title": "Invalid data fix without required approval",
+  "uri": "workctx://fictional-context/investigation/SUG-20260803-unapproved-data-fix-01",
+  "aliases": [],
+  "status": "open",
+  "confidence": "high",
+  "tags": [
+    "suggestion",
+    "data_fix"
+  ],
+  "references": [
+    {
+      "relation": "evidenced_by",
+      "target": "workctx://fictional-context/task/TASK-2026-001",
+      "confidence": "high"
+    }
+  ],
+  "created_at": "2026-08-03T12:00:00Z",
+  "updated_at": "2026-08-03T12:00:00Z",
+  "type": "data_fix",
+  "rationale": "Reject a data fix that does not require approval",
+  "signal": "The embedded proposal incorrectly bypasses the approval gate.",
+  "source_refs": [
+    "workctx://fictional-context/task/TASK-2026-001"
+  ],
+  "proposal": {
+    "schema_version": 1,
+    "id": "TXP-20260803T100000Z-unapproved-data-fix",
+    "context_id": "fictional-context",
+    "base_revision": "0000000000000000000000000000000000000000000000000000000000000000",
+    "actor": {
+      "type": "human",
+      "id": "fictional-operator",
+      "agent": null,
+      "model": null
+    },
+    "created_at": "2026-08-03T10:00:00Z",
+    "source_refs": [
+      "workctx://fictional-context/task/TASK-2026-001"
+    ],
+    "operations": [
+      {
+        "op": "create",
+        "target": "02_knowledge/projects/PRJ-unapproved.md",
+        "payload": {
+          "kind": "entity",
+          "document": {
+            "schema_version": 1,
+            "id": "PRJ-unapproved",
+            "entity_type": "project",
+            "title": "Fictional Unapproved Project",
+            "uri": "workctx://fictional-context/project/PRJ-unapproved",
+            "aliases": [],
+            "status": "active",
+            "confidence": "high",
+            "tags": [
+              "fictional"
+            ],
+            "references": [],
+            "created_at": "2026-08-03T10:00:00Z",
+            "updated_at": "2026-08-03T10:00:00Z"
+          },
+          "body": "Fictional fixture project.\n"
+        }
+      }
+    ],
+    "preconditions": [],
+    "postconditions": [],
+    "expected_views": [
+      "sqlite"
+    ],
+    "approval": "not_required"
+  },
+  "actor": {
+    "type": "human",
+    "id": "fictional-operator",
+    "agent": null,
+    "model": null
+  },
+  "supersedes": null,
+  "superseded_by": null
+}
