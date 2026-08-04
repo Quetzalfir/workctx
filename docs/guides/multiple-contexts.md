@@ -24,7 +24,7 @@ A common setup is one employer or firm with several client projects that must
 not see each other, plus the company's own internal context:
 
 ```text
-C:\Assistantscme\
+C:\Assistants\acme\
   _company\        <- kind=company: internal operations
   client-alpha\    <- kind=project: isolated engagement
   client-beta\     <- kind=project: isolated engagement
