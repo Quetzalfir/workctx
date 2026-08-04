@@ -19,6 +19,20 @@ transaction function, policy, or staged-filesystem stager in tests. Paths in `Re
 context-relative portable POSIX paths below `00_inbox/raw/`. Absolute paths, traversal,
 backslashes, links escaping the context, and non-regular files fail closed.
 
+The service also provides the additive
+`register_batch(requests, session_id=...) -> BatchRegistrationResult` method. Batch outcomes keep
+request order and contain either the normal `RegistrationResult`, the existing duplicate record
+when duplicate refusal applies, the first hard per-file error, or a not-attempted marker. Duplicate
+refusal and quarantine remain successful per-file outcomes. A hard failure stops later attempts,
+but every earlier file has its own durable commit and remains registered.
+
+With the default transaction adapter, one non-empty batch holds one context lock and one heartbeat
+lease and performs one SQLite projection preflight. The per-file transaction and receipt boundary
+is unchanged, including the two manifest receipts and physical staged move used by quarantine.
+An empty batch performs no filesystem ceremony. Injected transaction functions retain their test
+seam and run through the same ordered outcome contract, without the default adapter's shared
+operation scope.
+
 The caller supplies source type and optional source metadata. Media type is inferred from a
 closed, cross-platform suffix table unless it is supplied explicitly; an unknown suffix,
 unsupported media type, or mismatch between a declared type and the known suffix is
@@ -42,6 +56,12 @@ two policies:
 Same-name files with different hashes receive distinct IDs. A security quarantine takes
 precedence over duplicate handling so an executable or otherwise suspicious new path is not
 left unclassified merely because its bytes were seen before.
+
+`workctx inbox add FILE...` uses `register_batch`. Its successful JSON envelope keeps the existing
+`result.count` and ordered `result.outcomes` shape. If one file fails hard, the command returns a
+failure envelope whose same outcomes array includes `outcome: failed` for that file and
+`outcome: not_attempted` for each remainder; committed prefix entries retain their normal
+`registered`, `duplicate`, or `quarantined` payloads.
 
 Optional sidecars are registered as an ordered set in the manifest. Ingestion stores their
 source paths and streaming hashes in the manifest's versioned, compact `notes` metadata so a
