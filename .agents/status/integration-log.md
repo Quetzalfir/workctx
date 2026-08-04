@@ -40,3 +40,8 @@
 | 2026-08-03 | LEAD-P2W2-layout-guard | lead addition | direct | tests/test_layout.py bans stdlib-shadowing test packages | committed | prevents the 314-failure class permanently |
 | 2026-08-03 | WP-650-more-views | capture 748be61 | merge d07e50d | worktree gate 1527; lead reran outside sandbox | accepted+integrated | 11 views total; C-204/205/206 + C-202 detection |
 | 2026-08-03 | WP-660-perf-leftovers | capture | merge | worktree gate 1528; combined 1532; 9 resolution cuts lead-reviewed | accepted+integrated | batch inbox add 1 lock/1 refresh; C-213 debt recorded |
+| 2026-08-04 | WP-680-suggestions | capture | merge 923c2ca | worktree gate 1552; atomicity lead-reviewed | accepted+integrated | investigation as URI carrier noted |
+| 2026-08-04 | WP-690-overrides | capture | merge 3e83be8 | gate 1543 after 2-test fix round + lead schema patch | accepted+integrated | three-way markers verified |
+| 2026-08-04 | WP-710-connectors | capture | merge 633b6c1 | worktree gate 1573; secret containment lead-reviewed | accepted+integrated | 1 blocker round (D-049) |
+| 2026-08-04 | LEAD-P3-connector-cli | lead addition | direct 50407f0 | connector list/sync CLI + envelope rows + test | committed | completes Phase 3 wave 1 plan |
+| 2026-08-04 | WP-700-telemetry | capture | merge 4abca91 | worktree gate 1565; combined 1618 | accepted+integrated | 1 blocker round (telemetry config prerequisite); engine_proposal carrier noted |

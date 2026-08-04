@@ -10,14 +10,14 @@
 
 ## Current wave
 
-Phase 2 wave 3 CLOSED (2026-08-03): WP-650 (people-directory, glossary, agenda,
-suggestions views — 11 generated views total) and WP-660 (batch inbox
-registration, staging ceremony cuts) integrated; final gate 1532 tests. C-213
-operation-session debt recorded with a payment condition. The C-202/C-212
-design draft awaits four operator decisions (see the wave plan folder).
-Construction pauses for operator real-usage feedback; remaining Phase 2:
-C-202/C-212 machinery wave + local UI (2-3 waves, operator to confirm
-priority).
+Phase 2 wave 4 CLOSED and Phase 3 wave 1 CLOSED (2026-08-04, overnight run):
+WP-680 suggestion records, WP-690 skill overrides, WP-700 usage telemetry
+(C-202+C-212 complete under D-045), WP-710 generic connector runtime + lead
+CLI wiring (C-214, D-049). Final combined gate 1618 tests. Phase 2 is now
+COMPLETE except the operator-deferred UI (D-046). Phase 3 next: named-adapter
+wave for GitHub/Jira/Teams per D-050 (verify API accessibility first;
+browser-assisted capture as documented fallback), then scheduled sync;
+operator pauses 2 (external writes) and 3 (Graphify/CodeGraph) pending.
 
 ## Work-package status
 
@@ -51,6 +51,10 @@ priority).
 | WP-640 | verified | — | Claude agent | worktree-agent (captured) | accepted | Integrated; guide + tier rule in two skills |
 | WP-650 | verified | — | Codex worker | agent/WP-650-more-views | accepted | Integrated at d07e50d; four views |
 | WP-660 | verified | — | Codex worker | agent/WP-660-perf-leftovers | accepted | Integrated; batch registration; C-213 debt |
+| WP-680 | verified | — | Codex worker | agent/WP-680-suggestions | accepted | Integrated at 923c2ca |
+| WP-690 | verified | — | Codex worker | agent/WP-690-overrides | accepted (1 fix round) | Integrated at 3e83be8 |
+| WP-700 | verified | lead telemetry config | Codex worker | agent/WP-700-telemetry | accepted (1 blocker round) | Integrated at 4abca91 |
+| WP-710 | verified | httpx (D-047) | Codex worker | agent/WP-710-connectors | accepted (1 blocker round, D-049) | Integrated at 633b6c1; CLI wired by lead |
 
 ## Validation status
 
