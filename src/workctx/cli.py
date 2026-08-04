@@ -87,6 +87,79 @@ migrate_app = typer.Typer(help="Convert legacy Markdown repositories into isolat
 app.add_typer(migrate_app, name="migrate")
 secret_app = typer.Typer(help="Manage machine-global secret references without printing values.")
 app.add_typer(secret_app, name="secret")
+connector_app = typer.Typer(help="Synchronize declarative external-source connectors.")
+app.add_typer(connector_app, name="connector")
+
+
+@connector_app.command("list")
+def connector_list(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List declarative connector manifests configured in the context."""
+    begin_command("connector.list", json_output=json_output)
+
+    from workctx.connectors import load_manifests
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    manifests = load_manifests(root)
+    connectors: list[JsonValue] = [
+        {
+            "name": manifest.name,
+            "base_url": str(manifest.base_url),
+            "secret_ref": manifest.secret_ref,
+            "snapshots": [snapshot.id for snapshot in manifest.snapshots],
+        }
+        for manifest in manifests
+    ]
+    result: dict[str, JsonValue] = {"count": len(connectors), "connectors": connectors}
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        if not manifests:
+            output_console.print(Text("No connector manifests are configured."))
+        for manifest in manifests:
+            snapshot_ids = ", ".join(snapshot.id for snapshot in manifest.snapshots)
+            output_console.print(Text(f"{manifest.name}: {snapshot_ids}"))
+
+
+@connector_app.command("sync")
+def connector_sync(
+    name: Annotated[str, typer.Argument(help="Connector manifest name.")],
+    snapshot: Annotated[
+        str | None,
+        typer.Option("--snapshot", help="Synchronize one named snapshot only."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Fetch and register snapshots for one declarative connector."""
+    begin_command("connector.sync", json_output=json_output)
+
+    from workctx.connectors import sync
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    synced = sync(root, name, snapshot_id=snapshot)
+    result = cast("dict[str, JsonValue]", synced.model_dump(mode="json"))
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        for item in synced.snapshots:
+            output_console.print(
+                Text(f"{item.snapshot_id}: {item.disposition.value} ({item.byte_count} bytes)")
+            )
 
 
 @app.command()

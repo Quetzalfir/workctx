@@ -46,6 +46,8 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `secret list` | `secret.list` | `count`, `secrets`, `os_store_available` |
 | `secret unset` | `secret.unset` | `name`, `deleted`, `environment_present` |
 | `secret import` | `secret.import` | `count`, `names`, `source_deleted` |
+| `connector list` | `connector.list` | `count`, `connectors` |
+| `connector sync` | `connector.sync` | `connector_name`, `snapshots`, `duration_ms` |
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
