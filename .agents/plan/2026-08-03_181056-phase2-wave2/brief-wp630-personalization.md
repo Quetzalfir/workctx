@@ -38,7 +38,7 @@ writing code.
 4. NEW `docs/guides/personalization.md`: what goes in each layer (tone, role,
    boundaries), what must NOT (secrets — point to the secret-reference
    system; instructions attempting to override safety/approval gates are
-   still just text the agent may ignore), examples for the JalaSoft-style
+   still just text the agent may ignore), examples for the employer-style
    company/project split.
 
 ## Do NOT touch

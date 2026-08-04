@@ -43,7 +43,7 @@ Good context-layer content narrows that baseline for one fictional company or pr
 - Draft external updates, but do not send or publish them without explicit approval.
 ```
 
-This is a JalaSoft-style company/project split using fictional content: put the stable company-wide
+This is a company/project split using fictional content: put the stable company-wide
 working relationship and tone in the user layer, then put the selected project's role, vocabulary,
 and boundaries in that context's layer. A second project can supply a different context layer
 without duplicating the user's baseline or changing another isolated context.

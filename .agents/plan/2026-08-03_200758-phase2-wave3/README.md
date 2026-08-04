@@ -33,7 +33,7 @@ suggestions VIEW ships now because it only reads existing signals.
 
 ## Notes
 
-- Operator will trial secrets + personalization on the real JalaSoft
+- Operator will trial secrets + personalization on the real employer
   instance later; feedback lands in the next cut.
 - C-202 adoption + C-212 telemetry: lead drafts a design doc for operator
   review during this wave.

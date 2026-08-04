@@ -47,7 +47,7 @@ changes into skills.
 
 ## C-203..C-207 — First-class homes for everyday work data (operator-requested, 2026-08-03)
 
-Origin: real JalaSoft usage surfaced the links-directory case — the data was
+Origin: real operator usage surfaced the links-directory case — the data was
 representable (entities are extensible, `references` is typed) but nothing
 generates a usable projection, so each agent improvises a pattern. A sweep for
 sibling cases found the same shape everywhere. Design principle for ALL of
