@@ -1,0 +1,8 @@
+schema_version: 1
+name: fictional-service
+base_url: https://api.example.test/
+timeout_seconds: 301
+max_bytes: 104857601
+snapshots:
+  - id: current-items
+    path: /items

@@ -1,0 +1,20 @@
+schema_version: 1
+name: rally-interno
+base_url: http://rally.example.test/api/
+allow_insecure_http: true
+secret_ref: rally-interno-token
+auth_style: query:api_key
+timeout_seconds: 12.5
+max_bytes: 2097152
+snapshots:
+  - id: active-work
+    path: /snapshots/active
+    query:
+      team: alpha
+      limit: 50
+      include-closed: false
+    accept: application/vnd.fictional+json
+    schedule: "0 8 * * 1-5"
+  - id: service-health
+    path: /health
+    accept: text/plain

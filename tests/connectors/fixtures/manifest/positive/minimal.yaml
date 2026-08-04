@@ -1,0 +1,6 @@
+schema_version: 1
+name: fictional-service
+base_url: https://api.example.test/v1/
+snapshots:
+  - id: current-items
+    path: items/current
