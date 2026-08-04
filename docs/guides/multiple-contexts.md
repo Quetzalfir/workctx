@@ -52,6 +52,7 @@ Rule of thumb: separate boundaries (different clients, different employers,
 work you must never mix) get separate contexts. Within one boundary, prefer
 one context even if it spans several repositories and workstreams — splitting
 a single team's work across contexts only costs you cross-referencing.
+A repository is not a context — it belongs to the project context that owns it; see [Code repositories](code-repositories.md).
 
 ## Where to put contexts on disk
 
