@@ -4,6 +4,7 @@
   "baseline_commit": "wave3-close",
   "notes": [
     "Phase 2 waves 1-3 historical. UI deferred (D-046).",
+    "Phase 3 wave 1 overlaps (D-048): WP-710 connectors runtime, disjoint from WP-680/690. Brief under .agents/plan/2026-08-03_232026-phase3-wave1/. No cli.py for WP-710.",
     "Phase 2 wave 4: WP-680 || WP-690 parallel, disjoint; WP-700 after WP-680 integrates. Briefs under .agents/plan/2026-08-03_225124-phase2-wave4/.",
     "cli.py: WP-680 only (suggestion group). schemas/**: WP-680 only (one new schema + fixtures).",
     "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
@@ -65,6 +66,19 @@
       "branch": "agent/WP-700-telemetry",
       "worktree": ".worktrees/WP-700",
       "status": "proposed"
+    },
+    {
+      "work_order_id": "WP-710-connectors",
+      "mode": "write",
+      "paths": [
+        "src/workctx/connectors/**",
+        "tests/connectors/**",
+        "schemas/connector-manifest.schema.json (+fixtures)",
+        "docs/reference/connectors.md"
+      ],
+      "branch": "agent/WP-710-connectors",
+      "worktree": ".worktrees/WP-710",
+      "status": "assigned"
     }
   ]
 }
