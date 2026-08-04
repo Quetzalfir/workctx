@@ -45,3 +45,4 @@
 | 2026-08-04 | WP-710-connectors | capture | merge 633b6c1 | worktree gate 1573; secret containment lead-reviewed | accepted+integrated | 1 blocker round (D-049) |
 | 2026-08-04 | LEAD-P3-connector-cli | lead addition | direct 50407f0 | connector list/sync CLI + envelope rows + test | committed | completes Phase 3 wave 1 plan |
 | 2026-08-04 | WP-700-telemetry | capture | merge 4abca91 | worktree gate 1565; combined 1618 | accepted+integrated | 1 blocker round (telemetry config prerequisite); engine_proposal carrier noted |
+| 2026-08-04 | CI-BILLING-NOTE | n/a | n/a | matrix run 30887534416 failed at job START: Actions minutes/billing exhausted (macOS 10x multiplier); zero steps ran | recorded | validation of record for 5e90876 is the local combined gate (1618 tests); full-ci moratorium until the operator decides billing/visibility |
