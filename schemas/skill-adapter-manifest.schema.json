@@ -81,7 +81,7 @@
                   "items": {
                     "properties": {
                       "path": {
-                        "pattern": "^\\.codex/"
+                        "pattern": "^(?:\\.codex/|\\.agents/skills/[a-z0-9-]+/SKILL\\.md$)"
                       }
                     }
                   }

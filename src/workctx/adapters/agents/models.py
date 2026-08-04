@@ -112,6 +112,13 @@ class PersonalizationLayerName(StrEnum):
     CONTEXT = "context"
 
 
+class SkillOverrideWarningCode(StrEnum):
+    """Stable warning kinds emitted by per-context skill override discovery."""
+
+    UNKNOWN_SKILL = "unknown_skill"
+    OLDER_PACKAGED_SKILL = "older_packaged_skill"
+
+
 @dataclass(frozen=True, order=True, slots=True)
 class SemanticVersion:
     """Minimal semantic version used for client capability checks."""
@@ -188,6 +195,68 @@ class PersonalizationLayerStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class SkillOverrideStatus:
+    """One safely observed per-context skill override and its three-way hashes."""
+
+    skill: str
+    path: str
+    size_bytes: int
+    override_hash: str
+    known: bool
+    packaged_at_adoption_hash: str | None = None
+    packaged_now_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.size_bytes < 0:
+            raise ValueError("Skill override byte size cannot be negative")
+        if self.known != (
+            self.packaged_at_adoption_hash is not None and self.packaged_now_hash is not None
+        ):
+            raise ValueError("Known skill overrides must carry both packaged hashes")
+
+    @property
+    def stale(self) -> bool:
+        """Return whether the packaged skill changed after override adoption."""
+
+        return bool(self.known and self.packaged_at_adoption_hash != self.packaged_now_hash)
+
+
+@dataclass(frozen=True, slots=True)
+class SkillOverrideWarning:
+    """Typed non-blocking warning for an unknown or stale skill override."""
+
+    code: SkillOverrideWarningCode
+    skill: str
+    path: str
+    override_hash: str
+    packaged_at_adoption_hash: str | None = None
+    packaged_now_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        has_three_way_hashes = (
+            self.packaged_at_adoption_hash is not None and self.packaged_now_hash is not None
+        )
+        if self.code is SkillOverrideWarningCode.OLDER_PACKAGED_SKILL:
+            if not has_three_way_hashes:
+                raise ValueError("Stale override warnings require all three hashes")
+        elif has_three_way_hashes:
+            raise ValueError("Unknown-skill warnings cannot claim packaged hashes")
+
+    def __str__(self) -> str:
+        if self.code is SkillOverrideWarningCode.UNKNOWN_SKILL:
+            return (
+                "Unknown skill override ignored: "
+                f"skill={self.skill}; path={self.path}; override={self.override_hash}"
+            )
+        return (
+            "override written against an older packaged skill: "
+            f"skill={self.skill}; path={self.path}; "
+            f"packaged-at-adoption={self.packaged_at_adoption_hash}; "
+            f"packaged-now={self.packaged_now_hash}; override={self.override_hash}"
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class DriftDetail:
     """One exact drift observation."""
 
@@ -219,6 +288,8 @@ class AdapterStatus:
     warnings: tuple[str, ...] = ()
     repair_blocked: bool = False
     personalization_layers: tuple[PersonalizationLayerStatus, ...] = ()
+    skill_overrides: tuple[SkillOverrideStatus, ...] = ()
+    skill_override_warnings: tuple[SkillOverrideWarning, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,6 +326,7 @@ class AdapterPlan:
     source_fingerprint: str | None = None
     blocked_reason: str | None = None
     personalization_layers: tuple[PersonalizationLayerStatus, ...] = ()
+    skill_overrides: tuple[SkillOverrideStatus, ...] = ()
 
     @property
     def requires_approval(self) -> bool:
