@@ -1,57 +1,70 @@
 {
   "schema_version": 1,
-  "wave": 6,
-  "baseline_commit": "b4c1d4a (v0.1.0-alpha)",
+  "wave": 7,
+  "baseline_commit": "77e42c8 (wave-1 close + keyring)",
   "notes": [
-    "Waves 1-5 (Phase 1) are historical (Git history + integration log).",
-    "Phase 2 wave 1: WP-600 || WP-610 in parallel, disjoint. Briefs under .agents/plan/2026-08-03_160507-phase2-wave1/.",
-    "WP-610 is surgical: only the four named hot-path files. Everything else frozen for it.",
+    "Phase 1 and Phase 2 wave 1 are historical (Git history + integration log).",
+    "Phase 2 wave 2: WP-620 || WP-630 || WP-640 in parallel, disjoint. Briefs under .agents/plan/2026-08-03_181056-phase2-wave2/.",
+    "cli.py: WP-620 only (secret group). pyproject frozen (keyring added by lead, D-043).",
     "Each worker leaves changes uncommitted (sandbox); the lead captures after review."
   ],
   "frozen_paths": [
-    "src/workctx/** except the WP-600/WP-610 assigned files",
-    "tests/** except tests/tasks_views/** (WP-600) and tests/perf/** (WP-610)",
+    "src/workctx/** except src/workctx/secrets/** (WP-620), the WP-620 secret group in cli.py, src/workctx/adapters/agents/** (WP-630), src/workctx/resources/agent_kit/skills/** (WP-640)",
+    "tests/** except tests/secrets/** (WP-620) and tests/agents_setup/** (WP-630)",
     "templates/**",
     "schemas/**",
-    "docs/** except docs/reference/views.md (WP-600)",
+    "pyproject.toml",
+    "uv.lock",
+    "docs/** except docs/reference/secrets.md + cli-envelope rows (WP-620), docs/guides/personalization.md (WP-630), docs/guides/code-repositories.md + one multiple-contexts line (WP-640)",
     ".agents/plan/**",
     ".agents/templates/**",
     ".agents/skills/**",
     "AGENTS.md",
     "CLAUDE.md",
-    "GEMINI.md",
-    "pyproject.toml"
+    "GEMINI.md"
   ],
   "frozen_interfaces": [
-    "All Phase 1 public APIs consumed as-is; WP-610 makes ZERO public-API changes",
-    "ADR 0006 lease-freshness semantics frozen; heartbeat strategy may change only within the configured staleness bound",
-    "ViewName may gain members (WP-600); every other enum and schema frozen"
+    "All existing public APIs consumed as-is; SecretValue accessor discipline per WP-620 brief becomes frozen at integration",
+    "D-044 layer locations are fixed; D-043 keyring is the only resolver backend besides env",
+    "CLI envelope schema and D-015 exit codes frozen; new secret commands conform"
   ],
   "assignments": [
     {
-      "work_order_id": "WP-600-phase2-views",
+      "work_order_id": "WP-620-secrets",
       "mode": "write",
       "paths": [
-        "src/workctx/views/**",
-        "tests/tasks_views/**",
-        "docs/reference/views.md"
+        "src/workctx/secrets/**",
+        "src/workctx/cli.py (secret group)",
+        "tests/secrets/**",
+        "docs/reference/secrets.md",
+        "docs/reference/cli-envelope.md (rows)"
       ],
-      "branch": "agent/WP-600-phase2-views",
-      "worktree": ".worktrees/WP-600",
+      "branch": "agent/WP-620-secrets",
+      "worktree": ".worktrees/WP-620",
       "status": "assigned"
     },
     {
-      "work_order_id": "WP-610-performance",
+      "work_order_id": "WP-630-personalization",
       "mode": "write",
       "paths": [
-        "src/workctx/adapters/filesystem/lock.py",
-        "src/workctx/adapters/sqlite/projection.py",
-        "src/workctx/transactions/engine.py",
-        "src/workctx/ingestion/service.py",
-        "tests/perf/**"
+        "src/workctx/adapters/agents/**",
+        "tests/agents_setup/**",
+        "docs/guides/personalization.md"
       ],
-      "branch": "agent/WP-610-performance",
-      "worktree": ".worktrees/WP-610",
+      "branch": "agent/WP-630-personalization",
+      "worktree": ".worktrees/WP-630",
+      "status": "assigned"
+    },
+    {
+      "work_order_id": "WP-640-repo-guide",
+      "mode": "write",
+      "paths": [
+        "src/workctx/resources/agent_kit/skills/**",
+        "docs/guides/code-repositories.md",
+        "docs/guides/multiple-contexts.md (one line)"
+      ],
+      "branch": "(claude worktree)",
+      "worktree": "(claude worktree)",
       "status": "assigned"
     }
   ]
