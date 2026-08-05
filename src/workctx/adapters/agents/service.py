@@ -2259,6 +2259,30 @@ class AgentAdapterService:
             else None
         )
         if old_bridge is not None and old_bridge.ownership == "user-owned":
+            # A recorded user-owned bridge whose CURRENT bytes are exactly the
+            # packaged context template was misclassified at an earlier
+            # install (the template ships the file); heal it like a fresh one.
+            if (
+                target.exists
+                and target.content_hash is not None
+                and target.content_hash == _pristine_template_bridge_hash(sources.bridge_path)
+            ):
+                mutations.append(
+                    FileMutation(sources.bridge_path, target, sources.bridge_content)
+                )
+                planned.append(
+                    PlannedChange(
+                        sources.bridge_path,
+                        FileOperation.REPLACE,
+                        observed_hash=target.content_hash,
+                        desired_hash=sources.bridge_hash,
+                        reason=(
+                            "Replace the pristine context-template bridge previously "
+                            "recorded as user-owned"
+                        ),
+                    )
+                )
+                return "generated", sources.bridge_hash
             return "user-owned", old_bridge.target.content_hash
         if not target.exists:
             mutations.append(FileMutation(sources.bridge_path, target, sources.bridge_content))

@@ -5,6 +5,8 @@ from __future__ import annotations
 from importlib import resources
 from pathlib import Path
 
+import pytest
+
 from workctx.adapters.agents import AgentAdapterService, AgentClient
 from workctx.services.contexts import initialize_context
 
@@ -24,6 +26,28 @@ def test_pristine_template_agents_md_is_replaced_by_the_codex_bridge(tmp_path: P
     assert bridge_changes, [change.path for change in plan.changes]
     assert bridge_changes[0].operation.value == "replace"
     assert "pristine context-template" in bridge_changes[0].reason
+
+
+def test_previously_misrecorded_template_bridge_heals_on_reinstall(tmp_path: Path) -> None:
+    import workctx.adapters.agents.service as service_module
+
+    root = tmp_path / "context"
+    initialize_context(root, name="Fictional Healing Bridge", context_id="healing-bridge")
+
+    # Reproduce a pre-fix install, which recorded the template bridge as
+    # user-owned. The patch lives in its own context so it never unwinds the
+    # package's autouse isolation fixtures.
+    with pytest.MonkeyPatch.context() as patcher:
+        patcher.setattr(service_module, "_pristine_template_bridge_hash", lambda _path: None)
+        stale_service = AgentAdapterService()
+        stale_service.install(stale_service.plan_install(root, AgentClient.CODEX))
+    assert (root / "AGENTS.md").read_bytes() == _template_agents_bytes()
+
+    heal_plan = AgentAdapterService().plan_install(root, AgentClient.CODEX)
+    bridge_changes = [change for change in heal_plan.changes if change.path == "AGENTS.md"]
+    assert bridge_changes, [change.path for change in heal_plan.changes]
+    assert bridge_changes[0].operation.value == "replace"
+    assert "previously recorded as user-owned" in bridge_changes[0].reason
 
 
 def test_operator_edited_agents_md_stays_user_owned(tmp_path: Path) -> None:
