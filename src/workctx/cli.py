@@ -2252,13 +2252,9 @@ def agent_install(
     if agent.strip().lower() == "all":
         availability = {item.client: item.availability for item in service.detect(root)}
         installable = tuple(
-            client
-            for client in clients
-            if availability.get(client) is ClientAvailability.AVAILABLE
+            client for client in clients if availability.get(client) is ClientAvailability.AVAILABLE
         )
-        skipped_clients = tuple(
-            client.value for client in clients if client not in installable
-        )
+        skipped_clients = tuple(client.value for client in clients if client not in installable)
         if not installable:
             raise UserCorrectableError(
                 "No supported agent client is available on this machine; "
