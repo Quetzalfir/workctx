@@ -2240,7 +2240,7 @@ def agent_install(
     ] = False,
 ) -> None:
     """Plan by default, or install project-scoped agent adapters with approval."""
-    from workctx.adapters.agents import AgentAdapterService
+    from workctx.adapters.agents import AgentAdapterService, ClientAvailability
 
     begin_command("agent.install", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
@@ -2248,6 +2248,23 @@ def agent_install(
         raise UserCorrectableError("Agent adapter installation supports only project scope.")
     clients = _agent_clients(agent)
     service = AgentAdapterService()
+    skipped_clients: tuple[str, ...] = ()
+    if agent.strip().lower() == "all":
+        availability = {item.client: item.availability for item in service.detect(root)}
+        installable = tuple(
+            client
+            for client in clients
+            if availability.get(client) is ClientAvailability.AVAILABLE
+        )
+        skipped_clients = tuple(
+            client.value for client in clients if client not in installable
+        )
+        if not installable:
+            raise UserCorrectableError(
+                "No supported agent client is available on this machine; "
+                "install one or select a specific --agent."
+            )
+        clients = installable
     plans = tuple(service.plan_install(root, client) for client in clients)
     receipts: tuple[OperationResult, ...] = ()
     if yes:
@@ -2259,12 +2276,22 @@ def agent_install(
         "applied": yes,
         "plans": [_adapter_plan_payload(plan) for plan in plans],
         "receipts": [_agent_operation_payload(receipt) for receipt in receipts],
+        "skipped_clients": list(skipped_clients),
     }
+    warnings = tuple(
+        CliDiagnostic(
+            code="AGENT_CLIENT_UNAVAILABLE",
+            message=f"The {name} client is not available on this machine; skipped.",
+        )
+        for name in skipped_clients
+    )
     if json_output:
-        emit_success(result=result, context_id=context_id)
+        emit_success(result=result, context_id=context_id, warnings=warnings)
     else:
         for plan in plans:
             _render_agent_plan(plan)
+        for diagnostic in warnings:
+            output_console.print(Text(diagnostic.message))
         if yes:
             output_console.print(Text(f"Installed {len(receipts)} agent adapters."))
         else:
