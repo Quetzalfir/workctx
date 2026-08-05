@@ -170,6 +170,8 @@ The checks executed against this generated scaffold are recorded in [`docs/devel
 | [Context layout](docs/guides/context-layout.md) | What each workspace directory means. |
 | [Evidence processing](docs/guides/evidence-processing.md) | The safe processing workflow in detail. |
 | [Multiple contexts](docs/guides/multiple-contexts.md) | Isolation between companies and projects. |
+| [Code repositories](docs/guides/code-repositories.md) | Referencing and investigating code with durable locators. |
+| [Obsidian](docs/guides/obsidian.md) | Open a context as a vault for visual browsing. |
 
 | Reference | |
 | --- | --- |

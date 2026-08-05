@@ -33,7 +33,7 @@ Before modifying the repository:
 - Updates spanning multiple entities must be transactional.
 - External writes require explicit approval by default.
 - Secret values must never be stored in a workspace, source control, logs, prompts, or reports.
-- The system must remain useful without Graphify, CodeGraph, Obsidian, or any hosted service.
+- The system must remain useful without any external index, graph, or editor tool (Obsidian, Sourcegraph, CodeQL, or similar) and without any hosted service.
 
 ## Reference rules
 
