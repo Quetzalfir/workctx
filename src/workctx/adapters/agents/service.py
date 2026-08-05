@@ -9,7 +9,8 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from pathlib import Path
+from importlib import resources
+from pathlib import Path, PurePosixPath
 from typing import Literal, cast
 
 from pydantic import ValidationError
@@ -136,6 +137,23 @@ class _PreparedPlan:
     next_manifest_digest: str | None
     operations_digest: str | None
     codex_restore_names: frozenset[str]
+
+
+def _pristine_template_bridge_hash(bridge_path: str) -> str | None:
+    """Hash of the context template's copy of a bridge file, when one ships.
+
+    A bridge file whose bytes exactly match the packaged context template is
+    workctx-generated content, not operator writing, so installation may
+    replace it with the full adapter bridge.
+    """
+
+    name = PurePosixPath(bridge_path).name
+    resource = resources.files("workctx.resources.context_template").joinpath(name)
+    try:
+        content = resource.read_bytes()
+    except (FileNotFoundError, OSError):
+        return None
+    return "sha256:" + hashlib.sha256(content).hexdigest()
 
 
 def _utc_now() -> datetime:
@@ -2256,6 +2274,21 @@ class AgentAdapterService:
         if target.content_hash is None:
             raise InvalidAdapterStateError("Instruction bridge content hash is unavailable")
         if old_bridge is None:
+            if target.content_hash == _pristine_template_bridge_hash(sources.bridge_path):
+                mutations.append(FileMutation(sources.bridge_path, target, sources.bridge_content))
+                planned.append(
+                    PlannedChange(
+                        sources.bridge_path,
+                        FileOperation.REPLACE,
+                        observed_hash=target.content_hash,
+                        desired_hash=sources.bridge_hash,
+                        reason=(
+                            "Replace the pristine context-template bridge with the "
+                            "packaged adapter bridge"
+                        ),
+                    )
+                )
+                return "generated", sources.bridge_hash
             return "user-owned", target.content_hash
         if target.content_hash != old_bridge.target.content_hash:
             blocked.append(
