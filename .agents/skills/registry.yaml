@@ -2,6 +2,9 @@ schema_version: 1
 skills:
   - id: bootstrap-session
     side_effect_class: read_only
+  - id: capture-browser-evidence
+    side_effect_class: external_read
+    notes: Reads an already-authenticated browser session strictly read-only; the only writes are local capture files and their inbox registration.
   - id: close-session
     side_effect_class: local_mutation
   - id: create-work-order

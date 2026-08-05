@@ -25,6 +25,7 @@ REGISTRY_PATH = SKILLS_ROOT / "registry.yaml"
 EXPECTED_SKILL_IDS = frozenset(
     {
         "bootstrap-session",
+        "capture-browser-evidence",
         "close-session",
         "create-work-order",
         "curate-knowledge",
