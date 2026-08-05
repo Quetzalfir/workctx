@@ -51,6 +51,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `secret import` | `secret.import` | `count`, `names`, `source_deleted` |
 | `connector list` | `connector.list` | `count`, `connectors` |
 | `connector sync` | `connector.sync` | `connector_name`, `snapshots`, `duration_ms` |
+| `outbox send` | `outbox.send` | preview: `operation`, `draft_id`, `channel`, `target`, `recipient_display`, `body`, `draft_content_hash`, `fingerprint`; sent: `operation`, `draft`, `delivery`, `receipt` |
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
@@ -60,6 +61,11 @@ apply reports `dry_run: false` and includes the authenticated transaction receip
 returns an envelope-first usage/configuration failure with exit code 2.
 `usage suggest` likewise requires `--yes`; evaluation alone is always read-only, and each created
 record is committed through the approved suggestion transaction API.
+`outbox send` previews by default. JSON execution requires both `--yes` and the exact
+`--fingerprint` returned by preview; omission is an envelope-first usage failure, while a stale
+draft or swapped target is a conflict. Human `--yes` renders a new full preview and confirms it
+interactively before the fingerprint-pinned send. Delivery failure envelopes contain only safe
+operation metadata and a content-free diagnostic.
 
 ## Envelope contract
 

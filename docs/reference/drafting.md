@@ -72,11 +72,4 @@ does not authorize delivery. The returned `ApplyResult` authenticates local pers
 
 ## No-send boundary
 
-The drafting package has no send, publish, post, forward, browser, mail, network, connector, or
-plugin-execution primitive. It cannot turn `delivery_state: unsent` into a delivery claim.
-There is no Phase 1 delivery receipt because there is no Phase 1 delivery interface.
-
-Any future connector must be a separate external-write operation. It must identify the exact
-system, recipient, content, and action; obtain explicit approval immediately before delivery;
-and return an authenticated external receipt. Approval to gather context or persist a draft
-must never be reused as that delivery approval.
+Draft saving cannot deliver or authorize delivery; the separate, preview-pinned, per-operation approval boundary is documented in [outbox send](outbox-send.md).
