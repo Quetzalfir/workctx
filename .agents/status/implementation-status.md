@@ -10,14 +10,16 @@
 
 ## Current wave
 
-Phase 2 wave 4 CLOSED and Phase 3 wave 1 CLOSED (2026-08-04, overnight run):
-WP-680 suggestion records, WP-690 skill overrides, WP-700 usage telemetry
-(C-202+C-212 complete under D-045), WP-710 generic connector runtime + lead
-CLI wiring (C-214, D-049). Final combined gate 1618 tests. Phase 2 is now
-COMPLETE except the operator-deferred UI (D-046). Phase 3 next: named-adapter
-wave for GitHub/Jira/Teams per D-050 (verify API accessibility first;
-browser-assisted capture as documented fallback), then scheduled sync;
-operator pauses 2 (external writes) and 3 (Graphify/CodeGraph) pending.
+PHASE 3 COMPLETE (2026-08-04): the generic connector runtime (WP-710, C-214,
+D-049), the approval-gated outbox send with the github channel (WP-720, D-053,
+ADR 0014), the browser-assisted capture skill (WP-730, D-050/D-054), scheduled
+synchronization without a daemon (WP-740), and the connector CLI (lead). Also
+this phase: repo made PUBLIC, v0.1.0-alpha release visible, Actions discipline
+reset after the quota burn, and four operator-found defects fixed (trampoline
+virtualization, install --agent all, timeline clock binding, plus the recorded
+template-bridge personalization defect pending its lead fix). Remaining beyond
+Phase 3: deferred UI (D-046), optional PyPI, Phase 4 on real-usage demand, and
+the named-adapter/browser-capture usage feedback loop with the operator.
 
 ## Work-package status
 
@@ -55,6 +57,9 @@ operator pauses 2 (external writes) and 3 (Graphify/CodeGraph) pending.
 | WP-690 | verified | — | Codex worker | agent/WP-690-overrides | accepted (1 fix round) | Integrated at 3e83be8 |
 | WP-700 | verified | lead telemetry config | Codex worker | agent/WP-700-telemetry | accepted (1 blocker round) | Integrated at 4abca91 |
 | WP-710 | verified | httpx (D-047) | Codex worker | agent/WP-710-connectors | accepted (1 blocker round, D-049) | Integrated at 633b6c1; CLI wired by lead |
+| WP-720 | verified | D-053 | Codex worker | agent/WP-720-outbox-send | accepted | Integrated at 9d7144a; ADR 0014 |
+| WP-730 | verified | D-050/D-054 | Claude agent | worktree-agent (captured) | accepted (1 scope extension) | Integrated at 4ac3055 |
+| WP-740 | verified | — | Codex worker | agent/WP-740-scheduled-sync | accepted | Integrated; Phase 3 closes |
 
 ## Validation status
 

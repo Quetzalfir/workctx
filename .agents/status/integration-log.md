@@ -49,3 +49,7 @@
 | 2026-08-04 | LEAD-clock-bound-apply | lead fix | direct 0ace889 | suggestion record + ledger event share one timeline; fixes wall-clock flip-flop in usage decay test | committed | found by first free public matrix; confirmed green 6+build |
 | 2026-08-04 | REPO-PUBLIC | operator decision | gh repo edit | employer refs genericized; operator.local never in history; CI re-enabled (free) | done | full-ci discipline stays: releases/dispatch only |
 | 2026-08-04 | DEFECT-template-bridge | operator validation of a real context | pending fix | template-shipped AGENTS.md is treated as user-owned at agent install, so the codex bridge never regenerates and personalization is not merged for codex in ANY fresh context | recorded | fix: recognize pristine-template bridge files by content hash as generated-equivalent; lead follow-up after Phase 3 close |
+| 2026-08-04 | WP-720-outbox-send | capture | merge 9d7144a | worktree gate 1639; ADR 0014 authored+accepted | accepted+integrated | first external write in product history |
+| 2026-08-04 | WP-730-browser-capture | capture | merge 4ac3055 | own-branch full suite 1618; skill lint 390 | accepted+integrated | 14th skill; scope extension for EXPECTED_SKILL_IDS |
+| 2026-08-04 | LEAD-install-all-fix | lead fix | direct e2a016e | agent install --agent all targets detected clients; 2 regression tests | committed | operator-found defect |
+| 2026-08-04 | WP-740-scheduled-sync | capture | merge | worktree gate 1652 | accepted+integrated | PHASE 3 COMPLETE |
