@@ -130,6 +130,7 @@ def test_json_preview_and_fingerprint_required_failure_are_non_mutating(tmp_path
             "code": "OUTBOX_FINGERPRINT_REQUIRED",
             "message": "JSON send approval requires the exact preview fingerprint.",
             "path": "$.fingerprint",
+            "repair_action": None,
         }
     ]
     assert get_draft(root, DRAFT_ID).delivery_state == "unsent"

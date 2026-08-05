@@ -27,7 +27,7 @@ Implemented and tested today:
 - the transaction engine with an append-only, hash-chained audit ledger;
 - the inbox artifact lifecycle: registration, hashing, safety quarantine, and post-commit archive;
 - generated operational views (current focus, next actions, waiting on, stale knowledge, brief);
-- local outbox drafting with no send capability;
+- local outbox drafting, delivered only through the approval-gated `workctx outbox send`;
 - a stdio MCP server bound to one context (`workctx mcp serve`);
 - agent adapter installers for Codex, Claude Code, and Gemini CLI;
 - deterministic migration of legacy Markdown repositories (`workctx migrate legacy`);

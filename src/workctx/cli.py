@@ -3166,6 +3166,7 @@ def _serialize_issue(issue: ValidationIssue) -> dict[str, str | None]:
         "code": issue.code,
         "message": _safe_issue_message(issue),
         "path": sanitize_message(issue.path, fallback="") if issue.path is not None else None,
+        "repair_action": sanitize_message(issue.repair_action, fallback="") or None,
     }
 
 
@@ -3174,6 +3175,7 @@ def _diagnostic_from_issue(issue: ValidationIssue) -> CliDiagnostic:
         code=issue.code,
         message=_safe_issue_message(issue),
         path=sanitize_message(issue.path, fallback="") if issue.path is not None else None,
+        repair_action=sanitize_message(issue.repair_action, fallback="") or None,
     )
 
 
@@ -3199,11 +3201,13 @@ def _render_validation(report: ValidationReport, issues: list[dict[str, str | No
     table.add_column("Code")
     table.add_column("Path")
     table.add_column("Message")
+    table.add_column("Repair")
     for issue in issues:
         table.add_row(
             issue["severity"] or "",
             issue["code"] or "",
             Text(issue["path"] or ""),
             Text(issue["message"] or ""),
+            Text(issue["repair_action"] or ""),
         )
     output_console.print(table)

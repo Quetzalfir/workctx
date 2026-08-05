@@ -104,6 +104,20 @@
               "type": "null"
             }
           ]
+        },
+        "repair_action": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 500,
+              "not": {
+                "pattern": "[\\r\\n]"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     }

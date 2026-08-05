@@ -244,5 +244,6 @@ def test_sync_all_reports_partial_results_and_aggregate_exit_semantics(
             "code": "CONNECTOR_STATUS",
             "message": "Connector 'a-failing' snapshot 'failed-items' returned HTTP 503.",
             "path": "$.outcomes[0].error",
+            "repair_action": None,
         }
     ]

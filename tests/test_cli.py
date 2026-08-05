@@ -96,6 +96,7 @@ def test_unexpected_json_failure_uses_exit_10_without_leaking_secret(monkeypatch
             "code": "INTERNAL_ERROR",
             "message": "Unexpected internal failure.",
             "path": None,
+            "repair_action": None,
         }
     ]
     assert secret not in result.stdout

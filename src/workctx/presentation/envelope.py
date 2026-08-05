@@ -16,6 +16,7 @@ class CliDiagnostic(BaseModel):
     code: str = Field(min_length=1, max_length=64, pattern=r"^[A-Z][A-Z0-9_-]*$")
     message: str = Field(min_length=1, max_length=500)
     path: str | None = Field(default=None, max_length=500)
+    repair_action: str | None = Field(default=None, max_length=500)
 
     @field_validator("message")
     @classmethod

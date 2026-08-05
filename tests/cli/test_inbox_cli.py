@@ -283,6 +283,7 @@ def test_verify_reports_match_then_user_correctable_mismatch_after_tampering(
             "code": "ARTIFACT_HASH_MISMATCH",
             "message": "Artifact content hash does not match its manifest.",
             "path": None,
+            "repair_action": None,
         }
     ]
 

@@ -99,7 +99,7 @@ update the related tasks and knowledge, and draft a response for Alex.
 Do not send or publish anything.
 ```
 
-The agent runs the same cycle you just ran by hand: register, propose, apply with approval, rebuild, retrieve — and saves any requested draft to `05_outbox/` through the approval-gated `draft_save` MCP tool. Drafts are local files; the alpha has no send capability of any kind.
+The agent runs the same cycle you just ran by hand: register, propose, apply with approval, rebuild, retrieve — and saves any requested draft to `05_outbox/` through the approval-gated `draft_save` MCP tool. Drafts are local files. Delivery is a separate, explicitly approved step: `workctx outbox send <draft-id> --via github --target owner/repo#number` previews by default and sends only with `--yes` and the previewed fingerprint.
 
 ## Migrate an existing Markdown repository
 
