@@ -2267,9 +2267,7 @@ class AgentAdapterService:
                 and target.content_hash is not None
                 and target.content_hash == _pristine_template_bridge_hash(sources.bridge_path)
             ):
-                mutations.append(
-                    FileMutation(sources.bridge_path, target, sources.bridge_content)
-                )
+                mutations.append(FileMutation(sources.bridge_path, target, sources.bridge_content))
                 planned.append(
                     PlannedChange(
                         sources.bridge_path,
