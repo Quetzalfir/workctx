@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,19 @@ PERSON_URI = ALICE_URI
 TASK_URI = f"workctx://{CONTEXT_ID}/task/TASK-2026-001"
 DRAFT_ID = "DRAFT-20260802-rollout-reply-01"
 UNCERTAINTY = "## Uncertainty\n\nThe vendor test date is still unconfirmed.\n"
+GITHUB_TARGET = "fictional-org/rollout-tracker#17"
+GITHUB_COMMENT_ID = "72017"
+GITHUB_COMMENT_URL = "https://github.com/fictional-org/rollout-tracker/issues/17#issuecomment-72017"
+FICTIONAL_TOKEN = "fictional-outbox-token-720"
+FIXED_SEND_TIME = datetime(2026, 8, 4, 19, 20, 30, tzinfo=UTC)
+
+
+@dataclass
+class MutableClock:
+    value: datetime
+
+    def __call__(self) -> datetime:
+        return self.value
 
 
 def initialize_drafting_context(root: Path) -> Path:
@@ -76,3 +90,7 @@ def draft_payload(*, body: str | None = None, draft_id: str | None = DRAFT_ID) -
         agent="codex",
         model="gpt-fictional",
     )
+
+
+def workspace_file_bytes(root: Path) -> tuple[bytes, ...]:
+    return tuple(path.read_bytes() for path in root.rglob("*") if path.is_file())

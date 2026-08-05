@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from datetime import timedelta
 from enum import StrEnum
 from typing import Literal, Self
 
@@ -30,6 +32,19 @@ from workctx.retrieval import ContextPack
 from workctx.transactions import ApplyResult
 
 DRAFT_ID_PATTERN = r"^DRAFT-[0-9]{8}-[a-z0-9]+(?:-[a-z0-9]+)*-[0-9]{2}$"
+GITHUB_TARGET_PATTERN = (
+    r"^(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)/"
+    r"(?P<repo>[A-Za-z0-9._-]{1,100})#(?P<number>[1-9][0-9]*)$"
+)
+GITHUB_COMMENT_URL_PATTERN = (
+    r"^https://github\.com/(?P<owner>[A-Za-z0-9-]+)/"
+    r"(?P<repo>[A-Za-z0-9._-]+)/(?:issues|pull)/(?P<number>[1-9][0-9]*)"
+    r"#issuecomment-(?P<comment_id>[1-9][0-9]*)$"
+)
+SEND_FINGERPRINT_PATTERN = r"^sha256:[0-9a-f]{64}$"
+
+_GITHUB_TARGET = re.compile(GITHUB_TARGET_PATTERN)
+_GITHUB_COMMENT_URL = re.compile(GITHUB_COMMENT_URL_PATTERN)
 
 
 class DraftFormat(StrEnum):
@@ -120,6 +135,35 @@ class DraftPayload(_DraftRecordModel):
         return canonical
 
 
+class DraftDelivery(_DraftRecordModel):
+    """Verified provenance for the one successful external delivery of a draft."""
+
+    channel: Literal["github"]
+    target: str = Field(pattern=GITHUB_TARGET_PATTERN, max_length=200)
+    remote_comment_id: str = Field(pattern=r"^[1-9][0-9]*$", max_length=40)
+    remote_comment_url: str = Field(pattern=GITHUB_COMMENT_URL_PATTERN, max_length=500)
+    sent_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_remote_identity(self) -> Self:
+        if self.sent_at.utcoffset() != timedelta(0):
+            raise ValueError("delivery timestamps must use UTC")
+        target = _GITHUB_TARGET.fullmatch(self.target)
+        remote = _GITHUB_COMMENT_URL.fullmatch(self.remote_comment_url)
+        if target is None or remote is None:  # pragma: no cover - constrained fields
+            raise ValueError("GitHub delivery provenance is invalid")
+        if target.group("repo") in {".", ".."}:
+            raise ValueError("GitHub delivery provenance has an invalid repository")
+        if (
+            target.group("owner").casefold() != remote.group("owner").casefold()
+            or target.group("repo").casefold() != remote.group("repo").casefold()
+            or target.group("number") != remote.group("number")
+            or self.remote_comment_id != remote.group("comment_id")
+        ):
+            raise ValueError("GitHub delivery provenance does not match its target")
+        return self
+
+
 class DraftRecord(_DraftRecordModel):
     """One validated canonical outbox document."""
 
@@ -128,7 +172,8 @@ class DraftRecord(_DraftRecordModel):
     uri: str
     title: str
     status: Literal["draft"]
-    delivery_state: Literal["unsent"]
+    delivery_state: Literal["unsent", "sent"]
+    delivery: DraftDelivery | None = None
     recipient_uri: str
     purpose: str
     format: DraftFormat
@@ -144,6 +189,13 @@ class DraftRecord(_DraftRecordModel):
         parsed = WorkctxUri.parse(self.uri)
         if parsed.entity_type != "draft" or parsed.entity_id != self.id:
             raise ValueError("draft URI identity must match its ID")
+        if self.delivery_state == "unsent" and self.delivery is not None:
+            raise ValueError("an unsent draft cannot claim delivery provenance")
+        if self.delivery_state == "sent":
+            if self.delivery is None:
+                raise ValueError("a sent draft requires delivery provenance")
+            if self.updated_at != self.delivery.sent_at:
+                raise ValueError("a sent draft update time must match its delivery time")
         return self
 
 
@@ -207,7 +259,8 @@ class _DraftFrontmatter(EntityFrontmatter):
 
     entity_type: Literal["draft"]
     status: Literal["draft"]
-    delivery_state: Literal["unsent"]
+    delivery_state: Literal["unsent", "sent"]
+    delivery: DraftDelivery | None = None
     recipient_uri: str
     purpose: str
     draft_format: DraftFormat
@@ -232,6 +285,17 @@ class _DraftFrontmatter(EntityFrontmatter):
             raise ValueError("source_refs must contain unique durable references")
         return canonical
 
+    @model_validator(mode="after")
+    def validate_delivery(self) -> Self:
+        if self.delivery_state == "unsent" and self.delivery is not None:
+            raise ValueError("an unsent draft cannot claim delivery provenance")
+        if self.delivery_state == "sent":
+            if self.delivery is None:
+                raise ValueError("a sent draft requires delivery provenance")
+            if self.updated_at != self.delivery.sent_at:
+                raise ValueError("a sent draft update time must match its delivery time")
+        return self
+
 
 def draft_frontmatter_record(
     frontmatter: EntityFrontmatter,
@@ -248,6 +312,7 @@ def draft_frontmatter_record(
         title=refined.title,
         status=refined.status,
         delivery_state=refined.delivery_state,
+        delivery=refined.delivery,
         recipient_uri=refined.recipient_uri,
         purpose=refined.purpose,
         format=refined.draft_format,
@@ -262,6 +327,10 @@ def draft_frontmatter_record(
 
 __all__ = [
     "DRAFT_ID_PATTERN",
+    "GITHUB_COMMENT_URL_PATTERN",
+    "GITHUB_TARGET_PATTERN",
+    "SEND_FINGERPRINT_PATTERN",
+    "DraftDelivery",
     "DraftFormat",
     "DraftPayload",
     "DraftRecord",

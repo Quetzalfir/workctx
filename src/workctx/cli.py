@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     )
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
     from workctx.domain.transactions import AuditEvent, TransactionProposal
+    from workctx.drafting import SendPreview, SendResult
     from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
     from workctx.retrieval.records import ResolutionResult
     from workctx.suggestions import SuggestionDocument, SuggestionMutationResult
@@ -93,6 +94,110 @@ secret_app = typer.Typer(help="Manage machine-global secret references without p
 app.add_typer(secret_app, name="secret")
 connector_app = typer.Typer(help="Synchronize declarative external-source connectors.")
 app.add_typer(connector_app, name="connector")
+outbox_app = typer.Typer(help="Preview and deliver one approval-pinned outbox draft.")
+app.add_typer(outbox_app, name="outbox")
+
+
+@outbox_app.command("send")
+def outbox_send(
+    draft_id: Annotated[str, typer.Argument(help="Draft ID or canonical draft URI.")],
+    via: Annotated[str, typer.Option("--via", help="Delivery channel; v1 supports github.")],
+    target: Annotated[
+        str,
+        typer.Option("--target", help="One GitHub issue or PR as owner/repo#number."),
+    ],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve this one preview-pinned external write."),
+    ] = False,
+    fingerprint: Annotated[
+        str | None,
+        typer.Option(
+            "--fingerprint",
+            help="Exact fingerprint returned by preview; required with --yes --json.",
+        ),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Preview by default; explicitly approve one pinned GitHub comment send."""
+
+    from workctx.drafting import SendError, preview_send
+    from workctx.drafting import send as deliver_draft
+
+    begin_command("outbox.send", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    try:
+        preview = preview_send(root, draft_id, via, target)
+        if not yes:
+            if json_output:
+                emit_success(
+                    result=_outbox_preview_payload(preview),
+                    context_id=context_id,
+                )
+            else:
+                _render_outbox_preview(preview)
+                output_console.print(Text("Re-run with --yes to review and confirm this send."))
+            return
+
+        approved_fingerprint: str
+        if json_output:
+            if not fingerprint:
+                error = CliDiagnostic(
+                    code="OUTBOX_FINGERPRINT_REQUIRED",
+                    message="JSON send approval requires the exact preview fingerprint.",
+                    path="$.fingerprint",
+                )
+                record_failure(
+                    result=_outbox_preview_payload(preview),
+                    context_id=context_id,
+                    errors=[error],
+                )
+                raise UsageConfigurationError(error.message)
+            approved_fingerprint = fingerprint
+        else:
+            _render_outbox_preview(preview)
+            if not typer.confirm("Send this exact body to this exact GitHub target?"):
+                output_console.print(Text("Send cancelled; no external write occurred."))
+                return
+            approved_fingerprint = preview.fingerprint
+
+        delivered = deliver_draft(
+            root,
+            draft_id,
+            via,
+            target,
+            approved=True,
+            fingerprint=approved_fingerprint,
+        )
+    except SendError as exc:
+        _record_outbox_failure(
+            exc,
+            context_id=context_id,
+            draft_id=draft_id,
+            channel=via,
+            target=target,
+        )
+        raise
+
+    if json_output:
+        emit_success(
+            result=_outbox_send_payload(delivered),
+            context_id=context_id,
+        )
+    else:
+        output_console.print(
+            Text(
+                f"Sent {delivered.draft.id}: {delivered.delivery.remote_comment_url}; "
+                f"ledger event {delivered.receipt.ledger_event_id}."
+            )
+        )
 
 
 @connector_app.command("list")
@@ -2556,6 +2661,84 @@ def _task_payload(task: TaskRecord) -> dict[str, JsonValue]:
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
     }
+
+
+def _outbox_preview_payload(preview: SendPreview) -> dict[str, JsonValue]:
+    return cast("dict[str, JsonValue]", preview.model_dump(mode="json"))
+
+
+def _outbox_send_payload(delivered: SendResult) -> dict[str, JsonValue]:
+    return cast("dict[str, JsonValue]", delivered.model_dump(mode="json"))
+
+
+def _render_outbox_preview(preview: SendPreview) -> None:
+    output_console.print(Text(f"Draft: {preview.draft_id}"))
+    output_console.print(Text(f"Channel: {preview.channel}"))
+    output_console.print(Text(f"Recipient: {preview.recipient_display}"))
+    output_console.print(Text(f"Draft hash: {preview.draft_content_hash}"))
+    output_console.print(Text(f"Send fingerprint: {preview.fingerprint}"))
+    output_console.print(Text("Body:"))
+    output_console.print(Text(preview.body))
+
+
+def _record_outbox_failure(
+    error: Exception,
+    *,
+    context_id: str,
+    draft_id: str,
+    channel: str,
+    target: str,
+) -> None:
+    from workctx.drafting import (
+        SendApprovalRequiredError,
+        SendAuditCommitError,
+        SendAuthenticationError,
+        SendDeliveryError,
+        SendFingerprintMismatchError,
+        SendInputError,
+        SendSecretError,
+        SendStateError,
+    )
+
+    code = "OUTBOX_SEND_FAILED"
+    path: str | None = None
+    if isinstance(error, SendApprovalRequiredError):
+        code = "OUTBOX_APPROVAL_REQUIRED"
+        path = "$.yes"
+    elif isinstance(error, SendFingerprintMismatchError):
+        code = "OUTBOX_FINGERPRINT_MISMATCH"
+        path = "$.fingerprint"
+    elif isinstance(error, SendStateError):
+        code = "OUTBOX_RESEND_REFUSED"
+    elif isinstance(error, SendSecretError):
+        code = "OUTBOX_SECRET_REFUSED"
+        path = "$.body"
+    elif isinstance(error, SendAuthenticationError):
+        code = "OUTBOX_AUTH_UNAVAILABLE"
+    elif isinstance(error, SendAuditCommitError):
+        code = "OUTBOX_AUDIT_COMMIT_FAILED"
+    elif isinstance(error, SendDeliveryError):
+        code = "OUTBOX_DELIVERY_FAILED"
+    elif isinstance(error, SendInputError):
+        code = "OUTBOX_INPUT_INVALID"
+
+    result: dict[str, JsonValue] = {"draft_id": draft_id}
+    if not isinstance(error, (SendInputError, SendSecretError)):
+        result.update({"channel": channel, "target": target})
+    if isinstance(error, SendAuditCommitError):
+        result["remote_comment_id"] = error.remote_comment_id
+        result["remote_comment_url"] = error.remote_comment_url
+    record_failure(
+        result=result,
+        context_id=context_id,
+        errors=[
+            CliDiagnostic(
+                code=code,
+                message=sanitize_message(error),
+                path=path,
+            )
+        ],
+    )
 
 
 def _suggestion_summary_payload(document: SuggestionDocument) -> dict[str, JsonValue]:

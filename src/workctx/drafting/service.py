@@ -171,6 +171,8 @@ class DraftService:
         draft_id = validated.draft_id or self._allocate_draft_id(validated.title, now)
         relative_path = _draft_path(draft_id)
         existing = self._read_draft(draft_id, required=False)
+        if existing is not None and existing.delivery_state == "sent":
+            raise DraftStateError("A sent draft cannot be revised or returned to unsent state.")
         created_at = now if existing is None else existing.created_at
         frontmatter = self._frontmatter(
             validated,
@@ -178,7 +180,10 @@ class DraftService:
             created_at=created_at,
             updated_at=now,
         )
-        document = EntityFrontmatter.model_validate(frontmatter.model_dump(mode="python"))
+        frontmatter_values = frontmatter.model_dump(mode="python")
+        if frontmatter.delivery is None:
+            frontmatter_values.pop("delivery", None)
+        document = EntityFrontmatter.model_validate(frontmatter_values)
         entity_payload = EntityDocumentPayload(
             kind="entity",
             document=document,

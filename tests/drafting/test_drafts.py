@@ -69,7 +69,7 @@ def test_possible_secret_is_refused_without_outbox_or_ledger_mutation(tmp_path: 
     assert verify_ledger(root).event_count == 0
 
 
-def test_drafting_modules_import_no_network_or_delivery_primitives() -> None:
+def test_only_delivery_module_imports_network_and_no_batch_send_api_exists() -> None:
     package = Path(drafting.__file__).parent
     forbidden = {
         "aiohttp",
@@ -81,14 +81,18 @@ def test_drafting_modules_import_no_network_or_delivery_primitives() -> None:
         "urllib",
         "webbrowser",
     }
-    imported: set[str] = set()
+    network_importers: set[str] = set()
     for module_path in package.glob("*.py"):
         tree = ast.parse(module_path.read_text(encoding="utf-8"))
+        imported: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 imported.update(alias.name.partition(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module is not None:
                 imported.add(node.module.partition(".")[0])
+        if not imported.isdisjoint(forbidden):
+            network_importers.add(module_path.name)
 
-    assert imported.isdisjoint(forbidden)
-    assert not any(name.startswith(("send", "publish")) for name in drafting.__all__)
+    assert network_importers == {"delivery.py"}
+    assert {"preview_send", "send"}.issubset(drafting.__all__)
+    assert not any(name in drafting.__all__ for name in ("batch_send", "send_all", "schedule"))
