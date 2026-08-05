@@ -13,6 +13,7 @@ from workctx.connectors import (
     ConnectorManifest,
     ConnectorManifestError,
     DuplicateConnectorNameError,
+    SnapshotSchedule,
     load_manifests,
 )
 from workctx.services.contexts import initialize_context
@@ -60,6 +61,7 @@ def test_connector_fixture_sets_are_complete() -> None:
         "forbidden-header",
         "insecure-without-opt-in",
         "invalid-auth-style",
+        "invalid-schedule",
         "invalid-secret-ref",
         "oversized-limits",
         "secret-without-auth",
@@ -132,6 +134,7 @@ def test_load_manifests_returns_stable_validated_models(connector_tmp_path: Path
 
     assert [manifest.name for manifest in manifests] == ["fictional-service", "rally-interno"]
     assert manifests[1].allow_insecure_http is True
+    assert manifests[1].snapshots[0].schedule is SnapshotSchedule.DAILY
 
 
 def test_load_manifests_returns_empty_when_directory_is_absent(

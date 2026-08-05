@@ -14,7 +14,7 @@ snapshots:
       limit: 50
       include-closed: false
     accept: application/vnd.fictional+json
-    schedule: "0 8 * * 1-5"
+    schedule: daily
   - id: service-health
     path: /health
     accept: text/plain

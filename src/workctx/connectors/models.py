@@ -39,6 +39,14 @@ class _ConnectorRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class SnapshotSchedule(StrEnum):
+    """Supported OS-invoked synchronization cadences."""
+
+    HOURLY = "hourly"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
+
 class SnapshotManifest(_ConnectorRecord):
     """One GET endpoint declared by an operator-authored connector manifest."""
 
@@ -46,7 +54,7 @@ class SnapshotManifest(_ConnectorRecord):
     path: str
     query: dict[str, QueryValue] = Field(default_factory=dict)
     accept: str = "application/json"
-    schedule: str | None = None
+    schedule: SnapshotSchedule | None = None
 
     @field_validator("id")
     @classmethod
@@ -99,15 +107,6 @@ class SnapshotManifest(_ConnectorRecord):
             or any(ord(character) < 32 for character in value)
         ):
             raise ValueError("accept must be a printable non-empty HTTP header value")
-        return value.strip()
-
-    @field_validator("schedule")
-    @classmethod
-    def validate_schedule(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not value.strip() or len(value) > 256 or any(ord(character) < 32 for character in value):
-            raise ValueError("schedule must be printable metadata")
         return value.strip()
 
 
@@ -252,6 +251,96 @@ class SyncResult(_ConnectorRecord):
     duration_ms: DurationMilliseconds
 
 
+class ConnectorSyncFailureKind(StrEnum):
+    """Content-free connector failure categories exposed by batch synchronization."""
+
+    MANIFEST = "manifest"
+    NOT_FOUND = "not_found"
+    SNAPSHOT_NOT_FOUND = "snapshot_not_found"
+    SECRET = "secret"
+    CONNECTION = "connection"
+    TIMEOUT = "timeout"
+    STATUS = "status"
+    SIZE = "size"
+    REDIRECT = "redirect"
+    SECRET_EXPOSURE = "secret_exposure"
+    WRITE = "write"
+    REGISTRATION = "registration"
+
+
+class ConnectorSyncError(_ConnectorRecord):
+    """Envelope-safe failure for one connector in a batch."""
+
+    kind: ConnectorSyncFailureKind
+    snapshot_id: str
+    message: str = Field(min_length=1, max_length=500)
+
+
+class ConnectorSyncOutcome(_ConnectorRecord):
+    """One attempted or not-due connector outcome in deterministic name order."""
+
+    connector_name: str
+    snapshot_ids: tuple[str, ...]
+    attempted: bool
+    result: SyncResult | None = None
+    error: ConnectorSyncError | None = None
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> Self:
+        populated = sum(value is not None for value in (self.result, self.error))
+        if self.attempted and populated != 1:
+            raise ValueError("an attempted connector must have exactly one outcome")
+        if not self.attempted and (populated or self.snapshot_ids):
+            raise ValueError("a skipped connector cannot carry snapshots or an outcome")
+        if self.result is not None and self.result.connector_name != self.connector_name:
+            raise ValueError("connector result name must match its batch outcome")
+        return self
+
+    @property
+    def succeeded(self) -> bool:
+        return self.attempted and self.result is not None
+
+    @property
+    def failed(self) -> bool:
+        return self.error is not None
+
+
+class SyncAllResult(_ConnectorRecord):
+    """Ordered failure-isolated outcomes from synchronizing all connectors."""
+
+    outcomes: tuple[ConnectorSyncOutcome, ...]
+    duration_ms: DurationMilliseconds
+
+    @property
+    def failure(self) -> ConnectorSyncOutcome | None:
+        return next((outcome for outcome in self.outcomes if outcome.failed), None)
+
+    @property
+    def ok(self) -> bool:
+        return self.failure is None
+
+    @property
+    def failure_count(self) -> int:
+        return sum(outcome.failed for outcome in self.outcomes)
+
+
+class ConnectorSnapshotStatus(_ConnectorRecord):
+    """Due status for one connector and snapshot at one injected-clock instant."""
+
+    connector_name: str
+    snapshot_id: str
+    schedule: SnapshotSchedule | None
+    last_success: AwareDatetime | None
+    due_now: bool
+
+
+class ConnectorStatusResult(_ConnectorRecord):
+    """Deterministic status rows for every configured connector snapshot."""
+
+    checked_at: AwareDatetime
+    snapshots: tuple[ConnectorSnapshotStatus, ...]
+
+
 def _validate_kebab(value: str, *, label: str) -> str:
     if not isinstance(value, str) or len(value) > 64 or _KEBAB_PATTERN.fullmatch(value) is None:
         raise ValueError(f"{label} must be 1-64 characters of lowercase kebab-case")
@@ -279,11 +368,18 @@ __all__ = [
     "MAX_MAX_BYTES",
     "MAX_TIMEOUT_SECONDS",
     "ConnectorManifest",
+    "ConnectorSnapshotStatus",
+    "ConnectorStatusResult",
+    "ConnectorSyncError",
+    "ConnectorSyncFailureKind",
+    "ConnectorSyncOutcome",
     "ProvenanceSecretRef",
     "QueryValue",
     "SnapshotManifest",
     "SnapshotProvenance",
+    "SnapshotSchedule",
     "SnapshotSyncDisposition",
     "SnapshotSyncResult",
+    "SyncAllResult",
     "SyncResult",
 ]

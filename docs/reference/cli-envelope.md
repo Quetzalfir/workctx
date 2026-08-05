@@ -50,7 +50,8 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `secret unset` | `secret.unset` | `name`, `deleted`, `environment_present` |
 | `secret import` | `secret.import` | `count`, `names`, `source_deleted` |
 | `connector list` | `connector.list` | `count`, `connectors` |
-| `connector sync` | `connector.sync` | `connector_name`, `snapshots`, `duration_ms` |
+| `connector sync` | `connector.sync` | named: `connector_name`, `snapshots`, `duration_ms`; batch: `outcomes`, `duration_ms` |
+| `connector status` | `connector.status` | `count`, `checked_at`, `snapshots` |
 | `outbox send` | `outbox.send` | preview: `operation`, `draft_id`, `channel`, `target`, `recipient_display`, `body`, `draft_content_hash`, `fingerprint`; sent: `operation`, `draft`, `delivery`, `receipt` |
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
