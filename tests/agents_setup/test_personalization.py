@@ -250,7 +250,7 @@ def test_install_and_upgrade_all_bridges_refresh_without_tracking_layers(
     # The context template owns AGENTS.md. Removing it makes this test exercise a
     # generated Codex bridge under the same three-factor ownership rules as the others.
     (context / "AGENTS.md").unlink()
-    isolated_user_layer.parent.mkdir(parents=True)
+    isolated_user_layer.parent.mkdir(parents=True, exist_ok=True)
     isolated_user_layer.write_text(
         "Speak as a concise engineering collaborator.\n",
         encoding="utf-8",

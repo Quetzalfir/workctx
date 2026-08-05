@@ -4,10 +4,23 @@ from pathlib import Path
 import pytest
 import yaml
 
+import workctx.adapters.filesystem.registry as registry_module
+import workctx.services.contexts as contexts_module
+from workctx.adapters.filesystem.registry import ContextRegistry
 from workctx.errors import ContextAlreadyExistsError
 from workctx.models.context import ContextKind, ContextProfile
 from workctx.services.contexts import initialize_context, load_context_config
 from workctx.validation.workspace import validate_workspace
+
+
+@pytest.fixture(autouse=True)
+def isolate_user_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    user_config = tmp_path / "user-config"
+    monkeypatch.setattr(
+        registry_module,
+        "user_config_path",
+        lambda *_args, **_kwargs: user_config,
+    )
 
 
 def test_initialize_context_creates_valid_isolated_workspace(tmp_path: Path) -> None:
@@ -27,6 +40,42 @@ def test_initialize_context_creates_valid_isolated_workspace(tmp_path: Path) -> 
     assert raw["languages"]["user_interaction"] == "en"
     assert raw["timezone"] == "UTC"
     assert validate_workspace(target).ok
+
+
+def test_initialize_context_registers_resolved_root(tmp_path: Path) -> None:
+    target = tmp_path / "registered-context"
+
+    config = initialize_context(
+        target,
+        name="Registered Context",
+        context_id="registered-context",
+    )
+
+    registered = ContextRegistry().get(config.id)
+    assert registered == target.resolve()
+
+
+def test_registry_failure_warns_without_breaking_context_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "registry-failure-context"
+
+    def fail_registration(*_args: object, **_kwargs: object) -> None:
+        raise OSError("injected registry failure")
+
+    monkeypatch.setattr(contexts_module, "register_context", fail_registration)
+
+    with pytest.warns(RuntimeWarning, match="advisory user registry"):
+        config = initialize_context(
+            target,
+            name="Registry Failure Context",
+            context_id="registry-failure-context",
+        )
+
+    assert config.id == "registry-failure-context"
+    assert load_context_config(target) == config
+    assert (target / "context.yaml").is_file()
 
 
 def test_initialize_context_supports_existing_empty_directory(tmp_path: Path) -> None:

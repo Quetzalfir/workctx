@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 import shutil
 import unicodedata
+import warnings
+from contextlib import suppress
 from datetime import UTC, datetime
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -10,6 +12,7 @@ from typing import Any
 
 import yaml
 
+from workctx.adapters.filesystem.registry import register_context
 from workctx.adapters.filesystem.serialization import dump_yaml_bytes
 from workctx.errors import ContextAlreadyExistsError, ContextNotFoundError, InvalidContextError
 from workctx.models.context import (
@@ -113,11 +116,24 @@ def initialize_context(
         timestamp=_format_utc_timestamp(now),
     )
     _write_context_config(target, config)
+    _register_initialized_context(config.id, target)
     return config
 
 
 def _write_context_config(root: Path, config: ContextConfig) -> None:
     (root / _CONTEXT_FILE).write_bytes(dump_yaml_bytes(config))
+
+
+def _register_initialized_context(context_id: str, root: Path) -> None:
+    try:
+        register_context(context_id, root, replace=True)
+    except Exception:
+        with suppress(Exception):
+            warnings.warn(
+                "Context creation succeeded, but the advisory user registry could not be updated.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
 
 
 def _utc_now() -> datetime:

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
         OperationResult,
         TargetApproval,
     )
+    from workctx.adapters.filesystem.registry import ContextInventoryEntry
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
     from workctx.connectors import SyncResult
     from workctx.domain.transactions import AuditEvent, TransactionProposal
@@ -63,7 +64,7 @@ app = typer.Typer(
     no_args_is_help=True,
     cls=PresentationTyperGroup,
 )
-context_app = typer.Typer(help="Create, inspect, and validate isolated contexts.")
+context_app = typer.Typer(help="Create, register, list, inspect, and validate isolated contexts.")
 app.add_typer(context_app, name="context")
 inbox_app = typer.Typer(help="Register and inspect inbox artifacts.")
 app.add_typer(inbox_app, name="inbox")
@@ -954,6 +955,186 @@ def context_init(
             Text.assemble("Created context ", (config.id, "bold"), " at ", str(target)),
             soft_wrap=True,
         )
+
+
+@context_app.command("register")
+def context_register(
+    path: Annotated[
+        Path | None, typer.Argument(help="Path inside the context to register.")
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Add or update one context in the advisory user registry."""
+    begin_command("context.register", json_output=json_output)
+
+    from workctx.adapters.filesystem.registry import register_context
+
+    root = resolve_cli_context(explicit_path=None, positional_path=path)
+    config = load_context_config(root)
+    registered = register_context(config.id, root, replace=True)
+    result: dict[str, JsonValue] = {
+        "id": registered.context_id,
+        "path": str(registered.root),
+        "active": registered.active,
+    }
+    if json_output:
+        emit_success(result=result, context_id=config.id)
+    else:
+        output_console.print(
+            Text.assemble("Registered context ", (config.id, "bold"), " at ", str(root)),
+            soft_wrap=True,
+        )
+
+
+@context_app.command("list")
+def context_list(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List advisory registrations and cheap canonical context statistics."""
+    begin_command("context.list", json_output=json_output)
+
+    from workctx.adapters.filesystem.registry import list_context_inventory
+
+    warnings: list[CliDiagnostic] = []
+    registry_unavailable = False
+    try:
+        entries = list_context_inventory()
+    except Exception:
+        entries = ()
+        registry_unavailable = True
+        warnings.append(
+            CliDiagnostic(
+                code="CONTEXT_REGISTRY_UNAVAILABLE",
+                message=(
+                    "The advisory user registry could not be read; no registrations are shown."
+                ),
+            )
+        )
+
+    contexts = [_context_inventory_payload(entry) for entry in entries]
+    result: dict[str, JsonValue] = {
+        "count": len(contexts),
+        "contexts": cast(JsonValue, contexts),
+    }
+    if json_output:
+        emit_success(result=result, warnings=warnings)
+    else:
+        _render_context_inventory(entries, registry_unavailable=registry_unavailable)
+
+
+@context_app.command("unregister")
+def context_unregister(
+    context_id: Annotated[
+        str,
+        typer.Argument(help="Registered context ID to remove from the user registry."),
+    ],
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Remove one advisory registration without touching its context directory."""
+    begin_command("context.unregister", json_output=json_output)
+
+    from workctx.adapters.filesystem.registry import unregister_context
+
+    removed = unregister_context(context_id)
+    result: dict[str, JsonValue] = {"id": context_id, "removed": removed}
+    if json_output:
+        emit_success(result=result)
+    elif removed:
+        output_console.print(Text.assemble("Unregistered context ", (context_id, "bold"), "."))
+    else:
+        output_console.print(
+            Text.assemble("Context ", (context_id, "bold"), " was not registered.")
+        )
+
+
+def _context_inventory_payload(entry: ContextInventoryEntry) -> dict[str, JsonValue]:
+    stats: JsonValue = None
+    if entry.stats is not None:
+        stats = {
+            "tasks": entry.stats.tasks,
+            "entities": entry.stats.entities,
+            "evidence_notes": entry.stats.evidence_notes,
+            "pending_inbox_artifacts": entry.stats.pending_inbox_artifacts,
+            "ledger_events": entry.stats.ledger_events,
+            "last_ledger_activity": _context_inventory_timestamp(entry.stats.last_ledger_activity),
+        }
+    return {
+        "id": entry.context_id,
+        "configured_id": entry.configured_context_id,
+        "name": entry.name,
+        "kind": entry.kind,
+        "profile": entry.profile,
+        "language": entry.language,
+        "path": str(entry.root),
+        "active": entry.active,
+        "missing": entry.missing,
+        "mismatched": entry.mismatched,
+        "stats": stats,
+        "error": entry.error,
+    }
+
+
+def _context_inventory_timestamp(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _render_context_inventory(
+    entries: tuple[ContextInventoryEntry, ...],
+    *,
+    registry_unavailable: bool,
+) -> None:
+    caption = (
+        "The advisory user registry could not be read; no registrations are shown."
+        if registry_unavailable
+        else None
+    )
+    table = Table(title="Registered contexts", caption=caption)
+    table.add_column("Context", min_width=14, max_width=20)
+    table.add_column("Type", min_width=7, max_width=16)
+    table.add_column("Path", min_width=8, max_width=24)
+    table.add_column("Stats", min_width=8, max_width=17)
+    table.add_column("Activity / state", min_width=16, max_width=24)
+    for entry in entries:
+        stats = entry.stats
+        state: list[str] = []
+        if entry.active:
+            state.append("active")
+        if entry.missing:
+            state.append("missing")
+        if entry.mismatched:
+            state.append(f"mismatched ({entry.configured_context_id or 'unknown'})")
+        if entry.error is not None:
+            state.append(f"error: {entry.error}")
+        counts = (
+            (
+                f"T {stats.tasks}  E {stats.entities}\n"
+                f"Ev {stats.evidence_notes}  In {stats.pending_inbox_artifacts}  "
+                f"L {stats.ledger_events}"
+            )
+            if stats is not None
+            else "-"
+        )
+        table.add_row(
+            f"{entry.context_id}\n{entry.name or '-'}",
+            f"{entry.kind or '-'}\n{entry.profile or '-'} / {entry.language or '-'}",
+            str(entry.root),
+            counts,
+            (
+                f"{_context_inventory_timestamp(stats.last_ledger_activity) or '-'}\n"
+                f"{', '.join(state) if state else 'ok'}"
+                if stats is not None
+                else f"-\n{', '.join(state) if state else 'ok'}"
+            ),
+        )
+    output_console.print(table, crop=False)
 
 
 @context_app.command("inspect")
