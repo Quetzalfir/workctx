@@ -392,6 +392,7 @@ def test_registry_failure_does_not_break_list_and_command_failures_keep_envelope
                 "The advisory user registry could not be read; no registrations are shown."
             ),
             "path": None,
+            "repair_action": None,
         }
     ]
 

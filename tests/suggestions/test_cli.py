@@ -145,6 +145,7 @@ def test_suggestion_adopt_and_reject_require_yes_and_report_receipts(tmp_path: P
             "code": "SUGGESTION_APPROVAL_REQUIRED",
             "message": "Suggestion adoption and rejection require explicit --yes approval.",
             "path": "$.yes",
+            "repair_action": None,
         }
     ]
     assert verify_ledger(root).event_count == 2

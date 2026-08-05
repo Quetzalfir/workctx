@@ -25,12 +25,23 @@ def _isolate_user_home(
 ) -> None:
     """Never read the operator's real global configuration from these tests."""
 
+    from workctx.adapters.agents import _install_records, personalization
+
     fake_home = tmp_path_factory.mktemp("cli-agent-home")
     monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("USERPROFILE", str(fake_home))
     monkeypatch.setenv("APPDATA", str(fake_home / "AppData" / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(fake_home / "AppData" / "Local"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(fake_home / ".config"))
+    # platformdirs does not follow the environment on every platform, so pin
+    # the two user-global paths the installer reads.
+    user_config = fake_home / "AppData" / "Local" / "workctx"
+    monkeypatch.setattr(_install_records, "user_config_path", lambda *_a, **_k: user_config)
+    monkeypatch.setattr(
+        personalization,
+        "user_personalization_path",
+        lambda: user_config / personalization.PERSONALIZATION_FILENAME,
+    )
 
 
 class _Capability:
