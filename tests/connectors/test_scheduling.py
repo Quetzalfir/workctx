@@ -93,7 +93,8 @@ def test_manual_sync_runs_when_not_due_and_atomically_records_last_success(
     assert requests == ["/items", "/items"]
     assert len(replacements) == 2
     assert all(source.parent == destination.parent for source, destination in replacements)
-    assert all(destination == _state_path(root) for _source, destination in replacements)
+    expected_state = _state_path(root).resolve()
+    assert all(destination.resolve() == expected_state for _source, destination in replacements)
     assert all(not source.exists() for source, _destination in replacements)
     assert _state_payload(root) == {
         "schema_version": 1,
