@@ -5,9 +5,9 @@ including private or internal services that do not justify shipped service-speci
 An operator adds a YAML manifest; the runtime performs bounded read-only GET requests and
 routes every response through the normal inbox registration and quarantine pipeline.
 
-Connector version 1 has no external-write operations, background scheduler, CLI command,
-MCP surface, pagination engine, or response parser. The `schedule` field records future
-automation metadata only.
+Connector version 1 has no external-write operations, resident scheduler, MCP surface,
+pagination engine, or response parser. Its CLI provides manual and due-aware batch commands;
+the operating system invokes those commands on a schedule. Workctx does not run a daemon.
 
 ## Manifest location and contract
 
@@ -35,7 +35,7 @@ snapshots:
       team: alpha
       limit: 50
     accept: application/json
-    schedule: "0 8 * * 1-5"
+    schedule: daily
 ```
 
 Manifest fields:
@@ -54,7 +54,8 @@ Manifest fields:
 
 Each snapshot requires a lowercase kebab `id` and a relative `path`. A snapshot may also
 declare a query mapping of scalar strings, numbers, and booleans; an `Accept` value
-(default `application/json`); and schedule metadata. Paths cannot be absolute URLs, carry
+(default `application/json`); and an optional `schedule` of `hourly`, `daily`, or `weekly`.
+Omitting `schedule` makes the snapshot manual-only. Paths cannot be absolute URLs, carry
 their own query or fragment, or contain traversal segments. A `query:` authentication
 parameter cannot also appear in the snapshot's ordinary query mapping.
 
@@ -153,15 +154,124 @@ hash is returned as a normal duplicate outcome referencing the existing artifact
 ```python
 from pathlib import Path
 
-from workctx.connectors import load_manifests, sync
+from workctx.connectors import load_manifests, status, sync, sync_all
 
 root = Path("/path/to/one/context")
 manifests = load_manifests(root)
 result = sync(root, "rally-interno", snapshot_id="active-work")
+batch = sync_all(root, due_only=True)
+schedule_status = status(root)
 ```
 
 `sync(root, name, *, snapshot_id=None, transport=None, clock=None)` fetches every declared
-snapshot unless one id is selected. `transport` is the `httpx` test seam; production calls
-normally omit it. `clock` supports deterministic tests and UTC naming. `SyncResult` and its
-per-snapshot records are frozen Pydantic models and serialize directly for a later CLI
-envelope without carrying request, response, transport, or secret objects.
+snapshot unless one id is selected. A named sync is always manual: it runs even when the
+snapshot is not due or has no schedule. `sync_all(root, *, due_only=False, transport=None,
+clock=None)` returns an ordered `SyncAllResult` with one typed outcome per connector. One
+connector failure does not prevent later connectors from running. `status(root, *,
+clock=None)` returns one typed schedule row per connector and snapshot.
+
+`transport` is the `httpx` test seam; production calls normally omit it. `clock` supports
+deterministic due evaluation, tests, and UTC naming. Results are frozen Pydantic models and
+serialize directly for CLI envelopes without carrying request, response, transport, or
+secret objects.
+
+## Due evaluation and last-success state
+
+Schedule intervals are fixed durations: `hourly` is 1 hour, `daily` is 24 hours, and
+`weekly` is 7 days. A scheduled snapshot is due exactly when:
+
+```text
+now - last_success >= schedule_interval
+```
+
+The equality boundary is due. A scheduled snapshot with no usable last-success timestamp is
+due. A snapshot without `schedule` is manual-only and is never selected by `--due`; an
+explicit named sync or `sync --all` without `--due` still runs it.
+
+Successful snapshots update the machine-local advisory file
+`98_state/connectors/last-sync.json`. It stores UTC timestamps by connector and snapshot:
+
+```json
+{
+  "schema_version": 1,
+  "connectors": {
+    "rally-interno": {
+      "active-work": "2026-08-04T12:00:00Z"
+    }
+  }
+}
+```
+
+Updates use a flushed temporary file in the same directory followed by atomic replacement.
+This file is not canonical knowledge: it is rebuild-safe and may be deleted. Missing,
+corrupt, oversized, or otherwise unusable state is never a connector error; it means every
+scheduled snapshot is due. A successful manual sync also records its selected snapshots.
+
+## CLI and operating-system scheduling
+
+The connector commands are:
+
+```text
+workctx connector list
+workctx connector sync <name> [--snapshot <id>]
+workctx connector sync --all [--due]
+workctx connector status
+```
+
+`--all` and a positional connector name are mutually exclusive. `--due` is valid only with
+`--all`. Batch synchronization reports every per-connector outcome. It exits `0` when no
+connector failed, including when nothing is currently due, and exits `1` when any connector
+failed; the failure envelope retains successful and skipped outcomes and includes one safe
+diagnostic per failed connector. `connector status` reports `schedule`, `last_success`, and
+`due_now` for each connector and snapshot.
+
+Run the due-aware command at least hourly and let its interval math decide what work is due.
+For Windows Task Scheduler, replace both executable and context paths with absolute paths
+appropriate to the machine:
+
+```powershell
+schtasks.exe /Create /TN "workctx connector sync" /SC HOURLY /MO 1 /TR "workctx connector sync --all --due --json --context C:\workctx\example" /F
+```
+
+An equivalent hourly crontab entry is:
+
+```cron
+0 * * * * /usr/local/bin/workctx connector sync --all --due --json --context /srv/workctx/example
+```
+
+These recipes invoke a terminating batch command. They do not install or depend on a
+workctx background process.
+
+## Real-world read example: GitHub issues
+
+The following manifest is intentionally a **real-world example**, unlike the fictional
+`.example.test` hosts required in automated tests. It reads the public GitHub REST issues
+endpoint for `octocat/Hello-World`; replace the repository path for actual use. GitHub's
+issues endpoint can also return pull requests, so downstream evidence processing must retain
+the response verbatim rather than assume every item is an issue.
+
+```yaml
+schema_version: 1
+name: github-issues
+base_url: https://api.github.com/
+secret_ref: github-token
+auth_style: bearer
+timeout_seconds: 30
+max_bytes: 10485760
+snapshots:
+  - id: open-issues
+    path: /repos/octocat/Hello-World/issues
+    query:
+      state: open
+      per_page: 100
+    accept: application/vnd.github+json
+    schedule: hourly
+```
+
+The repository-wide GitHub authentication chain is the ADR 0013 `github-token` secret
+reference, then the conventional `GITHUB_TOKEN` environment variable, then `gh auth token`
+where a GitHub-aware operation supports those fallbacks. The generic declarative connector
+runtime itself resolves its declared `secret_ref` through ADR 0013
+(`WORKCTX_SECRET_GITHUB_TOKEN`, then the OS credential store). If the token currently exists
+only in `GITHUB_TOKEN` or `gh`, seed the reference before using this manifest, for example
+with `workctx secret set github-token --from-env GITHUB_TOKEN`.

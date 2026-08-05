@@ -1,0 +1,7 @@
+schema_version: 1
+name: fictional-service
+base_url: https://api.example.test/
+snapshots:
+  - id: current-items
+    path: /items
+    schedule: "0 8 * * 1-5"

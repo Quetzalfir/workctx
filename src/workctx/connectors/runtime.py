@@ -6,8 +6,7 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from enum import StrEnum
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NoReturn
 from urllib.parse import quote, quote_plus
@@ -17,6 +16,7 @@ import httpx
 from workctx.adapters.filesystem._paths import canonical_context_root, resolve_context_path
 from workctx.connectors.errors import (
     ConnectorConnectionError,
+    ConnectorError,
     ConnectorManifestError,
     ConnectorNotFoundError,
     ConnectorRedirectError,
@@ -32,14 +32,22 @@ from workctx.connectors.errors import (
 from workctx.connectors.manifests import load_manifests
 from workctx.connectors.models import (
     ConnectorManifest,
+    ConnectorSnapshotStatus,
+    ConnectorStatusResult,
+    ConnectorSyncError,
+    ConnectorSyncFailureKind,
+    ConnectorSyncOutcome,
     ProvenanceSecretRef,
     SnapshotManifest,
     SnapshotProvenance,
+    SnapshotSchedule,
     SnapshotSyncDisposition,
     SnapshotSyncResult,
+    SyncAllResult,
     SyncResult,
     _parse_auth_style,
 )
+from workctx.connectors.state import load_last_sync, record_last_sync
 from workctx.domain.artifacts import ArtifactSourceType
 from workctx.ingestion import IngestionService, RegisterRequest, RegistrationDisposition
 from workctx.secrets import SecretValue, resolve
@@ -52,19 +60,13 @@ _MAX_REDIRECTS = 3
 _MAX_CONTENT_TYPE_LENGTH = 1024
 
 
-class _FailureKind(StrEnum):
-    MANIFEST = "manifest"
-    NOT_FOUND = "not_found"
-    SNAPSHOT_NOT_FOUND = "snapshot_not_found"
-    SECRET = "secret"
-    CONNECTION = "connection"
-    TIMEOUT = "timeout"
-    STATUS = "status"
-    SIZE = "size"
-    REDIRECT = "redirect"
-    SECRET_EXPOSURE = "secret_exposure"
-    WRITE = "write"
-    REGISTRATION = "registration"
+_FailureKind = ConnectorSyncFailureKind
+
+_SCHEDULE_INTERVALS = {
+    SnapshotSchedule.HOURLY: timedelta(hours=1),
+    SnapshotSchedule.DAILY: timedelta(days=1),
+    SnapshotSchedule.WEEKLY: timedelta(days=7),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,10 +123,13 @@ class _RequestBoundaryTransport(httpx.BaseTransport):
         inner: httpx.BaseTransport,
         auth_style: str | None,
         secret: SecretValue | None,
+        *,
+        close_inner: bool,
     ) -> None:
         self._inner = inner
         self._auth_style = auth_style
         self._secret = secret
+        self._close_inner = close_inner
         self._last_outgoing_request: httpx.Request | None = None
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
@@ -153,7 +158,8 @@ class _RequestBoundaryTransport(httpx.BaseTransport):
         self._last_outgoing_request = None
 
     def close(self) -> None:
-        self._inner.close()
+        if self._close_inner:
+            self._inner.close()
 
 
 def sync(
@@ -170,6 +176,7 @@ def sync(
         root,
         name,
         snapshot_id=snapshot_id,
+        snapshot_ids=None,
         transport=transport,
         clock=clock or _utc_now,
     )
@@ -182,7 +189,122 @@ def sync(
         failure = _Failure(_FailureKind.REGISTRATION, name, snapshot_id or "snapshot")
         del transport, clock
         _raise_failure(failure)
+    record_last_sync(root, result)
     return result
+
+
+def sync_all(
+    root: Path,
+    *,
+    due_only: bool = False,
+    transport: httpx.BaseTransport | None = None,
+    clock: Clock | None = None,
+) -> SyncAllResult:
+    """Synchronize every connector while isolating failures by connector."""
+
+    effective_clock = clock or _utc_now
+    manifests = load_manifests(root)
+    started_at = _read_clock(effective_clock)
+    if started_at is None:
+        raise ConnectorWriteError("all", "snapshot")
+    last_sync = load_last_sync(root)
+    outcomes: list[ConnectorSyncOutcome] = []
+
+    for manifest in manifests:
+        selected = manifest.snapshots
+        if due_only:
+            selected = tuple(
+                snapshot
+                for snapshot in manifest.snapshots
+                if _is_due(
+                    snapshot.schedule,
+                    last_sync.get((manifest.name, snapshot.id)),
+                    started_at,
+                )
+            )
+        snapshot_ids = tuple(snapshot.id for snapshot in selected)
+        if not snapshot_ids:
+            outcomes.append(
+                ConnectorSyncOutcome(
+                    connector_name=manifest.name,
+                    snapshot_ids=(),
+                    attempted=False,
+                )
+            )
+            continue
+
+        operation = _run_sync(
+            root,
+            manifest.name,
+            snapshot_id=None,
+            snapshot_ids=snapshot_ids,
+            transport=transport,
+            clock=effective_clock,
+        )
+        failure = operation.failure
+        result = operation.result
+        if failure is None and result is None:
+            failure = _Failure(_FailureKind.REGISTRATION, manifest.name, snapshot_ids[0])
+        if failure is not None:
+            outcomes.append(
+                ConnectorSyncOutcome(
+                    connector_name=manifest.name,
+                    snapshot_ids=snapshot_ids,
+                    attempted=True,
+                    error=_public_sync_error(failure),
+                )
+            )
+            continue
+
+        assert result is not None
+        record_last_sync(root, result)
+        outcomes.append(
+            ConnectorSyncOutcome(
+                connector_name=manifest.name,
+                snapshot_ids=snapshot_ids,
+                attempted=True,
+                result=result,
+            )
+        )
+
+    ended_at = _read_clock(effective_clock) or started_at
+    return SyncAllResult(
+        outcomes=tuple(outcomes),
+        duration_ms=_duration_ms(started_at, ended_at),
+    )
+
+
+def status(
+    root: Path,
+    *,
+    clock: Clock | None = None,
+) -> ConnectorStatusResult:
+    """Report schedule and due state for every configured snapshot."""
+
+    manifests = load_manifests(root)
+    checked_at = _read_clock(clock or _utc_now)
+    if checked_at is None:
+        raise ConnectorWriteError("all", "snapshot")
+    last_sync = load_last_sync(root)
+    snapshots = tuple(
+        ConnectorSnapshotStatus(
+            connector_name=manifest.name,
+            snapshot_id=snapshot.id,
+            schedule=snapshot.schedule,
+            last_success=last_sync.get((manifest.name, snapshot.id)),
+            due_now=_is_due(
+                snapshot.schedule,
+                last_sync.get((manifest.name, snapshot.id)),
+                checked_at,
+            ),
+        )
+        for manifest in manifests
+        for snapshot in manifest.snapshots
+    )
+    return ConnectorStatusResult(checked_at=checked_at, snapshots=snapshots)
+
+
+connector_status = status
 
 
 def _run_sync(
@@ -190,6 +312,7 @@ def _run_sync(
     name: str,
     *,
     snapshot_id: str | None,
+    snapshot_ids: tuple[str, ...] | None,
     transport: httpx.BaseTransport | None,
     clock: Clock,
 ) -> _OperationOutcome:
@@ -205,10 +328,11 @@ def _run_sync(
     if manifest is None:
         return _OperationOutcome(failure=_Failure(_FailureKind.NOT_FOUND, name))
 
-    selected = _select_snapshots(manifest, snapshot_id)
+    selected = _select_snapshots(manifest, snapshot_id, snapshot_ids)
     if selected is None:
+        missing_snapshot = snapshot_id or (snapshot_ids[0] if snapshot_ids else "snapshot")
         return _OperationOutcome(
-            failure=_Failure(_FailureKind.SNAPSHOT_NOT_FOUND, name, snapshot_id or "snapshot")
+            failure=_Failure(_FailureKind.SNAPSHOT_NOT_FOUND, name, missing_snapshot)
         )
     first_snapshot_id = selected[0].id
     started_at = _read_clock(clock)
@@ -229,10 +353,12 @@ def _run_sync(
     request_transport: _RequestBoundaryTransport | None = None
     client_failed = False
     try:
+        owns_transport = transport is None
         request_transport = _RequestBoundaryTransport(
-            transport or httpx.HTTPTransport(trust_env=False),
+            transport if transport is not None else httpx.HTTPTransport(trust_env=False),
             manifest.auth_style,
             secret,
+            close_inner=owns_transport,
         )
         client = httpx.Client(
             timeout=httpx.Timeout(manifest.timeout_seconds),
@@ -318,7 +444,16 @@ def _run_sync(
 def _select_snapshots(
     manifest: ConnectorManifest,
     snapshot_id: str | None,
+    snapshot_ids: tuple[str, ...] | None,
 ) -> tuple[SnapshotManifest, ...] | None:
+    if snapshot_id is not None and snapshot_ids is not None:
+        return None
+    if snapshot_ids is not None:
+        requested = frozenset(snapshot_ids)
+        selected = tuple(snapshot for snapshot in manifest.snapshots if snapshot.id in requested)
+        if len(requested) != len(snapshot_ids) or len(selected) != len(requested):
+            return None
+        return selected
     if snapshot_id is None:
         return manifest.snapshots
     selected = tuple(snapshot for snapshot in manifest.snapshots if snapshot.id == snapshot_id)
@@ -897,42 +1032,67 @@ def _duration_ms(start: datetime, end: datetime) -> int:
     return max(0, int((end - start).total_seconds() * 1000))
 
 
+def _is_due(
+    schedule: SnapshotSchedule | None,
+    last_success: datetime | None,
+    now: datetime,
+) -> bool:
+    if schedule is None:
+        return False
+    if last_success is None:
+        return True
+    return now - last_success >= _SCHEDULE_INTERVALS[schedule]
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _public_sync_error(failure: _Failure) -> ConnectorSyncError:
+    error = _failure_exception(failure)
+    return ConnectorSyncError(
+        kind=failure.kind,
+        snapshot_id=failure.snapshot_id,
+        message=str(error),
+    )
+
+
 def _raise_failure(failure: _Failure) -> NoReturn:
+    raise _failure_exception(failure) from None
+
+
+def _failure_exception(failure: _Failure) -> ConnectorError:
     if failure.kind is _FailureKind.MANIFEST:
-        raise ConnectorManifestError(failure.path)
+        return ConnectorManifestError(failure.path)
     if failure.kind is _FailureKind.NOT_FOUND:
-        raise ConnectorNotFoundError(failure.connector_name)
+        return ConnectorNotFoundError(failure.connector_name)
     if failure.kind is _FailureKind.SNAPSHOT_NOT_FOUND:
-        raise ConnectorSnapshotNotFoundError(failure.connector_name, failure.snapshot_id)
+        return ConnectorSnapshotNotFoundError(failure.connector_name, failure.snapshot_id)
     if failure.kind is _FailureKind.SECRET:
-        raise ConnectorSecretResolutionError(failure.connector_name, failure.snapshot_id)
+        return ConnectorSecretResolutionError(failure.connector_name, failure.snapshot_id)
     if failure.kind is _FailureKind.TIMEOUT:
-        raise ConnectorTimeoutError(failure.connector_name, failure.snapshot_id)
+        return ConnectorTimeoutError(failure.connector_name, failure.snapshot_id)
     if failure.kind is _FailureKind.STATUS:
-        raise ConnectorStatusError(
+        return ConnectorStatusError(
             failure.connector_name,
             failure.snapshot_id,
             failure.status_code or 500,
         )
     if failure.kind is _FailureKind.SIZE:
-        raise ConnectorSizeLimitError(
+        return ConnectorSizeLimitError(
             failure.connector_name,
             failure.snapshot_id,
             failure.max_bytes or 1,
         )
     if failure.kind is _FailureKind.REDIRECT:
-        raise ConnectorRedirectError(failure.connector_name, failure.snapshot_id)
+        return ConnectorRedirectError(failure.connector_name, failure.snapshot_id)
     if failure.kind is _FailureKind.SECRET_EXPOSURE:
-        raise ConnectorSecretExposureError(failure.connector_name, failure.snapshot_id)
+        return ConnectorSecretExposureError(failure.connector_name, failure.snapshot_id)
     if failure.kind is _FailureKind.WRITE:
-        raise ConnectorWriteError(failure.connector_name, failure.snapshot_id)
+        return ConnectorWriteError(failure.connector_name, failure.snapshot_id)
     if failure.kind is _FailureKind.REGISTRATION:
-        raise ConnectorRegistrationError(failure.connector_name, failure.snapshot_id)
-    raise ConnectorConnectionError(failure.connector_name, failure.snapshot_id)
+        return ConnectorRegistrationError(failure.connector_name, failure.snapshot_id)
+    return ConnectorConnectionError(failure.connector_name, failure.snapshot_id)
 
 
-__all__ = ["Clock", "sync"]
+__all__ = ["Clock", "connector_status", "status", "sync", "sync_all"]

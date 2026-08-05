@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workctx.dev/schemas/connector-manifest.schema.json",
   "title": "Declarative connector manifest",
-  "description": "Operator-authored Level 1 connector configuration. Snapshot ids must be unique within a manifest; the runtime enforces this relational invariant in addition to this structural schema. The schedule field is metadata only in schema version 1.",
+  "description": "Operator-authored Level 1 connector configuration. Snapshot ids must be unique within a manifest; the runtime enforces this relational invariant in addition to this structural schema. Optional schedules use the hourly, daily, or weekly vocabulary; omission means manual-only.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -154,9 +154,11 @@
         },
         "schedule": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 256,
-          "pattern": "^[^\\u0000-\\u001F]+$"
+          "enum": [
+            "hourly",
+            "daily",
+            "weekly"
+          ]
         }
       }
     }

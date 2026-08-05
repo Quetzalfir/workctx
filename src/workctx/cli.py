@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         TargetApproval,
     )
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
+    from workctx.connectors import SyncResult
     from workctx.domain.transactions import AuditEvent, TransactionProposal
     from workctx.drafting import SendPreview, SendResult
     from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
@@ -240,7 +241,18 @@ def connector_list(
 
 @connector_app.command("sync")
 def connector_sync(
-    name: Annotated[str, typer.Argument(help="Connector manifest name.")],
+    name: Annotated[
+        str | None,
+        typer.Argument(help="Connector manifest name; omit when using --all."),
+    ] = None,
+    all_connectors: Annotated[
+        bool,
+        typer.Option("--all", help="Synchronize every configured connector."),
+    ] = False,
+    due: Annotated[
+        bool,
+        typer.Option("--due", help="With --all, synchronize only due scheduled snapshots."),
+    ] = False,
     snapshot: Annotated[
         str | None,
         typer.Option("--snapshot", help="Synchronize one named snapshot only."),
@@ -253,22 +265,141 @@ def connector_sync(
         bool, typer.Option("--json", help="Emit machine-readable JSON.")
     ] = False,
 ) -> None:
-    """Fetch and register snapshots for one declarative connector."""
+    """Fetch and register one connector or a failure-isolated connector batch."""
     begin_command("connector.sync", json_output=json_output)
 
-    from workctx.connectors import sync
+    _validate_connector_sync_selection(
+        name=name,
+        all_connectors=all_connectors,
+        due=due,
+        snapshot=snapshot,
+    )
+
+    from workctx.connectors import sync, sync_all
 
     root = resolve_cli_context(explicit_path=context_path)
     context_id = load_context_config(root).id
-    synced = sync(root, name, snapshot_id=snapshot)
-    result = cast("dict[str, JsonValue]", synced.model_dump(mode="json"))
+    if not all_connectors:
+        assert name is not None
+        synced = sync(root, name, snapshot_id=snapshot)
+        result = cast("dict[str, JsonValue]", synced.model_dump(mode="json"))
+        if json_output:
+            emit_success(result=result, context_id=context_id)
+        else:
+            _render_connector_sync_result(synced)
+        return
+
+    batch = sync_all(root, due_only=due)
+    result = cast("dict[str, JsonValue]", batch.model_dump(mode="json"))
+    failures = tuple(
+        (index, outcome)
+        for index, outcome in enumerate(batch.outcomes)
+        if outcome.error is not None
+    )
+    if not json_output:
+        for outcome in batch.outcomes:
+            if not outcome.attempted:
+                output_console.print(Text(f"{outcome.connector_name}: not due"))
+            elif outcome.error is not None:
+                output_console.print(
+                    Text(f"{outcome.connector_name}: failed ({outcome.error.message})")
+                )
+            elif outcome.result is not None:
+                _render_connector_sync_result(outcome.result)
+    if failures:
+        errors = [
+            CliDiagnostic(
+                code=f"CONNECTOR_{outcome.error.kind.value.upper()}",
+                message=sanitize_message(outcome.error.message),
+                path=f"$.outcomes[{index}].error",
+            )
+            for index, outcome in failures
+            if outcome.error is not None
+        ]
+        record_failure(result=result, context_id=context_id, errors=errors)
+        raise UserCorrectableError(
+            f"{len(failures)} connector synchronization(s) failed; partial results are available."
+        )
     if json_output:
         emit_success(result=result, context_id=context_id)
-    else:
-        for item in synced.snapshots:
-            output_console.print(
-                Text(f"{item.snapshot_id}: {item.disposition.value} ({item.byte_count} bytes)")
+
+
+@connector_app.command("status")
+def connector_status_command(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Report schedule, last success, and due state for every snapshot."""
+    begin_command("connector.status", json_output=json_output)
+
+    from workctx.connectors import status
+
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    reported = status(root)
+    result = cast("dict[str, JsonValue]", reported.model_dump(mode="json"))
+    result["count"] = len(reported.snapshots)
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+        return
+    if not reported.snapshots:
+        output_console.print(Text("No connector manifests are configured."))
+    for item in reported.snapshots:
+        schedule = item.schedule.value if item.schedule is not None else "manual"
+        last_success = (
+            item.last_success.isoformat().replace("+00:00", "Z")
+            if item.last_success is not None
+            else "never"
+        )
+        due_label = "due" if item.due_now else "not due"
+        output_console.print(
+            Text(
+                f"{item.connector_name}/{item.snapshot_id}: {schedule}; "
+                f"last success {last_success}; {due_label}"
             )
+        )
+
+
+def _validate_connector_sync_selection(
+    *,
+    name: str | None,
+    all_connectors: bool,
+    due: bool,
+    snapshot: str | None,
+) -> None:
+    message: str | None = None
+    if name is not None and all_connectors:
+        message = "A connector name and --all are mutually exclusive."
+    elif name is None and not all_connectors:
+        message = "Provide a connector name or --all."
+    elif due and not all_connectors:
+        message = "--due can only be used with --all."
+    elif snapshot is not None and all_connectors:
+        message = "--snapshot cannot be used with --all."
+    if message is None:
+        return
+    diagnostic = CliDiagnostic(
+        code="CONNECTOR_SYNC_SELECTION",
+        message=message,
+        path="$.selection",
+    )
+    record_failure(result={}, errors=[diagnostic])
+    raise UsageConfigurationError(message)
+
+
+def _render_connector_sync_result(synced: SyncResult) -> None:
+    for item in synced.snapshots:
+        output_console.print(
+            Text(
+                f"{synced.connector_name}/{item.snapshot_id}: "
+                f"{item.disposition.value} ({item.byte_count} bytes)"
+            )
+        )
 
 
 @app.command()
