@@ -77,7 +77,8 @@
           "items": {
             "type": "string"
           },
-          "uniqueItems": true
+          "uniqueItems": true,
+          "description": "Canonical workctx:// URIs of the people or teams whose response this task awaits."
         },
         "due_at": {
           "type": [
@@ -95,14 +96,16 @@
           "items": {
             "type": "string"
           },
-          "uniqueItems": true
+          "uniqueItems": true,
+          "description": "Canonical task IDs or workctx:// task URIs this task depends on. Producer invariant: entries must resolve to tasks; free text validates structurally but never joins the task graph, generated views, or traversal."
         },
         "blockers": {
           "type": "array",
           "items": {
             "type": "string"
           },
-          "uniqueItems": true
+          "uniqueItems": true,
+          "description": "Canonical task IDs or workctx:// task URIs blocking this task. Producer invariant: entries must resolve to tasks; record a non-task obstacle in the body or next_action instead."
         },
         "source_observations": {
           "type": "array",
