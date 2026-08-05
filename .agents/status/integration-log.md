@@ -53,3 +53,4 @@
 | 2026-08-04 | WP-730-browser-capture | capture | merge 4ac3055 | own-branch full suite 1618; skill lint 390 | accepted+integrated | 14th skill; scope extension for EXPECTED_SKILL_IDS |
 | 2026-08-04 | LEAD-install-all-fix | lead fix | direct e2a016e | agent install --agent all targets detected clients; 2 regression tests | committed | operator-found defect |
 | 2026-08-04 | WP-740-scheduled-sync | capture | merge | worktree gate 1652 | accepted+integrated | PHASE 3 COMPLETE |
+| 2026-08-05 | PHASE3-MATRIX-VERDICT | dispatch | run green 6+build, 0 failures | final tree: Phase 3 close + template-bridge healing + runner-safety round (lead tests stubbed, 8.3 path normalization) | CLOSED | local 1655; matrix confirms cross-platform |
