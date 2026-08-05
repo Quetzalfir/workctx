@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+import workctx.services.contexts as contexts_module
 from workctx.adapters.filesystem import registry as registry_module
 from workctx.adapters.filesystem.registry import (
     ContextRegistry,
@@ -23,6 +24,11 @@ from workctx.adapters.filesystem.registry import (
     unregister_context,
 )
 from workctx.services.contexts import initialize_context
+
+
+@pytest.fixture(autouse=True)
+def disable_automatic_registration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(contexts_module, "register_context", lambda *_args, **_kwargs: None)
 
 
 def _context(parent: Path, context_id: str) -> Path:

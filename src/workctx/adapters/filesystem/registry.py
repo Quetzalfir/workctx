@@ -12,13 +12,15 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from platformdirs import user_config_path
 
 from workctx.adapters.filesystem._paths import canonical_context_root
-from workctx.adapters.filesystem.serialization import load_yaml_model
+from workctx.adapters.filesystem.serialization import load_json_model, load_yaml_model
+from workctx.domain.artifacts import ArtifactManifest, ArtifactStatus
 from workctx.errors import ConflictError, WorkctxError
 from workctx.models.context import ContextConfig
 
@@ -41,6 +43,36 @@ class RegisteredContext:
     context_id: str
     root: Path
     active: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ContextInventoryStats:
+    """Cheap canonical-file and verified-ledger counts for one context."""
+
+    tasks: int
+    entities: int
+    evidence_notes: int
+    pending_inbox_artifacts: int
+    ledger_events: int
+    last_ledger_activity: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class ContextInventoryEntry:
+    """Advisory details for one registered context without projection access."""
+
+    context_id: str
+    root: Path
+    active: bool
+    configured_context_id: str | None
+    name: str | None
+    kind: str | None
+    profile: str | None
+    language: str | None
+    missing: bool
+    mismatched: bool
+    stats: ContextInventoryStats | None
+    error: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +245,23 @@ def list_contexts(*, registry_file: Path | None = None) -> tuple[RegisteredConte
     return ContextRegistry(registry_file).list()
 
 
+def list_context_inventory(
+    *,
+    registry_file: Path | None = None,
+) -> tuple[ContextInventoryEntry, ...]:
+    """Inspect registered contexts with read-only, projection-free filesystem reads.
+
+    A malformed or unavailable registry remains an error for this low-level API so callers can
+    distinguish it from a valid empty registry. Individual stale or unreadable registrations are
+    isolated into their own inventory rows.
+    """
+
+    return tuple(
+        _inspect_registered_context(registered)
+        for registered in ContextRegistry(registry_file).list()
+    )
+
+
 def register_context(
     context_id: str,
     context_root: Path,
@@ -243,6 +292,165 @@ def set_active_context(
 
 def get_active_context(*, registry_file: Path | None = None) -> Path | None:
     return ContextRegistry(registry_file).get_active()
+
+
+def _inspect_registered_context(registered: RegisteredContext) -> ContextInventoryEntry:
+    config_path = registered.root / "context.yaml"
+    try:
+        metadata = config_path.lstat()
+    except FileNotFoundError:
+        return _inventory_entry(registered, missing=True)
+    except OSError:
+        return _inventory_entry(
+            registered,
+            error="Unable to read context configuration.",
+        )
+
+    if not stat.S_ISREG(metadata.st_mode):
+        return _inventory_entry(
+            registered,
+            error="Context configuration is not a regular file.",
+        )
+
+    try:
+        with config_path.open("rb") as stream:
+            config = load_yaml_model(stream.read(), ContextConfig)
+    except Exception:
+        return _inventory_entry(
+            registered,
+            error="Unable to read context configuration.",
+        )
+
+    mismatched = config.id != registered.context_id
+    try:
+        from workctx.transactions import audit_summary
+
+        summary = audit_summary(registered.root)
+        stats = ContextInventoryStats(
+            tasks=_count_markdown_documents(registered.root / "03_work" / "tasks"),
+            entities=_count_markdown_documents(registered.root / "02_knowledge"),
+            evidence_notes=_count_markdown_documents(registered.root / "02_knowledge" / "evidence"),
+            pending_inbox_artifacts=_count_pending_inbox_artifacts(
+                registered.root / "00_inbox" / "manifests"
+            ),
+            ledger_events=summary.event_count,
+            last_ledger_activity=summary.last_timestamp,
+        )
+    except Exception:
+        return _inventory_entry(
+            registered,
+            config=config,
+            mismatched=mismatched,
+            error="Unable to read context inventory statistics.",
+        )
+
+    return _inventory_entry(
+        registered,
+        config=config,
+        mismatched=mismatched,
+        stats=stats,
+    )
+
+
+def _inventory_entry(
+    registered: RegisteredContext,
+    *,
+    config: ContextConfig | None = None,
+    missing: bool = False,
+    mismatched: bool = False,
+    stats: ContextInventoryStats | None = None,
+    error: str | None = None,
+) -> ContextInventoryEntry:
+    return ContextInventoryEntry(
+        context_id=registered.context_id,
+        root=registered.root,
+        active=registered.active,
+        configured_context_id=config.id if config is not None else None,
+        name=config.name if config is not None else None,
+        kind=config.kind.value if config is not None else None,
+        profile=config.profile.value if config is not None else None,
+        language=config.languages.user_interaction if config is not None else None,
+        missing=missing,
+        mismatched=mismatched,
+        stats=stats,
+        error=error,
+    )
+
+
+def _count_markdown_documents(directory: Path) -> int:
+    if not _inventory_directory_exists(directory):
+        return 0
+
+    count = 0
+    for current, directories, filenames in os.walk(
+        directory,
+        topdown=True,
+        onerror=_raise_walk_error,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directories[:] = [
+            name
+            for name in directories
+            if not name.startswith(".") and not _is_link(current_path / name)
+        ]
+        for name in filenames:
+            path = current_path / name
+            if (
+                name.startswith(".")
+                or name.casefold() == "readme.md"
+                or path.suffix.casefold() != ".md"
+                or _is_link(path)
+            ):
+                continue
+            if path.is_file():
+                count += 1
+    return count
+
+
+def _count_pending_inbox_artifacts(directory: Path) -> int:
+    if not _inventory_directory_exists(directory):
+        return 0
+
+    pending = 0
+    for path in sorted(directory.iterdir(), key=lambda candidate: candidate.name.casefold()):
+        if path.name.startswith("."):
+            continue
+        suffix = path.suffix.casefold()
+        if suffix not in {".json", ".yaml", ".yml"}:
+            continue
+        if _is_link(path) or not path.is_file():
+            raise RegistryError("Inbox manifests must be regular files")
+        payload = path.read_bytes()
+        manifest = (
+            load_json_model(payload, ArtifactManifest)
+            if suffix == ".json"
+            else load_yaml_model(payload, ArtifactManifest)
+        )
+        if manifest.status is ArtifactStatus.PENDING:
+            pending += 1
+    return pending
+
+
+def _inventory_directory_exists(directory: Path) -> bool:
+    try:
+        metadata = directory.lstat()
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise RegistryError("Context inventory path is not a regular directory")
+    return True
+
+
+def _is_link(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    return is_junction is not None and bool(is_junction())
+
+
+def _raise_walk_error(error: OSError) -> None:
+    raise error
 
 
 @contextmanager

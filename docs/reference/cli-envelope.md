@@ -10,6 +10,9 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | --- | --- | --- |
 | `doctor` | `doctor` | `checks` |
 | `context init` | `context.init` | `root`, `context` |
+| `context register` | `context.register` | `id`, `path`, `active` |
+| `context list` | `context.list` | `count`, `contexts` |
+| `context unregister` | `context.unregister` | `id`, `removed` |
 | `context inspect` | `context.inspect` | `root`, `context` |
 | `context validate` | `context.validate` | `root`, `issues` |
 | `validate` | `context.validate` | `root`, `issues` |
