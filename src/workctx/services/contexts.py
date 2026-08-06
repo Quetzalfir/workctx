@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from workctx.adapters.filesystem.registry import register_context
+from workctx.adapters.filesystem.registry import register_context, register_context_if_changed
 from workctx.adapters.filesystem.serialization import dump_yaml_bytes
 from workctx.errors import ContextAlreadyExistsError, ContextNotFoundError, InvalidContextError
 from workctx.models.context import (
@@ -65,6 +65,16 @@ def load_context_config(root: Path) -> ContextConfig:
         raise
     except (OSError, yaml.YAMLError, ValueError) as exc:
         raise InvalidContextError(f"Unable to load {config_path}: {exc}") from exc
+
+
+def register_resolved_context(root: Path) -> None:
+    """Best-effort, non-blocking advisory registration at the CLI boundary."""
+
+    try:
+        config = load_context_config(root)
+        register_context_if_changed(config.id, root, replace=True)
+    except Exception:
+        return
 
 
 def initialize_context(

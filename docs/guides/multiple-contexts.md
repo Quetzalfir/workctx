@@ -46,6 +46,12 @@ company-wide roll-up view across projects; consolidated multi-context views
 are a later-phase feature. Canonical URIs include the context ID, so similar
 task IDs in two contexts never collide.
 
+## Context registry
+
+The advisory context registry is machine-local. Set `WORKCTX_CONTEXT_REGISTRY` to a full plain
+filesystem path when the registry JSON file must live somewhere other than its platform-specific
+default; this value is ordinary configuration, not a secret.
+
 ## One context or many?
 
 Rule of thumb: separate boundaries (different clients, different employers,

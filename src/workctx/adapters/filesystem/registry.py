@@ -26,6 +26,7 @@ from workctx.models.context import ContextConfig
 
 REGISTRY_SCHEMA_VERSION = 1
 REGISTRY_FILENAME = "contexts.json"
+CONTEXT_REGISTRY_ENV = "WORKCTX_CONTEXT_REGISTRY"
 _MUTATION_GUARD_TIMEOUT_SECONDS = 5.0
 _MUTATION_GUARD_POLL_SECONDS = 0.01
 
@@ -36,6 +37,18 @@ class RegistryError(WorkctxError):
 
 class RegistryConflictError(ConflictError):
     """Raised when a registry mutation conflicts with another writer or registration."""
+
+
+def _default_registry_path() -> Path:
+    override = os.environ.get(CONTEXT_REGISTRY_ENV)
+    if override is None:
+        return (user_config_path("workctx", appauthor=False) / REGISTRY_FILENAME).absolute()
+    if not override.strip():
+        raise RegistryError(f"{CONTEXT_REGISTRY_ENV} must name an absolute registry file")
+    selected = Path(override).expanduser()
+    if not selected.is_absolute():
+        raise RegistryError(f"{CONTEXT_REGISTRY_ENV} must name an absolute registry file")
+    return selected.absolute()
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +112,7 @@ class ContextRegistry:
         self.path = (
             registry_file.expanduser().absolute()
             if registry_file is not None
-            else user_config_path("workctx", appauthor=False) / REGISTRY_FILENAME
+            else _default_registry_path()
         )
         _reject_registry_inside_context(self.path)
 
@@ -140,6 +153,53 @@ class ContextRegistry:
             if updated != snapshot:
                 self._save(updated)
             return RegisteredContext(context_id, root, active_id == context_id)
+
+    def register_if_changed(
+        self,
+        context_id: str,
+        context_root: Path,
+        *,
+        replace: bool = False,
+    ) -> RegisteredContext:
+        """Register only when absent or moved, never waiting on a busy registry."""
+
+        root = canonical_context_root(context_root)
+        _require_registry_outside_roots(self.path, (root,))
+        actual_id = _load_registered_context_id(root)
+        if context_id != actual_id:
+            raise RegistryError(
+                f"Registry ID '{context_id}' does not match context.yaml ID '{actual_id}'"
+            )
+        snapshot = self._load()
+        existing = next(
+            (item for item in snapshot.contexts if item.context_id == context_id),
+            None,
+        )
+        if existing is not None and existing.root == root:
+            return existing
+
+        with _registry_mutation_guard(self.path, timeout_seconds=0.0):
+            snapshot = self._load()
+            contexts = {item.context_id: item.root for item in snapshot.contexts}
+            current = contexts.get(context_id)
+            if current == root:
+                return RegisteredContext(
+                    context_id,
+                    root,
+                    snapshot.active_context_id == context_id,
+                )
+            if current is not None and not replace:
+                raise RegistryConflictError(
+                    f"Context '{context_id}' is already registered to another root"
+                )
+            contexts[context_id] = root
+            updated = _snapshot(snapshot.active_context_id, contexts)
+            self._save(updated)
+            return RegisteredContext(
+                context_id,
+                root,
+                updated.active_context_id == context_id,
+            )
 
     def unregister(self, context_id: str) -> bool:
         """Idempotently remove a registration and clear it if active."""
@@ -274,6 +334,20 @@ def register_context(
         context_id,
         context_root,
         make_active=make_active,
+        replace=replace,
+    )
+
+
+def register_context_if_changed(
+    context_id: str,
+    context_root: Path,
+    *,
+    replace: bool = False,
+    registry_file: Path | None = None,
+) -> RegisteredContext:
+    return ContextRegistry(registry_file).register_if_changed(
+        context_id,
+        context_root,
         replace=replace,
     )
 
@@ -454,14 +528,18 @@ def _raise_walk_error(error: OSError) -> None:
 
 
 @contextmanager
-def _registry_mutation_guard(registry_path: Path) -> Iterator[None]:
+def _registry_mutation_guard(
+    registry_path: Path,
+    *,
+    timeout_seconds: float = _MUTATION_GUARD_TIMEOUT_SECONDS,
+) -> Iterator[None]:
     """Serialize mutations with a crash-released OS lock on a stable sentinel."""
 
     _reject_registry_inside_context(registry_path)
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     guard_path = registry_path.with_name(f".{registry_path.name}.lock")
     descriptor = _open_registry_mutation_guard(guard_path)
-    deadline = time.monotonic() + _MUTATION_GUARD_TIMEOUT_SECONDS
+    deadline = time.monotonic() + timeout_seconds
 
     try:
         while not _try_lock_registry_guard(descriptor):

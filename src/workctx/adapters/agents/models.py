@@ -257,6 +257,25 @@ class SkillOverrideWarning:
 
 
 @dataclass(frozen=True, slots=True)
+class ManagedFileMerge:
+    """Exact three-way state for an edited managed file behind the package."""
+
+    path: str
+    recorded_at_adoption_hash: str
+    packaged_now_hash: str
+    local_hash: str
+
+    def __post_init__(self) -> None:
+        if self.recorded_at_adoption_hash == self.packaged_now_hash:
+            raise ValueError("A merge candidate requires a newer packaged version")
+        if self.local_hash in {
+            self.recorded_at_adoption_hash,
+            self.packaged_now_hash,
+        }:
+            raise ValueError("A merge candidate must contain distinct operator-edited bytes")
+
+
+@dataclass(frozen=True, slots=True)
 class DriftDetail:
     """One exact drift observation."""
 
@@ -290,6 +309,7 @@ class AdapterStatus:
     personalization_layers: tuple[PersonalizationLayerStatus, ...] = ()
     skill_overrides: tuple[SkillOverrideStatus, ...] = ()
     skill_override_warnings: tuple[SkillOverrideWarning, ...] = ()
+    merge_candidates: tuple[ManagedFileMerge, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -327,6 +347,8 @@ class AdapterPlan:
     blocked_reason: str | None = None
     personalization_layers: tuple[PersonalizationLayerStatus, ...] = ()
     skill_overrides: tuple[SkillOverrideStatus, ...] = ()
+    merge_candidates: tuple[ManagedFileMerge, ...] = ()
+    adopts_trust: bool = False
 
     @property
     def requires_approval(self) -> bool:
@@ -335,8 +357,13 @@ class AdapterPlan:
     @property
     def is_noop(self) -> bool:
         return (
-            not any(change.operation is not FileOperation.VERIFY for change in self.changes)
+            not any(
+                change.operation
+                in {FileOperation.CREATE, FileOperation.REPLACE, FileOperation.DELETE}
+                for change in self.changes
+            )
             and self.blocked_reason is None
+            and not self.adopts_trust
         )
 
 

@@ -6,7 +6,7 @@ import hashlib
 import json
 import secrets
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib import resources
@@ -69,6 +69,7 @@ from .manifest import (
     SkillAdapterEntry,
     dump_manifest_bytes,
     load_manifest,
+    source_set_aggregate_hash,
 )
 from .models import (
     AdapterPlan,
@@ -82,12 +83,14 @@ from .models import (
     FeatureState,
     FeatureStatus,
     FileOperation,
+    ManagedFileMerge,
     OpenedContext,
     OperationAction,
     OperationResult,
     PersonalizationLayerStatus,
     PlannedChange,
     SkillOverrideStatus,
+    SourceOrigin,
     TargetApproval,
 )
 from .overrides import (
@@ -116,8 +119,10 @@ from .sources import (
     CanonicalRegistryMissingError,
     CanonicalSkill,
     CanonicalSourceSet,
+    compose_canonical_skill,
     load_canonical_sources,
     load_context_skill_overrides,
+    load_packaged_canonical_sources,
     load_packaged_skill_primary,
     restore_packaged_skill_sources,
 )
@@ -137,6 +142,62 @@ class _PreparedPlan:
     next_manifest_digest: str | None
     operations_digest: str | None
     codex_restore_names: frozenset[str]
+    adopt_manifest_digest: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CanonicalFileChange:
+    """One package-driven canonical file transition authorized by its manifest hash."""
+
+    path: str
+    content: bytes | None
+    recorded_hash: str | None
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ManagedFileState:
+    """A locally edited managed file preserved against its packaged lineage."""
+
+    path: str
+    recorded_at_adoption_hash: str
+    packaged_now_hash: str
+    local_hash: str
+
+    @property
+    def merge_candidate(self) -> ManagedFileMerge | None:
+        if (
+            self.packaged_now_hash == self.recorded_at_adoption_hash
+            or self.local_hash == self.packaged_now_hash
+        ):
+            return None
+        return ManagedFileMerge(
+            path=self.path,
+            recorded_at_adoption_hash=self.recorded_at_adoption_hash,
+            packaged_now_hash=self.packaged_now_hash,
+            local_hash=self.local_hash,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceSelection:
+    """Effective inputs plus package-refresh and preservation metadata."""
+
+    sources: CanonicalSourceSet
+    fingerprint: str
+    canonical_changes: tuple[_CanonicalFileChange, ...] = ()
+    managed_file_states: tuple[_ManagedFileState, ...] = ()
+    preserved_source_hashes: tuple[tuple[str, str], ...] = ()
+    preserved_registry_hash: str | None = None
+    codex_restore_names: frozenset[str] = frozenset()
+
+    @property
+    def merge_candidates(self) -> tuple[ManagedFileMerge, ...]:
+        return tuple(
+            candidate
+            for state in self.managed_file_states
+            if (candidate := state.merge_candidate) is not None
+        )
 
 
 def _pristine_template_bridge_hash(bridge_path: str) -> str | None:
@@ -177,6 +238,7 @@ def _plan_digest(
     blocked_reason: str | None,
     target_snapshots: tuple[tuple[str, FileSnapshot], ...],
     install_record_fingerprint: str | None,
+    adopt_manifest_digest: str | None,
 ) -> str:
     value = {
         "root": str(root),
@@ -196,6 +258,7 @@ def _plan_digest(
         "source_fingerprint": source_fingerprint,
         "blocked_reason": blocked_reason,
         "install_record_fingerprint": install_record_fingerprint,
+        "adopt_manifest_digest": adopt_manifest_digest,
         "target_snapshots": [
             {
                 "path": path,
@@ -212,6 +275,88 @@ def _plan_digest(
     }
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _source_selection_digest(
+    sources: CanonicalSourceSet,
+    canonical_changes: tuple[_CanonicalFileChange, ...],
+    managed_file_states: tuple[_ManagedFileState, ...],
+    preserved_source_hashes: tuple[tuple[str, str], ...],
+    preserved_registry_hash: str | None,
+    codex_restore_names: frozenset[str],
+) -> str:
+    value = {
+        "sources": sources.fingerprint,
+        "canonical_changes": [
+            {
+                "path": change.path,
+                "desired_hash": (None if change.content is None else content_hash(change.content)),
+                "recorded_hash": change.recorded_hash,
+            }
+            for change in canonical_changes
+        ],
+        "managed_file_states": [
+            {
+                "path": state.path,
+                "recorded_at_adoption_hash": state.recorded_at_adoption_hash,
+                "packaged_now_hash": state.packaged_now_hash,
+                "local_hash": state.local_hash,
+            }
+            for state in managed_file_states
+        ],
+        "preserved_source_hashes": list(preserved_source_hashes),
+        "preserved_registry_hash": preserved_registry_hash,
+        "codex_restore_names": sorted(codex_restore_names),
+    }
+    canonical = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return content_hash(canonical)
+
+
+def _canonical_skill_files(skill: CanonicalSkill) -> dict[str, bytes]:
+    return {
+        skill.path: skill.content,
+        **{
+            f".agents/skills/{skill.name}/{resource.relative_path}": resource.content
+            for resource in skill.resources
+        },
+    }
+
+
+def _managed_file_message(state: _ManagedFileState) -> str:
+    prefix = (
+        "Merge required for edited managed file"
+        if state.merge_candidate is not None
+        else "Operator-edited managed file preserved"
+    )
+    return (
+        f"{prefix}: path={state.path}; "
+        f"recorded-at-adoption={state.recorded_at_adoption_hash}; "
+        f"packaged-now={state.packaged_now_hash}; local={state.local_hash}"
+    )
+
+
+def _managed_file_plan_changes(
+    states: tuple[_ManagedFileState, ...],
+) -> tuple[PlannedChange, ...]:
+    return tuple(
+        PlannedChange(
+            path=state.path,
+            operation=FileOperation.PRESERVE,
+            observed_hash=state.local_hash,
+            desired_hash=state.packaged_now_hash,
+            reason=_managed_file_message(state),
+        )
+        for state in states
+        if state.merge_candidate is not None
+    )
+
+
+def _managed_file_status_warnings(
+    states: tuple[_ManagedFileState, ...],
+) -> tuple[str, ...]:
+    return tuple(
+        _managed_file_message(state) for state in states if state.merge_candidate is not None
+    )
 
 
 def _observe_plan_target(
@@ -651,6 +796,253 @@ def _render_source_skill(client: AgentClient, skill: CanonicalSkill) -> Rendered
     )
 
 
+def _select_codex_context_sources(
+    local: CanonicalSourceSet,
+    packaged: CanonicalSourceSet,
+    manifest: AdapterManifest,
+    codex_restore_names: frozenset[str],
+) -> _SourceSelection:
+    """Select package refreshes only for manifest-tracked pristine context files."""
+
+    if local.origin is not SourceOrigin.LOCAL:
+        fingerprint = _source_selection_digest(
+            local,
+            (),
+            (),
+            (),
+            None,
+            codex_restore_names,
+        )
+        return _SourceSelection(
+            sources=local,
+            fingerprint=fingerprint,
+            codex_restore_names=codex_restore_names,
+        )
+
+    local_skills = {skill.name: skill for skill in local.skills}
+    packaged_skills = {skill.name: skill for skill in packaged.skills}
+    recorded_skills = {skill.name: skill for skill in manifest.skills}
+    active_overrides = local.skill_overrides.by_name
+    changes: list[_CanonicalFileChange] = []
+    managed_states: list[_ManagedFileState] = []
+    preserved_hashes: dict[str, str] = {}
+
+    recorded_registry_hash = manifest.registry.content_hash
+    local_registry_hash = local.registry_hash
+    packaged_registry_hash = packaged.registry_hash
+    package_removed_skills = set(local_skills) - set(packaged_skills)
+    registry_operator_edited = local_registry_hash not in {
+        recorded_registry_hash,
+        packaged_registry_hash,
+    }
+    use_packaged_registry = not registry_operator_edited and not package_removed_skills
+    preserved_registry_hash: str | None = None
+    if registry_operator_edited:
+        managed_states.append(
+            _ManagedFileState(
+                path=manifest.registry.path,
+                recorded_at_adoption_hash=recorded_registry_hash,
+                packaged_now_hash=packaged_registry_hash,
+                local_hash=local_registry_hash,
+            )
+        )
+        preserved_registry_hash = recorded_registry_hash
+    elif use_packaged_registry and local_registry_hash != packaged_registry_hash:
+        changes.append(
+            _CanonicalFileChange(
+                path=manifest.registry.path,
+                content=packaged.registry_content,
+                recorded_hash=recorded_registry_hash,
+                reason="Refresh pristine canonical skill registry from the current package",
+            )
+        )
+
+    registry_source = packaged if use_packaged_registry else local
+    selected_skills: list[CanonicalSkill] = []
+    for selected_registry_skill in registry_source.skills:
+        name = selected_registry_skill.name
+        local_skill = local_skills.get(name)
+        packaged_skill = packaged_skills.get(name)
+        override = active_overrides.get(name)
+
+        if packaged_skill is None:
+            if local_skill is not None:
+                selected_skills.append(local_skill)
+            continue
+
+        packaged_files = _canonical_skill_files(packaged_skill)
+        if override is not None:
+            override_files = dict(packaged_files)
+            override_files[packaged_skill.path] = override.file.content
+            selected_skills.append(
+                compose_canonical_skill(
+                    packaged_skill,
+                    override_files,
+                    override=override,
+                )
+            )
+            continue
+
+        if name in codex_restore_names:
+            selected_skills.append(packaged_skill)
+            continue
+
+        if local_skill is None:
+            selected_skills.append(packaged_skill)
+            changes.extend(
+                _CanonicalFileChange(
+                    path=path,
+                    content=content,
+                    recorded_hash=None,
+                    reason="Materialize a newly packaged canonical skill file",
+                )
+                for path, content in sorted(packaged_files.items())
+            )
+            continue
+
+        recorded = recorded_skills.get(name)
+        if recorded is None or recorded.effective_mode != "native-verified":
+            selected_skills.append(local_skill)
+            continue
+        assert recorded.source_set is not None
+        recorded_files = {source.path: source.content_hash for source in recorded.source_set.files}
+        local_files = _canonical_skill_files(local_skill)
+        selected_files: dict[str, bytes] = {}
+        for path in sorted(set(recorded_files) | set(local_files) | set(packaged_files)):
+            recorded_hash = recorded_files.get(path)
+            local_content = local_files.get(path)
+            packaged_content = packaged_files.get(path)
+            local_hash = None if local_content is None else content_hash(local_content)
+            packaged_hash = None if packaged_content is None else content_hash(packaged_content)
+
+            if packaged_content is None:
+                if local_content is None:
+                    continue
+                if recorded_hash is not None and local_hash == recorded_hash:
+                    changes.append(
+                        _CanonicalFileChange(
+                            path=path,
+                            content=None,
+                            recorded_hash=recorded_hash,
+                            reason="Remove a pristine canonical skill resource no longer packaged",
+                        )
+                    )
+                    continue
+                selected_files[path] = local_content
+                if recorded_hash is not None:
+                    preserved_hashes[path] = recorded_hash
+                continue
+
+            assert packaged_hash is not None
+            if local_content is None:
+                if recorded_hash is not None:
+                    raise CanonicalInputMissingError(
+                        f"Tracked canonical skill file is missing: {path}",
+                        path=path,
+                        skill=name,
+                    )
+                selected_files[path] = packaged_content
+                changes.append(
+                    _CanonicalFileChange(
+                        path=path,
+                        content=packaged_content,
+                        recorded_hash=None,
+                        reason="Materialize a newly packaged canonical skill file",
+                    )
+                )
+                continue
+
+            if recorded_hash is None:
+                selected_files[path] = local_content
+                continue
+            if local_hash == recorded_hash:
+                selected_files[path] = packaged_content
+                if local_hash != packaged_hash:
+                    changes.append(
+                        _CanonicalFileChange(
+                            path=path,
+                            content=packaged_content,
+                            recorded_hash=recorded_hash,
+                            reason=(
+                                "Refresh pristine manifest-tracked canonical skill file "
+                                "from the current package"
+                            ),
+                        )
+                    )
+                continue
+            if local_hash == packaged_hash:
+                selected_files[path] = local_content
+                continue
+
+            selected_files[path] = local_content
+            preserved_hashes[path] = recorded_hash
+            managed_states.append(
+                _ManagedFileState(
+                    path=path,
+                    recorded_at_adoption_hash=recorded_hash,
+                    packaged_now_hash=packaged_hash,
+                    local_hash=cast(str, local_hash),
+                )
+            )
+
+        template = packaged_skill if use_packaged_registry else selected_registry_skill
+        selected_skills.append(compose_canonical_skill(template, selected_files))
+
+    selected_sources = replace(
+        local,
+        registry_content=registry_source.registry_content,
+        registry_hash=registry_source.registry_hash,
+        skills=tuple(sorted(selected_skills, key=lambda skill: skill.name)),
+    )
+    ordered_changes = tuple(sorted(changes, key=lambda change: change.path))
+    ordered_states = tuple(sorted(managed_states, key=lambda state: state.path))
+    ordered_preserved = tuple(sorted(preserved_hashes.items()))
+    fingerprint = _source_selection_digest(
+        selected_sources,
+        ordered_changes,
+        ordered_states,
+        ordered_preserved,
+        preserved_registry_hash,
+        codex_restore_names,
+    )
+    return _SourceSelection(
+        sources=selected_sources,
+        fingerprint=fingerprint,
+        canonical_changes=ordered_changes,
+        managed_file_states=ordered_states,
+        preserved_source_hashes=ordered_preserved,
+        preserved_registry_hash=preserved_registry_hash,
+        codex_restore_names=codex_restore_names,
+    )
+
+
+def _bridge_managed_file_state(
+    manifest: AdapterManifest | None,
+    sources: CanonicalSourceSet,
+    target: FileSnapshot,
+) -> _ManagedFileState | None:
+    if (
+        manifest is None
+        or manifest.components is None
+        or not target.exists
+        or target.content_hash is None
+    ):
+        return None
+    bridge = manifest.components.instruction_bridge
+    recorded_at_adoption = bridge.source.content_hash
+    packaged_now = (
+        sources.bridge_hash if bridge.ownership == "generated" else sources.bridge_template_hash
+    )
+    if target.content_hash in {recorded_at_adoption, packaged_now}:
+        return None
+    return _ManagedFileState(
+        path=bridge.target.path,
+        recorded_at_adoption_hash=recorded_at_adoption,
+        packaged_now_hash=packaged_now,
+        local_hash=target.content_hash,
+    )
+
+
 class AgentAdapterService:
     """Project-scoped agent adapter lifecycle service with injectable client discovery."""
 
@@ -685,6 +1077,48 @@ class AgentAdapterService:
             executable_finder=self._finder,
             version_probe=self._probe,
             spawner=self._spawner,
+        )
+
+    @staticmethod
+    def _load_source_selection(
+        layout: InstallationLayout,
+        manifest: AdapterManifest | None,
+        personalization: PersonalizationLayers,
+        skill_overrides: SkillOverrides | None = None,
+    ) -> _SourceSelection:
+        selected_overrides = (
+            load_context_skill_overrides(
+                layout.root,
+                include_context=layout.is_context,
+            )
+            if skill_overrides is None
+            else skill_overrides
+        )
+        local = load_canonical_sources(
+            layout.root,
+            layout.client,
+            personalization=personalization,
+            skill_overrides=selected_overrides,
+            include_context_overrides=layout.is_context,
+        )
+        codex_restore_names = _removed_codex_override_names(manifest, local)
+        local = restore_packaged_skill_sources(local, codex_restore_names)
+        if manifest is None or layout.client is not AgentClient.CODEX or not layout.is_context:
+            return _SourceSelection(
+                sources=local,
+                fingerprint=local.fingerprint,
+                codex_restore_names=codex_restore_names,
+            )
+        packaged = load_packaged_canonical_sources(
+            layout.root,
+            layout.client,
+            personalization=personalization,
+        )
+        return _select_codex_context_sources(
+            local,
+            packaged,
+            manifest,
+            codex_restore_names,
         )
 
     def status(self, root: Path, client: AgentClient) -> AdapterStatus:
@@ -908,12 +1342,11 @@ class AgentAdapterService:
                 repair_blocked=True,
             )
         try:
-            sources = load_canonical_sources(
-                layout.root,
-                client,
-                personalization=personalization,
-                skill_overrides=skill_overrides,
-                include_context_overrides=layout.is_context,
+            source_selection = self._load_source_selection(
+                layout,
+                manifest,
+                personalization,
+                skill_overrides,
             )
         except CanonicalInputMissingError as error:
             return self._status_missing_input(
@@ -951,24 +1384,10 @@ class AgentAdapterService:
                 warnings=(str(error),),
                 repair_blocked=True,
             )
-        removed_codex_overrides = _removed_codex_override_names(manifest, sources)
-        try:
-            sources = restore_packaged_skill_sources(sources, removed_codex_overrides)
-        except InvalidAdapterStateError as error:
-            return AdapterStatus(
-                client,
-                AdapterState.INVALID,
-                layout.manifest_path,
-                drift=(DriftDetail(DriftReason.SOURCE_INVALID, detail=str(error)),),
-                instruction_bridge=FeatureStatus(FeatureState.MISSING),
-                mcp_configuration=mcp,
-                warnings=(str(error),),
-                repair_blocked=True,
-            )
         return self._derive_freshness(
             layout,
             manifest,
-            sources,
+            source_selection,
             transaction.orphan_directories,
             authority_warning,
         )
@@ -1208,13 +1627,16 @@ class AgentAdapterService:
         self,
         layout: InstallationLayout,
         manifest: AdapterManifest,
-        sources: CanonicalSourceSet,
+        source_selection: _SourceSelection,
         orphan_directories: tuple[str, ...],
         authority_warning: str | None,
     ) -> AdapterStatus:
+        sources = source_selection.sources
         safe = SafeRoot(layout.root)
         drift: list[DriftDetail] = []
         warnings = [f"Orphan staging directory: {path}" for path in orphan_directories]
+        managed_file_states = list(source_selection.managed_file_states)
+        warnings.extend(_managed_file_status_warnings(source_selection.managed_file_states))
         if authority_warning is not None:
             warnings.append(authority_warning)
         try:
@@ -1493,6 +1915,11 @@ class AgentAdapterService:
                     warnings=tuple(warnings),
                     repair_blocked=True,
                 )
+            bridge_managed_state = _bridge_managed_file_state(manifest, sources, target)
+            if bridge_managed_state is not None:
+                managed_file_states.append(bridge_managed_state)
+                if bridge_managed_state.merge_candidate is not None:
+                    warnings.append(_managed_file_message(bridge_managed_state))
             if not target.exists:
                 if bridge.ownership == "user-owned":
                     bridge_feature = FeatureStatus(
@@ -1520,7 +1947,10 @@ class AgentAdapterService:
                         )
                     )
             elif bridge.ownership == "generated":
-                if target.content_hash != bridge.target.content_hash:
+                if (
+                    target.content_hash != bridge.target.content_hash
+                    and target.content_hash != sources.bridge_hash
+                ):
                     generated_modified = True
                     bridge_feature = FeatureStatus(
                         FeatureState.DIVERGED,
@@ -1626,6 +2056,11 @@ class AgentAdapterService:
                 or backup_modified
                 or any(item.reason is DriftReason.SOURCE_MISSING for item in drift)
             ),
+            merge_candidates=tuple(
+                candidate
+                for item in sorted(managed_file_states, key=lambda state: state.path)
+                if (candidate := item.merge_candidate) is not None
+            ),
         )
 
     def plan_install(self, root: Path, client: AgentClient) -> AdapterPlan:
@@ -1635,6 +2070,11 @@ class AgentAdapterService:
             return self._prepare_install_or_repair(root, client, OperationAction.INSTALL)
         except SafeFilesystemError as error:
             raise InvalidAdapterStateError(str(error)) from error
+
+    def forget(self, root: Path) -> tuple[AgentClient, ...]:
+        """Remove only machine-local trusted entries for one resolved root."""
+
+        return self._install_records.forget(root)
 
     def _install_record_for_plan(
         self,
@@ -1669,6 +2109,110 @@ class AgentAdapterService:
             )
         return observation, None
 
+    def _prepare_untracked_adoption(
+        self,
+        layout: InstallationLayout,
+        manifest: AdapterManifest,
+        manifest_snapshot: FileSnapshot,
+        observations: dict[str, FileSnapshot],
+        install_record: InstallRecordObservation,
+        *,
+        personalization: PersonalizationLayers,
+        skill_overrides: SkillOverrides,
+    ) -> AdapterPlan:
+        """Plan only a trust-record adoption after exact project-state verification."""
+
+        if manifest_snapshot.content_hash is None:
+            raise InvalidAdapterStateError("Untracked manifest content hash is unavailable")
+        expected: dict[str, str] = {manifest.registry.path: manifest.registry.content_hash}
+        for skill in manifest.skills:
+            expected[skill.canonical.path] = skill.canonical.content_hash
+            if skill.effective_mode == "native-verified":
+                assert skill.source_set is not None
+                candidates = (
+                    (source.path, source.content_hash) for source in skill.source_set.files
+                )
+            else:
+                candidates = (
+                    (generated.path, generated.content_hash) for generated in skill.generated or ()
+                )
+            for path, digest in candidates:
+                previous = expected.setdefault(path, digest)
+                if previous != digest:
+                    raise InvalidAdapterStateError(
+                        "Untracked manifest assigns conflicting hashes to one project path"
+                    )
+        if manifest.components is not None:
+            bridge = manifest.components.instruction_bridge
+            expected[bridge.target.path] = bridge.target.content_hash
+            mcp = manifest.components.mcp_configuration
+            if mcp.path is not None and mcp.content_hash is not None:
+                expected[mcp.path] = mcp.content_hash
+        for backup in manifest.backups or ():
+            expected[backup.path] = backup.content_hash
+
+        failures: list[str] = []
+        for path, digest in sorted(expected.items()):
+            target = _observe_plan_target(SafeRoot(layout.root), path, observations)
+            if not target.exists or target.content_hash != digest:
+                failures.append(path)
+        if failures:
+            return self._report_only_plan(
+                layout,
+                OperationAction.INSTALL,
+                "Untracked adapter state does not exactly match its complete manifest",
+                observations,
+                install_record=install_record,
+                affected_paths=tuple(expected),
+                personalization=personalization,
+                skill_overrides=skill_overrides,
+            )
+
+        changes = (
+            PlannedChange(
+                path=layout.manifest_path,
+                operation=FileOperation.VERIFY,
+                observed_hash=manifest_snapshot.content_hash,
+                desired_hash=manifest_snapshot.content_hash,
+                reason=(
+                    "Adopt an exact untracked manifest into the machine-local trust record; "
+                    "no project file will be changed"
+                ),
+            ),
+            *(
+                PlannedChange(
+                    path=path,
+                    operation=FileOperation.VERIFY,
+                    observed_hash=digest,
+                    desired_hash=digest,
+                    reason="Verify exact manifest-recorded state before trust adoption",
+                )
+                for path, digest in sorted(expected.items())
+            ),
+        )
+        personalization_statuses = personalization.statuses(merged=False)
+        return self._save_plan(
+            layout,
+            OperationAction.INSTALL,
+            (
+                *_skill_override_plan_changes(skill_overrides),
+                *_personalization_plan_changes(
+                    personalization,
+                    personalization_statuses,
+                ),
+                *changes,
+            ),
+            (),
+            None,
+            None,
+            (),
+            observations,
+            install_record,
+            personalization_layers=personalization_statuses,
+            skill_overrides=skill_overrides.statuses,
+            adopt_manifest_digest=manifest_snapshot.content_hash,
+        )
+
     def _report_only_plan(
         self,
         layout: InstallationLayout,
@@ -1681,6 +2225,7 @@ class AgentAdapterService:
         affected_paths: tuple[str, ...] = (),
         personalization: PersonalizationLayers | None = None,
         skill_overrides: SkillOverrides | None = None,
+        managed_file_states: tuple[_ManagedFileState, ...] = (),
     ) -> AdapterPlan:
         """Return a no-write plan when any D-032 authority factor fails."""
 
@@ -1705,6 +2250,7 @@ class AgentAdapterService:
             )
         if skill_overrides is not None:
             changes = (*_skill_override_plan_changes(skill_overrides), *changes)
+        changes = (*_managed_file_plan_changes(managed_file_states), *changes)
         return self._save_plan(
             layout,
             action,
@@ -1717,6 +2263,11 @@ class AgentAdapterService:
             install_record,
             personalization_layers=personalization_statuses,
             skill_overrides=skill_override_statuses,
+            merge_candidates=tuple(
+                candidate
+                for state in managed_file_states
+                if (candidate := state.merge_candidate) is not None
+            ),
         )
 
     def plan_repair(self, root: Path, client: AgentClient) -> AdapterPlan:
@@ -1935,21 +2486,35 @@ class AgentAdapterService:
                 layout.root,
                 include_context=layout.is_context,
             )
-            sources = load_canonical_sources(
-                layout.root,
-                client,
-                personalization=personalization,
-                include_context_overrides=layout.is_context,
+            source_selection = self._load_source_selection(
+                layout,
+                old_manifest,
+                personalization,
             )
         except SafeFilesystemError as error:
             raise InvalidAdapterStateError(str(error)) from error
-        codex_restore_names = _removed_codex_override_names(old_manifest, sources)
-        sources = restore_packaged_skill_sources(sources, codex_restore_names)
+        sources = source_selection.sources
+        codex_restore_names = source_selection.codex_restore_names
         install_record, authority_error = self._install_record_for_plan(
             layout,
             manifest_snapshot,
         )
         if authority_error is not None:
+            if (
+                action is OperationAction.INSTALL
+                and old_manifest is not None
+                and install_record is not None
+                and install_record.record is None
+            ):
+                return self._prepare_untracked_adoption(
+                    layout,
+                    old_manifest,
+                    manifest_snapshot,
+                    observations,
+                    install_record,
+                    personalization=sources.personalization,
+                    skill_overrides=sources.skill_overrides,
+                )
             affected_paths = _manifest_mutation_targets(old_manifest)
             for path in affected_paths:
                 _observe_plan_target(safe, path, observations)
@@ -1958,11 +2523,12 @@ class AgentAdapterService:
                 action,
                 authority_error,
                 observations,
-                source_fingerprint=sources.fingerprint,
+                source_fingerprint=source_selection.fingerprint,
                 install_record=install_record,
                 affected_paths=affected_paths,
                 personalization=sources.personalization,
                 skill_overrides=sources.skill_overrides,
+                managed_file_states=source_selection.managed_file_states,
             )
 
         rendered = tuple(_render_source_skill(client, skill) for skill in sources.skills)
@@ -1976,6 +2542,13 @@ class AgentAdapterService:
             for skill in sources.skills
             if skill.name in codex_restore_names
         }
+        desired_managed_hashes = {
+            path: rendered_skill.target_hash for path, rendered_skill in desired_outputs.items()
+        }
+        desired_managed_hashes.update(
+            {path: content_hash(content) for path, content in codex_restore_outputs.items()}
+        )
+        desired_managed_hashes[rendered_mcp.path] = rendered_mcp.target_hash
         old_skill_outputs = _generated_skill_inventory(old_manifest)
         old_outputs = _generated_inventory(old_manifest)
         observed_outputs = {
@@ -1986,7 +2559,18 @@ class AgentAdapterService:
             for path, recorded_hash in sorted(old_outputs.items())
             if observed_outputs[path].exists
             and observed_outputs[path].content_hash != recorded_hash
+            and observed_outputs[path].content_hash != desired_managed_hashes.get(path)
         ]
+        canonical_targets: dict[str, FileSnapshot] = {}
+        for change in source_selection.canonical_changes:
+            target = _observe_plan_target(safe, change.path, observations)
+            canonical_targets[change.path] = target
+            if change.recorded_hash is None:
+                if target.exists:
+                    authority_failures.append(change.path)
+            elif not target.exists or target.content_hash != change.recorded_hash:
+                authority_failures.append(change.path)
+        managed_file_states = list(source_selection.managed_file_states)
         if old_manifest is not None and old_manifest.components is not None:
             old_bridge = old_manifest.components.instruction_bridge
             old_bridge_target = _observe_plan_target(
@@ -1998,8 +2582,16 @@ class AgentAdapterService:
                 old_bridge.ownership == "generated"
                 and old_bridge_target.exists
                 and old_bridge_target.content_hash != old_bridge.target.content_hash
+                and old_bridge_target.content_hash != sources.bridge_hash
             ):
                 authority_failures.append(old_bridge.target.path)
+            bridge_state = _bridge_managed_file_state(
+                old_manifest,
+                sources,
+                old_bridge_target,
+            )
+            if bridge_state is not None:
+                managed_file_states.append(bridge_state)
         for backup in () if old_manifest is None else old_manifest.backups or ():
             backup_target = _observe_plan_target(safe, backup.path, observations)
             if not backup_target.exists or backup_target.content_hash != backup.content_hash:
@@ -2033,17 +2625,43 @@ class AgentAdapterService:
                 action,
                 "One or more mutation targets fail the three-factor authority check",
                 observations,
-                source_fingerprint=sources.fingerprint,
+                source_fingerprint=source_selection.fingerprint,
                 install_record=install_record,
                 affected_paths=affected_paths,
                 personalization=sources.personalization,
                 skill_overrides=sources.skill_overrides,
+                managed_file_states=tuple(
+                    sorted(managed_file_states, key=lambda state: state.path)
+                ),
             )
         mutations: list[FileMutation] = []
         planned: list[PlannedChange] = []
         backup_entries = list(old_manifest.backups or ()) if old_manifest is not None else []
         blocked: list[str] = []
         now_text = _timestamp(self._clock())
+
+        for change in source_selection.canonical_changes:
+            target = canonical_targets[change.path]
+            if change.content is None:
+                if not target.exists:
+                    continue
+                operation = FileOperation.DELETE
+                desired_hash = None
+            else:
+                desired_hash = content_hash(change.content)
+                if target.exists and target.content_hash == desired_hash:
+                    continue
+                operation = FileOperation.REPLACE if target.exists else FileOperation.CREATE
+            mutations.append(FileMutation(change.path, target, change.content))
+            planned.append(
+                PlannedChange(
+                    path=change.path,
+                    operation=operation,
+                    observed_hash=target.content_hash,
+                    desired_hash=desired_hash,
+                    reason=change.reason,
+                )
+            )
 
         for backup in backup_entries:
             backup_snapshot = _observe_plan_target(safe, backup.path, observations)
@@ -2070,7 +2688,7 @@ class AgentAdapterService:
                         action,
                         f"Packaged canonical seed target already exists: {path}",
                         observations,
-                        source_fingerprint=sources.fingerprint,
+                        source_fingerprint=source_selection.fingerprint,
                         install_record=install_record,
                         affected_paths=(path,),
                         personalization=sources.personalization,
@@ -2175,6 +2793,15 @@ class AgentAdapterService:
             mutations,
             planned,
         )
+        preserved_bridge_source_hash = next(
+            (
+                state.recorded_at_adoption_hash
+                for state in managed_file_states
+                if state.path == sources.bridge_path
+            ),
+            None,
+        )
+        preserved_source_hashes = dict(source_selection.preserved_source_hashes)
 
         old_generated_at = old_manifest.generated_at if old_manifest is not None else now_text
         desired_manifest = self._build_manifest(
@@ -2186,6 +2813,9 @@ class AgentAdapterService:
             mcp_component,
             old_generated_at,
             backup_entries,
+            preserved_registry_hash=source_selection.preserved_registry_hash,
+            preserved_source_hashes=preserved_source_hashes,
+            preserved_bridge_source_hash=preserved_bridge_source_hash,
         )
         desired_bytes = dump_manifest_bytes(desired_manifest)
         old_bytes = manifest_snapshot.content
@@ -2199,6 +2829,9 @@ class AgentAdapterService:
                 mcp_component,
                 now_text,
                 backup_entries,
+                preserved_registry_hash=source_selection.preserved_registry_hash,
+                preserved_source_hashes=preserved_source_hashes,
+                preserved_bridge_source_hash=preserved_bridge_source_hash,
             )
             desired_bytes = dump_manifest_bytes(desired_manifest)
 
@@ -2223,6 +2856,9 @@ class AgentAdapterService:
         )
         planned = [
             *_skill_override_plan_changes(sources.skill_overrides),
+            *_managed_file_plan_changes(
+                tuple(sorted(managed_file_states, key=lambda state: state.path))
+            ),
             *_personalization_plan_changes(
                 sources.personalization,
                 personalization_statuses,
@@ -2234,13 +2870,18 @@ class AgentAdapterService:
             action,
             tuple(planned),
             tuple(mutations),
-            sources.fingerprint,
+            source_selection.fingerprint,
             blocked_reason,
             (),
             observations,
             install_record,
             personalization_layers=personalization_statuses,
             skill_overrides=sources.skill_overrides.statuses,
+            merge_candidates=tuple(
+                candidate
+                for state in sorted(managed_file_states, key=lambda item: item.path)
+                if (candidate := state.merge_candidate) is not None
+            ),
             codex_restore_names=codex_restore_names,
         )
 
@@ -2281,7 +2922,12 @@ class AgentAdapterService:
                     )
                 )
                 return "generated", sources.bridge_hash
-            return "user-owned", old_bridge.target.content_hash
+            return (
+                "user-owned",
+                target.content_hash
+                if target.exists and target.content_hash is not None
+                else old_bridge.target.content_hash,
+            )
         if not target.exists:
             mutations.append(FileMutation(sources.bridge_path, target, sources.bridge_content))
             planned.append(
@@ -2312,6 +2958,11 @@ class AgentAdapterService:
                 )
                 return "generated", sources.bridge_hash
             return "user-owned", target.content_hash
+        if (
+            target.content_hash != old_bridge.target.content_hash
+            and target.content_hash == sources.bridge_hash
+        ):
+            return "generated", sources.bridge_hash
         if target.content_hash != old_bridge.target.content_hash:
             blocked.append(
                 "Generated instruction bridge differs from its authenticated manifest record"
@@ -2424,14 +3075,22 @@ class AgentAdapterService:
         mcp_configuration: McpConfigurationComponent,
         generated_at: str,
         backups: list[BackupEntry],
+        *,
+        preserved_registry_hash: str | None = None,
+        preserved_source_hashes: Mapping[str, str] | None = None,
+        preserved_bridge_source_hash: str | None = None,
     ) -> AdapterManifest:
+        source_hash_overrides = {} if preserved_source_hashes is None else preserved_source_hashes
         skills: list[SkillAdapterEntry] = []
         canonical_skills = {skill.name: skill for skill in sources.skills}
         for skill in rendered:
             canonical_skill = canonical_skills[skill.name]
             canonical = CanonicalSource(
                 path=skill.canonical_path,
-                content_hash=skill.canonical_hash,
+                content_hash=source_hash_overrides.get(
+                    skill.canonical_path,
+                    skill.canonical_hash,
+                ),
             )
             if skill.mode == "native-verified":
                 skills.append(
@@ -2441,10 +3100,19 @@ class AgentAdapterService:
                         canonical=canonical,
                         source_set=NativeSourceSet(
                             files=[
-                                NativeSourceFile(path=path, content_hash=digest)
+                                NativeSourceFile(
+                                    path=path,
+                                    content_hash=source_hash_overrides.get(path, digest),
+                                )
                                 for path, digest in canonical_skill.source_files
                             ],
-                            aggregate_hash=canonical_skill.source_set_hash,
+                            aggregate_hash=source_set_aggregate_hash(
+                                (
+                                    path,
+                                    source_hash_overrides.get(path, digest),
+                                )
+                                for path, digest in canonical_skill.source_files
+                            ),
                         ),
                     )
                 )
@@ -2475,7 +3143,7 @@ class AgentAdapterService:
             generated_at=generated_at,
             registry=RegistrySource(
                 path=".agents/skills/registry.yaml",
-                content_hash=sources.registry_hash,
+                content_hash=preserved_registry_hash or sources.registry_hash,
             ),
             skills=skills,
             components=AdapterComponents(
@@ -2484,9 +3152,12 @@ class AgentAdapterService:
                     source=BridgeSource(
                         path=bridge_name,
                         content_hash=(
-                            sources.bridge_hash
-                            if bridge_ownership == "generated"
-                            else sources.bridge_template_hash
+                            preserved_bridge_source_hash
+                            or (
+                                sources.bridge_hash
+                                if bridge_ownership == "generated"
+                                else sources.bridge_template_hash
+                            )
                         ),
                     ),
                     target=BridgeTarget(
@@ -2513,7 +3184,9 @@ class AgentAdapterService:
         *,
         personalization_layers: tuple[PersonalizationLayerStatus, ...] = (),
         skill_overrides: tuple[SkillOverrideStatus, ...] = (),
+        merge_candidates: tuple[ManagedFileMerge, ...] = (),
         codex_restore_names: frozenset[str] = frozenset(),
+        adopt_manifest_digest: str | None = None,
     ) -> AdapterPlan:
         for mutation in mutations:
             observed = observations.get(mutation.path)
@@ -2539,6 +3212,12 @@ class AgentAdapterService:
             if mutations[-1].path != layout.manifest_path:
                 raise InvalidAdapterStateError("The ownership manifest mutation must be last")
             next_manifest_digest = mutations[-1].desired_hash
+        if adopt_manifest_digest is not None and (
+            mutations or install_record is None or install_record.record is not None
+        ):
+            raise InvalidAdapterStateError(
+                "Trust adoption requires an untracked, non-mutating install plan"
+            )
         digest = _plan_digest(
             layout.root,
             layout.client,
@@ -2548,6 +3227,7 @@ class AgentAdapterService:
             blocked_reason,
             target_snapshots,
             None if install_record is None else install_record.fingerprint,
+            adopt_manifest_digest,
         )
         plan = AdapterPlan(
             root=layout.root,
@@ -2559,6 +3239,8 @@ class AgentAdapterService:
             blocked_reason=blocked_reason,
             personalization_layers=personalization_layers,
             skill_overrides=skill_overrides,
+            merge_candidates=merge_candidates,
+            adopts_trust=adopt_manifest_digest is not None,
         )
         self._prepared[digest] = _PreparedPlan(
             plan=plan,
@@ -2570,6 +3252,7 @@ class AgentAdapterService:
             next_manifest_digest=next_manifest_digest,
             operations_digest=operations_digest,
             codex_restore_names=codex_restore_names,
+            adopt_manifest_digest=adopt_manifest_digest,
         )
         return plan
 
@@ -2671,17 +3354,19 @@ class AgentAdapterService:
                     prepared.layout.root,
                     include_context=prepared.layout.is_context,
                 )
-                locked_sources = load_canonical_sources(
-                    plan.root,
+                locked_manifest_snapshot = SafeRoot(prepared.layout.root).inspect_file(
+                    prepared.layout.manifest_path
+                )
+                locked_manifest = _manifest_from_snapshot(
+                    locked_manifest_snapshot,
                     plan.client,
-                    personalization=locked_personalization,
-                    include_context_overrides=prepared.layout.is_context,
                 )
-                locked_sources = restore_packaged_skill_sources(
-                    locked_sources,
-                    prepared.codex_restore_names,
+                locked_selection = self._load_source_selection(
+                    prepared.layout,
+                    locked_manifest,
+                    locked_personalization,
                 )
-                if locked_sources.fingerprint != plan.source_fingerprint:
+                if locked_selection.fingerprint != plan.source_fingerprint:
                     raise AdapterConflictError(
                         "Canonical sources changed before lock-held preflight; replan"
                     )
@@ -2704,7 +3389,15 @@ class AgentAdapterService:
                     raise AdapterConflictError(
                         "Trusted install record changed after dry run; replan"
                     )
-            if prepared.mutations:
+            changed: tuple[str, ...]
+            if prepared.adopt_manifest_digest is not None:
+                assert prepared.install_record is not None
+                self._install_records.adopt(
+                    prepared.install_record,
+                    manifest_digest=prepared.adopt_manifest_digest,
+                )
+                changed = ()
+            elif prepared.mutations:
                 if prepared.install_record is None or prepared.operations_digest is None:
                     raise InvalidAdapterStateError(
                         "A mutating plan lacks its trusted install-record preflight"
@@ -2798,7 +3491,7 @@ class AgentAdapterService:
             plan.action,
             changed,
             backups=prepared.backup_paths,
-            no_op=not prepared.mutations,
+            no_op=not prepared.mutations and prepared.adopt_manifest_digest is None,
         )
 
     def install(

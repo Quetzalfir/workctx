@@ -72,6 +72,22 @@ reports each layer's path, byte size, and current merged state. A changed layer 
 authenticated generated bridge stale; rerun installation to refresh it from the current layer
 files.
 
+## Merging your edits with updates
+
+When a managed canonical skill or generated bridge has both local edits and a newer packaged
+version, `workctx agent status` and the next install plan report the path together with three
+exact-byte hashes: `recorded-at-adoption`, `packaged-now`, and `local`. This is a review marker,
+not an automatic merge. Work Context preserves the local file, and approval of the install plan
+does not authorize replacing or silently adopting it.
+
+Ask an agent to draft the intended result from those three versions, then review the draft and
+approve the file change yourself. Move durable custom instructions into the user or context
+`instructions.md` layer; for a context-specific skill body, use the override mechanism below.
+Restore the managed file to the current packaged or rendered bytes as part of that approved
+change. The next `workctx agent install` verifies those exact bytes and records the file as tracked
+again. If the approved file remains different from `packaged-now`, Work Context continues to
+preserve and report it as operator-edited.
+
 ## Per-context skill overrides
 
 A context can replace the `SKILL.md` body of one packaged Work Context skill without changing the
