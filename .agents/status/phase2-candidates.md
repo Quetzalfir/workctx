@@ -227,3 +227,22 @@ explicit approval, unchanged.
 Phase 3 cut consequence: first package is the manifest spec + engine +
 scheduler; the operator's 2-3 daily systems get manifests (and thin adapters
 only if the generic engine falls short).
+
+## C-215 — Adapter recovery and freshness package (operator-driven, 2026-08-06)
+
+Three pieces from one day of real operator use, cut together:
+
+1. `workctx agent forget <context>`: officially drop one context's entry from
+   the machine-local trusted install record. Today's trust-divergence
+   recovery required hand-editing JSON because the three-factor check blocks
+   even uninstall (circular recovery, verified live).
+2. Pristine-skill refresh on `agent install`: context-canonical skills under
+   `.agents/skills/` pin the versions from the day the context was born;
+   packaged-skill improvements never reach existing contexts. Same cure as
+   the template bridge: byte-hash against every historical packaged version,
+   refresh pristine files, never touch operator-edited ones.
+3. Register-on-use: any context-resolved command best-effort registers an
+   unregistered context (covers pre-registry, cloned, and copied contexts).
+   Hazard proven live: fictional test contexts polluted the operator's real
+   registry — needs suite-wide registry isolation plus never-fail semantics
+   before the hook lands.
