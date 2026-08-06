@@ -246,3 +246,16 @@ Three pieces from one day of real operator use, cut together:
    Hazard proven live: fictional test contexts polluted the operator's real
    registry — needs suite-wide registry isolation plus never-fail semantics
    before the hook lands.
+
+### C-215 addendum — merge-assist for edited-and-outdated managed files (2026-08-06)
+
+Fourth piece: when a managed file (contract, bridge, canonical skill) is BOTH
+operator-edited and behind the packaged version, deterministic code surfaces
+the three-way state (packaged-at-adoption, packaged-now, local) — never
+auto-merges — and a skill guides an agent to draft the merged version as an
+approvable transaction. Deterministic detection, AI-proposed merge, human
+approval. The skill-override three-way marker (WP-690) is the working
+precedent. Operator scenario: an agent recorded standing AWS-access
+instructions in AGENTS.md, which preserves them but freezes that file out of
+future contract updates; the personalization layer is today's correct home,
+and merge-assist closes the general case.
