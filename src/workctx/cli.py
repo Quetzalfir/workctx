@@ -1096,8 +1096,8 @@ def _render_context_inventory(
         if registry_unavailable
         else None
     )
-    table = Table(title="Registered contexts", caption=caption)
-    table.add_column("Context", min_width=14, max_width=20)
+    table = Table(title="Registered contexts", caption=caption, show_lines=True)
+    table.add_column("Context", min_width=14, max_width=26)
     table.add_column("Type", min_width=7, max_width=16)
     table.add_column("Path", min_width=8, max_width=24)
     table.add_column("Stats", min_width=8, max_width=17)
@@ -1122,8 +1122,14 @@ def _render_context_inventory(
             if stats is not None
             else "-"
         )
+        display_name = entry.name or "-"
+        identity = (
+            entry.context_id
+            if display_name.casefold() == entry.context_id.casefold()
+            else f"{entry.context_id} ({display_name})"
+        )
         table.add_row(
-            f"{entry.context_id}\n{entry.name or '-'}",
+            identity,
             f"{entry.kind or '-'}\n{entry.profile or '-'} / {entry.language or '-'}",
             str(entry.root),
             counts,
