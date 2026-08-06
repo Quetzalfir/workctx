@@ -172,7 +172,9 @@ def _read_layer(
         snapshot = SafeRoot(path.parent).inspect_file(path.name)
     except SafeFilesystemError as error:
         raise PersonalizationLayerError(
-            f"{layer.value} personalization layer must be a safe regular file",
+            f"{layer.value} personalization layer at {path} is not a safe regular file "
+            f"({error}); move it to a plain local path outside links, redirected, or "
+            f"synchronized folders, or remove it to install without personalization",
             layer=layer,
             path=path,
         ) from error
