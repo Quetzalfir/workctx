@@ -55,16 +55,9 @@ def context_cli_root() -> Iterator[Path]:
 
 @pytest.fixture
 def registry_file(
-    context_cli_root: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    isolated_user_config_dir: Path,
 ) -> Path:
-    user_config = context_cli_root / "user-config"
-    monkeypatch.setattr(
-        registry_module,
-        "user_config_path",
-        lambda *_args, **_kwargs: user_config,
-    )
-    return user_config / "contexts.json"
+    return isolated_user_config_dir / "contexts.json"
 
 
 def _envelope(result: Any, *, exit_code: int, command: str) -> dict[str, Any]:

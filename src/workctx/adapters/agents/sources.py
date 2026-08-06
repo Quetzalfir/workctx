@@ -5,7 +5,7 @@ from __future__ import annotations
 import posixpath
 import re
 import shlex
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from functools import cache, partial
 from importlib import resources
@@ -1007,6 +1007,108 @@ def load_canonical_sources(
         bridge_path=selected_bridge,
         personalization=selected_personalization,
         skill_overrides=selected_overrides,
+    )
+
+
+def load_packaged_canonical_sources(
+    root: Path,
+    client: AgentClient,
+    *,
+    personalization: PersonalizationLayers,
+    skill_overrides: SkillOverrides | None = None,
+) -> CanonicalSourceSet:
+    """Load the current packaged catalog even when a local canonical tree exists."""
+
+    root.resolve(strict=True)
+    selected_overrides = SkillOverrides() if skill_overrides is None else skill_overrides
+    registry_content = _packaged_file("skills", "registry.yaml")
+    entries = _registry_entries(registry_content)
+    overrides_by_name = selected_overrides.by_name
+    skills: list[CanonicalSkill] = []
+    for name, side_effect in entries:
+        selected_override = overrides_by_name.get(name)
+        packaged_content = _packaged_file("skills", name, "SKILL.md")
+        content = packaged_content if selected_override is None else selected_override.file.content
+        source_path = f"skills/{name}/SKILL.md"
+        _validate_skill(
+            name,
+            content,
+            link_exists=partial(_packaged_link_exists, source_path),
+        )
+        skills.append(
+            CanonicalSkill(
+                name=name,
+                side_effect_class=side_effect,
+                content=content,
+                content_hash=content_hash(content),
+                resources=_packaged_skill_resources(name),
+                override=selected_override,
+            )
+        )
+    selected_bridge = bridge_path(client)
+    bridge_template = _packaged_file("bridges", selected_bridge)
+    bridge_content = render_personalized_bridge(bridge_template, personalization)
+    return CanonicalSourceSet(
+        origin=SourceOrigin.PACKAGED,
+        registry_content=registry_content,
+        registry_hash=content_hash(registry_content),
+        skills=tuple(skills),
+        bridge_content=bridge_content,
+        bridge_hash=content_hash(bridge_content),
+        bridge_template_hash=content_hash(bridge_template),
+        bridge_path=selected_bridge,
+        personalization=personalization,
+        skill_overrides=selected_overrides,
+    )
+
+
+def compose_canonical_skill(
+    template: CanonicalSkill,
+    files: Mapping[str, bytes],
+    *,
+    override: ResolvedSkillOverride | None = None,
+) -> CanonicalSkill:
+    """Validate and assemble one canonical skill from an exact in-memory file set."""
+
+    primary_path = template.path
+    try:
+        primary = files[primary_path]
+    except KeyError as error:
+        raise CanonicalSkillMissingError(
+            f"Canonical skill is missing its primary file: {template.name}",
+            path=primary_path,
+            skill=template.name,
+        ) from error
+    prefix = f".agents/skills/{template.name}/"
+    resources_found: list[CanonicalResource] = []
+    for path, content in files.items():
+        if path == primary_path:
+            continue
+        if not path.startswith(prefix):
+            raise InvalidAdapterStateError(
+                f"Canonical skill {template.name} contains a file outside its directory"
+            )
+        relative_path = _validate_resource_path(template.name, path.removeprefix(prefix))
+        _validate_resource_content(template.name, relative_path, content)
+        resources_found.append(CanonicalResource(relative_path, content, content_hash(content)))
+    selected_resources = _sorted_resource_inventory(template.name, resources_found)
+    available_paths = {
+        primary_path,
+        *(f"{prefix}{resource.relative_path}" for resource in selected_resources),
+    }
+
+    def link_exists(destination: str) -> bool:
+        resolved = _resolve_internal_link(primary_path, destination)
+        return resolved is not None and resolved != primary_path and resolved in available_paths
+
+    _validate_skill(template.name, primary, link_exists=link_exists)
+    return CanonicalSkill(
+        name=template.name,
+        side_effect_class=template.side_effect_class,
+        content=primary,
+        content_hash=content_hash(primary),
+        resources=selected_resources,
+        override=override,
     )
 
 

@@ -138,6 +138,43 @@ def test_missing_or_tampered_trusted_record_makes_repair_and_uninstall_report_on
         assert _project_files(project) == before
 
 
+def test_forget_breaks_circular_trust_divergence_and_fresh_install_recovers(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    service = _service()
+    _install(service, project)
+    record_file = _record_file()
+    payload = json.loads(record_file.read_text(encoding="utf-8"))
+    payload["projects"][0]["adapters"][0]["trusted_manifest_digest"] = "sha256:" + "f" * 64
+    record_file.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    before = _project_files(project)
+
+    blocked = service.plan_uninstall(project, AgentClient.CLAUDE)
+    assert blocked.blocked_reason is not None
+    assert service.forget(project) == (AgentClient.CLAUDE,)
+    assert _project_files(project) == before
+
+    fresh = service.plan_install(project, AgentClient.CLAUDE)
+    assert fresh.adopts_trust
+    assert fresh.blocked_reason is None
+    assert {change.operation for change in fresh.changes} == {FileOperation.VERIFY}
+
+    receipt = service.install(fresh)
+
+    assert not receipt.no_op
+    assert receipt.changed_paths == ()
+    assert _project_files(project) == before
+    manifest = project / Path(_MANIFEST_PATH)
+    trusted = TrustedInstallStore().observe(
+        project,
+        AgentClient.CLAUDE,
+        _MANIFEST_PATH,
+    )
+    assert trusted.authenticates(content_hash(manifest.read_bytes()))
+    assert service.status(project, AgentClient.CLAUDE).state is AdapterState.CURRENT
+
+
 def test_modified_manifest_target_makes_whole_repair_and_uninstall_report_only(
     tmp_path: Path,
 ) -> None:

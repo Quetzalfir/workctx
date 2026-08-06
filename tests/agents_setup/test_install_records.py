@@ -246,6 +246,42 @@ def test_uninstall_removes_only_selected_client_record(tmp_path: Path) -> None:
     assert store.observe(second, AgentClient.CODEX, _CODEX_MANIFEST).authenticates(_hash("3"))
 
 
+def test_forget_removes_all_root_entries_only_and_is_idempotent(tmp_path: Path) -> None:
+    first = _root(tmp_path, "first-forget")
+    second = _root(tmp_path, "second-forget")
+    store = _store(tmp_path)
+    _install_stable(
+        store,
+        first,
+        AgentClient.CLAUDE,
+        _CLAUDE_MANIFEST,
+        _hash("1"),
+        _hash("a"),
+    )
+    _install_stable(
+        store,
+        first,
+        AgentClient.GEMINI,
+        _GEMINI_MANIFEST,
+        _hash("2"),
+        _hash("b"),
+    )
+    _install_stable(
+        store,
+        second,
+        AgentClient.CODEX,
+        _CODEX_MANIFEST,
+        _hash("3"),
+        _hash("c"),
+    )
+
+    assert store.forget(first) == (AgentClient.CLAUDE, AgentClient.GEMINI)
+    assert store.forget(first) == ()
+    assert store.observe(first, AgentClient.CLAUDE, _CLAUDE_MANIFEST).record is None
+    assert store.observe(first, AgentClient.GEMINI, _GEMINI_MANIFEST).record is None
+    assert store.observe(second, AgentClient.CODEX, _CODEX_MANIFEST).authenticates(_hash("3"))
+
+
 def test_selected_entry_cas_rejects_stale_observation(tmp_path: Path) -> None:
     root = _root(tmp_path)
     store = _store(tmp_path)

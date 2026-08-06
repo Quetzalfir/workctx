@@ -106,6 +106,65 @@ def test_register_and_list_are_sorted_and_same_registration_is_byte_idempotent(
     assert payload["active_context_id"] is None
 
 
+def test_suite_default_registry_canary_is_inside_the_test_temp_tree(
+    isolated_user_config_dir: Path,
+) -> None:
+    registry = ContextRegistry()
+
+    assert registry.path == isolated_user_config_dir / "contexts.json"
+    assert isolated_user_config_dir.parent.name == "user-home"
+
+
+def test_default_registry_path_honors_environment_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_file = tmp_path / "subprocess-fence" / "contexts.json"
+    monkeypatch.setenv(registry_module.CONTEXT_REGISTRY_ENV, str(registry_file))
+
+    def forbidden_fallback(*_args: object, **_kwargs: object) -> Path:
+        raise AssertionError("environment override fell through to platformdirs")
+
+    monkeypatch.setattr(registry_module, "user_config_path", forbidden_fallback)
+
+    assert ContextRegistry().path == registry_file.absolute()
+
+
+def test_environment_registry_override_inside_context_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = _context(tmp_path, "environment-override-context")
+    registry_file = workspace / "98_state" / "contexts.json"
+    monkeypatch.setenv(registry_module.CONTEXT_REGISTRY_ENV, str(registry_file))
+
+    with pytest.raises(RegistryError, match="outside every context root"):
+        ContextRegistry()
+
+    assert not registry_file.exists()
+
+
+def test_register_if_changed_exact_match_avoids_the_mutation_guard(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry_file = tmp_path / "config" / "contexts.json"
+    root = _context(tmp_path, "fast-context")
+    registry = ContextRegistry(registry_file)
+    registry.register("fast-context", root)
+    before = registry_file.read_bytes()
+
+    def forbidden_guard(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("an unchanged registration entered the mutation guard")
+
+    monkeypatch.setattr(registry_module, "_registry_mutation_guard", forbidden_guard)
+
+    registered = registry.register_if_changed("fast-context", root, replace=True)
+
+    assert registered.root == root.resolve()
+    assert registry_file.read_bytes() == before
+
+
 def test_active_selection_is_explicit_and_unregister_clears_it(tmp_path: Path) -> None:
     registry_file = tmp_path / "config" / "contexts.json"
     root = _context(tmp_path, "active-context")
@@ -343,6 +402,7 @@ def test_default_registry_path_is_user_config_not_workspace(
 ) -> None:
     workspace = _context(tmp_path, "workspace-context")
     user_config = tmp_path / "outside-user-config"
+    monkeypatch.delenv(registry_module.CONTEXT_REGISTRY_ENV, raising=False)
     monkeypatch.setattr(registry_module, "user_config_path", lambda *_args, **_kwargs: user_config)
 
     registry = ContextRegistry()

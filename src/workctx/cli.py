@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
         AgentClient,
         ClientCapability,
         FeatureStatus,
+        ManagedFileMerge,
         OpenedContext,
         OperationResult,
         TargetApproval,
@@ -51,10 +53,14 @@ from workctx.presentation import (
     emit_success,
     output_console,
     record_failure,
-    resolve_cli_context,
     sanitize_message,
 )
-from workctx.services.contexts import initialize_context, load_context_config
+from workctx.presentation import resolve_cli_context as _resolve_cli_context
+from workctx.services.contexts import (
+    initialize_context,
+    load_context_config,
+    register_resolved_context,
+)
 from workctx.suggestions import SuggestionStatus
 from workctx.validation.workspace import ValidationIssue, ValidationReport, validate_workspace
 
@@ -98,6 +104,24 @@ connector_app = typer.Typer(help="Synchronize declarative external-source connec
 app.add_typer(connector_app, name="connector")
 outbox_app = typer.Typer(help="Preview and deliver one approval-pinned outbox draft.")
 app.add_typer(outbox_app, name="outbox")
+
+
+def resolve_cli_context(
+    *,
+    explicit_path: Path | None,
+    positional_path: Path | None = None,
+    discovery_start: Path | None = None,
+) -> Path:
+    """Resolve one CLI context, then register it without affecting command success."""
+
+    root = _resolve_cli_context(
+        explicit_path=explicit_path,
+        positional_path=positional_path,
+        discovery_start=discovery_start,
+    )
+    with suppress(Exception):
+        register_resolved_context(root)
+    return root
 
 
 @outbox_app.command("send")
@@ -2536,7 +2560,50 @@ def agent_status(
     if json_output:
         emit_success(result=result, context_id=context_id)
     else:
+        for status in statuses:
+            _render_agent_status(status)
         output_console.print(Text(f"Inspected {len(statuses)} agent adapter statuses."))
+
+
+@agent_app.command("forget")
+def agent_forget(
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Path inside the context whose adapter trust should be forgotten."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides the positional path."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Forget machine-local adapter trust without changing any context file."""
+
+    from workctx.adapters.agents import AgentAdapterService
+
+    begin_command("agent.forget", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path, positional_path=path)
+    forgotten = AgentAdapterService().forget(root)
+    context_id = load_context_config(root).id
+    treatment = "A subsequent agent install will treat existing adapter state as untracked."
+    result: dict[str, JsonValue] = {
+        "root": str(root),
+        "removed": bool(forgotten),
+        "adapters": [client.value for client in forgotten],
+        "install_treatment": "untracked",
+        "message": treatment,
+    }
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        if forgotten:
+            names = ", ".join(client.value for client in forgotten)
+            output_console.print(Text(f"Forgot trusted adapter records for {names} at {root}."))
+        else:
+            output_console.print(Text(f"No trusted adapter records existed for {root}."))
+        output_console.print(Text(treatment))
 
 
 @agent_app.command("install")
@@ -3341,6 +3408,9 @@ def _adapter_status_payload(status: AdapterStatus) -> dict[str, JsonValue]:
         "mcp_configuration": _feature_status_payload(status.mcp_configuration),
         "warnings": [sanitize_message(warning) for warning in status.warnings],
         "repair_blocked": status.repair_blocked,
+        "merge_candidates": [
+            _managed_file_merge_payload(candidate) for candidate in status.merge_candidates
+        ],
     }
 
 
@@ -3355,6 +3425,10 @@ def _adapter_plan_payload(plan: AdapterPlan) -> dict[str, JsonValue]:
         ),
         "requires_approval": plan.requires_approval,
         "no_op": plan.is_noop,
+        "adopts_trust": plan.adopts_trust,
+        "merge_candidates": [
+            _managed_file_merge_payload(candidate) for candidate in plan.merge_candidates
+        ],
         "changes": [
             {
                 "path": change.path,
@@ -3366,6 +3440,15 @@ def _adapter_plan_payload(plan: AdapterPlan) -> dict[str, JsonValue]:
             }
             for change in plan.changes
         ],
+    }
+
+
+def _managed_file_merge_payload(candidate: ManagedFileMerge) -> dict[str, JsonValue]:
+    return {
+        "path": candidate.path,
+        "recorded_at_adoption_hash": candidate.recorded_at_adoption_hash,
+        "packaged_now_hash": candidate.packaged_now_hash,
+        "local_hash": candidate.local_hash,
     }
 
 
@@ -3416,6 +3499,30 @@ def _render_agent_plan(plan: AdapterPlan) -> None:
     )
     for change in plan.changes:
         output_console.print(Text(f"  {change.operation.value}: {change.path}"))
+    if plan.adopts_trust:
+        output_console.print(Text("  trust: adopt exact untracked state; project files unchanged"))
+    for candidate in plan.merge_candidates:
+        output_console.print(
+            Text(
+                "  merge: "
+                f"{candidate.path}; recorded-at-adoption="
+                f"{candidate.recorded_at_adoption_hash}; packaged-now="
+                f"{candidate.packaged_now_hash}; local={candidate.local_hash}"
+            )
+        )
+
+
+def _render_agent_status(status: AdapterStatus) -> None:
+    output_console.print(Text(f"{status.client.value}: {status.state.value}"))
+    for candidate in status.merge_candidates:
+        output_console.print(
+            Text(
+                "  merge: "
+                f"{candidate.path}; recorded-at-adoption="
+                f"{candidate.recorded_at_adoption_hash}; packaged-now="
+                f"{candidate.packaged_now_hash}; local={candidate.local_hash}"
+            )
+        )
 
 
 def _render_doctor(checks: list[DoctorCheck]) -> None:

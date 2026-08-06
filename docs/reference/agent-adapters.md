@@ -25,21 +25,25 @@ agent installation is needed.
 
 ## Canonical source selection
 
-When a project contains a safe, complete `.agents/skills/` tree, the installer reads its
-`registry.yaml` and skill documents. This local, user-controlled tree has precedence. If the tree
-is absent, the installer uses the canonical skills and registry shipped in the package's agent
-kit. A deterministic repository sync check mirrors only `.agents/skills/`, including
-`registry.yaml`, into the kit. The kit's instruction bridges are separately authored,
-target-flavored resources; they are not synchronized copies of this repository's development
-bridges.
+For a project without an adapter manifest, a safe, complete `.agents/skills/` tree is the
+canonical input and has precedence over the packaged fallback. If the tree is absent, the
+installer uses the canonical skills and registry shipped in the package's agent kit. A
+deterministic repository sync check mirrors only `.agents/skills/`, including `registry.yaml`,
+into that kit. The kit's instruction bridges are separately authored, target-flavored resources;
+they are not synchronized copies of this repository's development bridges.
 
-Codex consumes `.agents/skills/<skill-name>/SKILL.md` directly. In a project without local
-canonical sources, a Codex install first materializes the packaged canonical kit there, then
-records each skill as `native-verified`; those canonical files become user-controlled sources and
-are retained on uninstall. A native-verified entry commits to every file in that skill directory
-through a sorted source set and an aggregate digest, so auxiliary resources participate in drift
-detection. Claude and Gemini can render directly from either the local inventory or the packaged
-fallback.
+Codex consumes `.agents/skills/<skill-name>/SKILL.md` directly. In a context without local
+canonical sources, a Codex install first materializes the packaged canonical kit there, records
+each skill as `native-verified`, and retains those canonical files on uninstall. On a later
+install, each manifest-recorded canonical file is refreshed from the currently running package
+only when its local hash still equals its recorded-at-adoption hash. An operator-edited file is
+preserved. Status and the install plan expose an edited-and-outdated file as a merge candidate
+with its path and exact `recorded-at-adoption`, `packaged-now`, and `local` hashes; no adapter
+operation auto-merges it. The same freshness rule covers `registry.yaml`, while newly packaged
+skills are added when the tracked registry can be refreshed safely. A native-verified entry
+commits to every file in that skill directory through a sorted source set and an aggregate digest,
+so auxiliary resources participate in drift detection. Claude and Gemini can render directly
+from either the local inventory or the packaged fallback.
 
 The registry supplies advisory `side_effect_class` metadata. Generated Claude and Gemini skill
 copies receive `# workctx-side-effect-class: <class>` immediately before the closing frontmatter
@@ -64,11 +68,14 @@ Each missing bridge is created from its self-contained packaged template and rec
 adapter manifest. The Codex template references `.agents/skills/`; Claude and Gemini reference
 their installed `.claude/skills/` and `.gemini/skills/` projections. The latter two also direct
 the client to an existing root `AGENTS.md`. In a context root, the context-template `AGENTS.md`
-therefore remains the user-owned base contract. An existing bridge is classified as user-owned:
-installation, repair, and uninstall never modify or delete it. Status reports template divergence
-as a warning so ownership remains visible without turning the packaged bridge into authority over
-user content. Only an absent bridge is generated during initial installation; later repair of a
-manifest-recorded generated bridge remains subject to all three mutation-authority factors.
+therefore remains the user-owned base contract. An existing unrecorded bridge is classified as
+user-owned: installation, repair, and uninstall never modify or delete it. Status reports template
+divergence as a warning so ownership remains visible without turning the packaged bridge into
+authority over user content. Only an absent bridge is generated during initial installation.
+A manifest-recorded bridge that still equals its adoption hash may receive the current packaged
+template through an authenticated install; an edited-and-outdated bridge is preserved and exposes
+the same exact three-hash merge candidate. Every later replacement of a generated bridge remains
+subject to all three mutation-authority factors.
 
 Installing one client computes and touches only that client's paths, its bridge, and shared
 project-local transaction state. It never requires another client's executable or directory.
@@ -111,6 +118,13 @@ If any factor fails, repair and uninstall are report-only: they describe the pre
 perform no deletion or overwrite. User approval and backup creation cannot substitute for a
 missing factor. The trusted record is written only by the installer through a guarded,
 compare-and-swap update; it is separate from all client authentication and configuration files.
+
+`workctx agent forget [PATH]` idempotently removes only that canonical project's machine-local
+trusted install-record entries and treats its adapters as untracked. It does not edit the project,
+remove an adapter, or bypass any authority factor. A later fresh install may restore the trust
+record without changing project files only when the complete manifest, canonical inputs, managed
+outputs, bridge, MCP configuration, and backups still match their exact recorded hashes. Any
+divergence remains report-only and requires operator reconciliation.
 
 Status safely compares the recorded inventory with current canonical inputs and managed outputs.
 It distinguishes changed sources, changed inventory or render layout, missing outputs, and

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import TextIO
@@ -84,6 +85,10 @@ async def _exercise_server(context_root: Path, errlog: TextIO) -> None:
             str(context_root),
         ],
         cwd=repository_root,
+        # Inherit the test process environment so isolation fences such as
+        # WORKCTX_CONTEXT_REGISTRY reach the server; the SDK default is a
+        # minimal allowlist that silently drops them.
+        env=dict(os.environ),
     )
 
     with anyio.fail_after(30):

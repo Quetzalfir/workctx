@@ -193,6 +193,14 @@ class _InstallRecordSnapshot:
             retained.append(replacement)
         return _InstallRecordSnapshot(tuple(sorted(retained, key=_record_sort_key)))
 
+    def without_root(self, root: Path) -> _InstallRecordSnapshot:
+        """Return a snapshot with every adapter entry for one root removed."""
+
+        key = _root_key(root)
+        return _InstallRecordSnapshot(
+            tuple(record for record in self.records if _root_key(record.root) != key)
+        )
+
     def to_dict(self) -> dict[str, object]:
         projects: list[dict[str, object]] = []
         grouped: dict[str, list[TrustedInstallRecord]] = {}
@@ -290,6 +298,68 @@ class TrustedInstallStore:
             )
             self._save(updated, file_snapshot, observation.root)
         return _pending_token(pending_record)
+
+    def adopt(
+        self,
+        observation: InstallRecordObservation,
+        *,
+        manifest_digest: str,
+    ) -> InstallRecordObservation:
+        """Trust an exact, already-present manifest without mutating project files.
+
+        Adoption is intentionally narrower than a transition: it is valid only for an
+        observed absent entry. The caller must independently verify the complete
+        manifest-recorded project state before invoking this compare-and-swap write.
+        """
+
+        _validate_observation(observation)
+        _require_hash(manifest_digest, "manifest_digest")
+        if observation.record is not None:
+            raise InstallRecordConflictError(
+                "Only untracked adapter state can be adopted as a fresh install"
+            )
+        replacement = TrustedInstallRecord(
+            root=observation.root,
+            client=observation.client,
+            manifest_path=observation.manifest_path,
+            trusted_manifest_digest=manifest_digest,
+        )
+        with self._mutation_guard(observation.root):
+            snapshot, file_snapshot = self._load(observation.root)
+            if snapshot.selected(observation.root, observation.client) is not None:
+                raise InstallRecordConflictError(
+                    "Trusted install record changed before untracked-state adoption"
+                )
+            updated = snapshot.replacing(
+                observation.root,
+                observation.client,
+                replacement,
+            )
+            self._save(updated, file_snapshot, observation.root)
+        return _observation(
+            observation.root,
+            observation.client,
+            observation.manifest_path,
+            replacement,
+        )
+
+    def forget(self, root: Path) -> tuple[AgentClient, ...]:
+        """Idempotently remove every trusted adapter entry for one project root."""
+
+        canonical_root = _canonical_root(root)
+        with self._mutation_guard(canonical_root):
+            snapshot, file_snapshot = self._load(canonical_root)
+            key = _root_key(canonical_root)
+            removed = tuple(
+                sorted(
+                    (record.client for record in snapshot.records if _root_key(record.root) == key),
+                    key=lambda client: client.value,
+                )
+            )
+            if not removed:
+                return ()
+            self._save(snapshot.without_root(canonical_root), file_snapshot, canonical_root)
+        return removed
 
     def verify_recovery(
         self,
