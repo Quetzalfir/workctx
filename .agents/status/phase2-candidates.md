@@ -228,7 +228,7 @@ Phase 3 cut consequence: first package is the manifest spec + engine +
 scheduler; the operator's 2-3 daily systems get manifests (and thin adapters
 only if the generic engine falls short).
 
-## C-215 — Adapter recovery and freshness package (operator-driven, 2026-08-06)
+## C-215 — Adapter recovery and freshness package (operator-driven, 2026-08-06) — DELIVERED (WP-760, merged 1c31073, 2026-08-06)
 
 Three pieces from one day of real operator use, cut together:
 
