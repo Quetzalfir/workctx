@@ -2606,6 +2606,96 @@ def agent_install(
             output_console.print(Text("Re-run with --yes to execute this installation plan."))
 
 
+@agent_app.command("repair")
+def agent_repair(
+    agent: Annotated[str, typer.Option("--agent", help="codex, claude, gemini, or all.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve and execute the complete reviewed repair plan."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Plan by default, or repair drifted and untrusted agent adapters with approval."""
+    from workctx.adapters.agents import AgentAdapterService
+
+    begin_command("agent.repair", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    clients = _agent_clients(agent)
+    service = AgentAdapterService()
+    plans = tuple(service.plan_repair(root, client) for client in clients)
+    receipts: tuple[OperationResult, ...] = ()
+    if yes:
+        receipts = tuple(
+            service.repair(plan, approvals=_agent_plan_approvals(plan)) for plan in plans
+        )
+    context_id = load_context_config(root).id
+    result: dict[str, JsonValue] = {
+        "applied": yes,
+        "plans": [_adapter_plan_payload(plan) for plan in plans],
+        "receipts": [_agent_operation_payload(receipt) for receipt in receipts],
+    }
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        for plan in plans:
+            _render_agent_plan(plan)
+        if yes:
+            output_console.print(Text(f"Repaired {len(receipts)} agent adapters."))
+        else:
+            output_console.print(Text("Re-run with --yes to execute this repair plan."))
+
+
+@agent_app.command("uninstall")
+def agent_uninstall(
+    agent: Annotated[str, typer.Option("--agent", help="codex, claude, gemini, or all.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve and execute the complete reviewed removal plan."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Plan by default, or remove manifest-owned adapter files with approval."""
+    from workctx.adapters.agents import AgentAdapterService
+
+    begin_command("agent.uninstall", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    clients = _agent_clients(agent)
+    service = AgentAdapterService()
+    plans = tuple(service.plan_uninstall(root, client) for client in clients)
+    receipts: tuple[OperationResult, ...] = ()
+    if yes:
+        receipts = tuple(
+            service.uninstall(plan, approvals=_agent_plan_approvals(plan)) for plan in plans
+        )
+    context_id = load_context_config(root).id
+    result: dict[str, JsonValue] = {
+        "applied": yes,
+        "plans": [_adapter_plan_payload(plan) for plan in plans],
+        "receipts": [_agent_operation_payload(receipt) for receipt in receipts],
+    }
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        for plan in plans:
+            _render_agent_plan(plan)
+        if yes:
+            output_console.print(Text(f"Removed {len(receipts)} agent adapters."))
+        else:
+            output_console.print(Text("Re-run with --yes to execute this removal plan."))
+
+
 @agent_app.command("open")
 def agent_open(
     agent: Annotated[str, typer.Option("--agent", help="codex, claude, or gemini.")],

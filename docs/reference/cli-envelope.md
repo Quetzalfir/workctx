@@ -45,6 +45,8 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `agent detect` | `agent.detect` | `clients` |
 | `agent status` | `agent.status` | `statuses` |
 | `agent install` | `agent.install` | `applied`, `plans`, `receipts` |
+| `agent repair` | `agent.repair` | `applied`, `plans`, `receipts` |
+| `agent uninstall` | `agent.uninstall` | `applied`, `plans`, `receipts` |
 | `agent open` | `agent.open` | `session` |
 | `migrate legacy` | `migrate.legacy` | `mode`, `applied`, `report` |
 | `secret set` | `secret.set` | `name`, `stored`, `backend` |
