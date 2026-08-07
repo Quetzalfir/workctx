@@ -45,6 +45,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `agent detect` | `agent.detect` | `clients` |
 | `agent status` | `agent.status` | `statuses` (including `merge_candidates`) |
 | `agent install` | `agent.install` | `applied`, `plans` (including `merge_candidates` and `adopts_trust`), `receipts` |
+| `agent refresh` | `agent.refresh` | `apply_requested`, `selected_clients`, `count`, `contexts` (including per-plan application state, `merge_candidates`, and skip/failure reasons), `summary` |
 | `agent repair` | `agent.repair` | `applied`, `plans`, `receipts` |
 | `agent uninstall` | `agent.uninstall` | `applied`, `plans`, `receipts` |
 | `agent forget` | `agent.forget` | `root`, `removed`, `adapters`, `install_treatment`, `message` |
@@ -64,6 +65,13 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
 apply reports `dry_run: false` and includes the authenticated transaction receipt. Likewise,
 `agent install` returns the complete plan without changing files unless `--yes` is present.
+`agent refresh` requires `--all` and reads the machine context registry in stable context-ID
+order. It also previews every valid context by default. The context rows report `preview`,
+`applied`, `skipped`, or `failed`; each client-plan row separately reports its application state
+and whether an install receipt exists. `--yes` is the only batch approval. A missing root, an ID
+mismatch, or an unavailable selected client remains an explicit skip with a warning. A planning
+or apply failure is recorded in that context row, later contexts are still processed, and the
+final failed envelope exits 6 with every partial result intact.
 `suggestion adopt` and `suggestion reject` never preview or mutate without `--yes`; omission
 returns an envelope-first usage/configuration failure with exit code 2.
 `usage suggest` likewise requires `--yes`; evaluation alone is always read-only, and each created
@@ -132,12 +140,13 @@ yet been established.
 | 3 | Context boundary or permission denial |
 | 4 | Conflict or stale precondition |
 | 5 | Required dependency or plugin unavailable |
-| 6 | Partial success with stale derived state |
+| 6 | Partial success from a failure-isolated batch, or success with stale derived state |
 | 10 | Unexpected internal failure |
 
 Codes 3, 4, and 6 are mapped at the shared boundary for later command families even though
-the current commands do not produce them. A failed required `doctor` check returns 5. An
-attempt to initialize a non-empty directory returns 1.
+not every command produces them. `agent refresh --all` returns 6 after processing every
+registration when any context planning or apply operation failed. A failed required `doctor`
+check returns 5. An attempt to initialize a non-empty directory returns 1.
 
 ## Context resolution
 

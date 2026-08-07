@@ -19,6 +19,12 @@ if TYPE_CHECKING:
         OperationResult,
         TargetApproval,
     )
+    from workctx.adapters.agents.fleet import (
+        FleetClientResult,
+        FleetContextResult,
+        FleetFailure,
+        FleetRefreshResult,
+    )
     from workctx.adapters.filesystem.registry import ContextInventoryEntry
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
     from workctx.connectors import SyncResult
@@ -41,9 +47,12 @@ from workctx import __version__
 from workctx.doctor import DoctorCheck, run_doctor
 from workctx.domain import EntityType, TaskStatus
 from workctx.errors import (
+    InvalidContextError,
+    StaleDerivedStateError,
     UnavailableDependencyError,
     UsageConfigurationError,
     UserCorrectableError,
+    WorkctxError,
 )
 from workctx.models.context import ContextKind, ContextProfile
 from workctx.presentation import (
@@ -94,7 +103,7 @@ suggestion_app = typer.Typer(help="Inspect and review canonical suggestion recor
 app.add_typer(suggestion_app, name="suggestion")
 usage_app = typer.Typer(help="Inspect opt-in local usage signals and create advisory records.")
 app.add_typer(usage_app, name="usage")
-agent_app = typer.Typer(help="Detect, install, inspect, and open supported agent clients.")
+agent_app = typer.Typer(help="Detect, install, refresh, inspect, and open supported agent clients.")
 app.add_typer(agent_app, name="agent")
 migrate_app = typer.Typer(help="Convert legacy Markdown repositories into isolated contexts.")
 app.add_typer(migrate_app, name="migrate")
@@ -2679,6 +2688,74 @@ def agent_install(
             output_console.print(Text("Re-run with --yes to execute this installation plan."))
 
 
+@agent_app.command("refresh")
+def agent_refresh(
+    all_contexts: Annotated[
+        bool,
+        typer.Option("--all", help="Refresh every context in the machine registry (required)."),
+    ] = False,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve and apply every successfully prepared context plan."),
+    ] = False,
+    agent: Annotated[
+        str,
+        typer.Option("--agent", help="codex, claude, gemini, or all (default)."),
+    ] = "all",
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Preview or apply agent adapter refreshes across every registered context."""
+
+    from workctx.adapters.agents import AgentAdapterService
+    from workctx.adapters.agents.fleet import refresh_registered_contexts
+
+    begin_command("agent.refresh", json_output=json_output)
+    if not all_contexts:
+        message = (
+            "Agent refresh currently requires --all; use 'workctx agent install' "
+            "to refresh one context."
+        )
+        diagnostic = CliDiagnostic(
+            code="AGENT_REFRESH_ALL_REQUIRED",
+            message=message,
+            path="$.selection",
+        )
+        record_failure(result={}, errors=[diagnostic])
+        raise UsageConfigurationError(message)
+
+    clients = _agent_clients(agent)
+    batch = refresh_registered_contexts(
+        service=AgentAdapterService(),
+        clients=clients,
+        apply=yes,
+        approvals_for=_agent_plan_approvals,
+    )
+    result = _fleet_refresh_payload(batch)
+    warnings = _fleet_refresh_warnings(batch)
+    errors = _fleet_refresh_errors(batch)
+
+    if not json_output:
+        _render_fleet_diagnostics(warnings, errors)
+        if yes:
+            output_console.print(Text("Applied the approved fleet refresh where plans succeeded."))
+        else:
+            output_console.print(
+                Text("Preview only; re-run with --all --yes to apply these plans.")
+            )
+        _render_fleet_refresh(batch)
+
+    if errors:
+        record_failure(result=result, warnings=warnings, errors=errors)
+        raise StaleDerivedStateError(
+            f"{batch.failure_count} agent refresh operation(s) failed; "
+            "every registered context was processed."
+        )
+    if json_output:
+        emit_success(result=result, warnings=warnings)
+
+
 @agent_app.command("repair")
 def agent_repair(
     agent: Annotated[str, typer.Option("--agent", help="codex, claude, gemini, or all.")],
@@ -3484,6 +3561,160 @@ def _agent_operation_payload(operation: OperationResult) -> dict[str, JsonValue]
     }
 
 
+def _fleet_refresh_payload(batch: FleetRefreshResult) -> dict[str, JsonValue]:
+    contexts = [_fleet_context_payload(context) for context in batch.contexts]
+    summary: dict[str, JsonValue] = {
+        "refreshed_clients": sum(len(context.refreshed_clients) for context in batch.contexts),
+        "preserved_edits": sum(len(context.preserved_edits) for context in batch.contexts),
+        "merge_pending": sum(len(context.merge_candidates) for context in batch.contexts),
+        "skipped_contexts": sum(context.skip is not None for context in batch.contexts),
+        "skipped_clients": sum(len(context.skipped_clients) for context in batch.contexts),
+        "failed_contexts": sum(bool(context.failures) for context in batch.contexts),
+        "failed_operations": batch.failure_count,
+    }
+    return {
+        "apply_requested": batch.apply_requested,
+        "selected_clients": [client.value for client in batch.selected_clients],
+        "count": len(contexts),
+        "contexts": cast(JsonValue, contexts),
+        "summary": summary,
+    }
+
+
+def _fleet_context_payload(context: FleetContextResult) -> dict[str, JsonValue]:
+    skip_reason: JsonValue = None
+    if context.skip is not None:
+        skip_reason = {
+            "code": context.skip.code.value,
+            "message": sanitize_message(context.skip.message),
+        }
+    preserved_edits = [
+        {
+            "client": item.client.value,
+            "path": item.change.path,
+            "reason": (
+                sanitize_message(item.change.reason) if item.change.reason is not None else None
+            ),
+        }
+        for item in context.preserved_edits
+    ]
+    merge_candidates = [
+        {
+            "client": item.client.value,
+            **_managed_file_merge_payload(item.candidate),
+        }
+        for item in context.merge_candidates
+    ]
+    return {
+        "context_id": context.context_id,
+        "root": str(context.root),
+        "configured_context_id": context.configured_context_id,
+        "clients": [client.value for client in context.clients],
+        "skipped_clients": [client.value for client in context.skipped_clients],
+        "application_state": context.application_state.value,
+        "plans": cast(
+            JsonValue,
+            [_fleet_client_result_payload(result) for result in context.client_results],
+        ),
+        "refreshed": [client.value for client in context.refreshed_clients],
+        "preserved_edits": cast(JsonValue, preserved_edits),
+        "merge_candidates": cast(JsonValue, merge_candidates),
+        "skip_reason": skip_reason,
+        "failures": cast(
+            JsonValue,
+            [_fleet_failure_payload(failure) for failure in context.failures],
+        ),
+    }
+
+
+def _fleet_client_result_payload(result: FleetClientResult) -> dict[str, JsonValue]:
+    plan: JsonValue = None
+    if result.plan is not None:
+        plan = _adapter_plan_payload(result.plan)
+    receipt: JsonValue = None
+    if result.receipt is not None:
+        receipt = _agent_operation_payload(result.receipt)
+    failure: JsonValue = None
+    if result.failure is not None:
+        failure = _fleet_failure_payload(result.failure)
+    return {
+        "client": result.client.value,
+        "application_state": result.application_state.value,
+        "applied": result.receipt is not None,
+        "plan": plan,
+        "receipt": receipt,
+        "failure": failure,
+    }
+
+
+def _fleet_failure_payload(failure: FleetFailure) -> dict[str, JsonValue]:
+    return {
+        "stage": failure.stage.value,
+        "client": failure.client.value if failure.client is not None else None,
+        "reason": _fleet_failure_reason(failure),
+    }
+
+
+def _fleet_failure_reason(failure: FleetFailure) -> str:
+    if isinstance(failure.error, InvalidContextError):
+        return "Context configuration is invalid."
+    if isinstance(failure.error, (WorkctxError, OSError)):
+        return sanitize_message(failure.error)
+    stage = failure.stage.value.replace("_", " ")
+    return f"Unexpected agent refresh {stage} failure."
+
+
+def _fleet_refresh_warnings(batch: FleetRefreshResult) -> tuple[CliDiagnostic, ...]:
+    warnings: list[CliDiagnostic] = []
+    skip_codes = {
+        "context_root_missing": "AGENT_REFRESH_CONTEXT_MISSING",
+        "context_id_mismatch": "AGENT_REFRESH_CONTEXT_ID_MISMATCH",
+    }
+    for context in batch.contexts:
+        if context.skip is not None and context.skip.code.value in skip_codes:
+            warnings.append(
+                CliDiagnostic(
+                    code=skip_codes[context.skip.code.value],
+                    message=sanitize_message(context.skip.message),
+                    path=str(context.root),
+                )
+            )
+        warnings.extend(
+            CliDiagnostic(
+                code="AGENT_CLIENT_UNAVAILABLE",
+                message=(f"The {client.value} client is not available on this machine; skipped."),
+                path=str(context.root),
+            )
+            for client in context.skipped_clients
+        )
+    return tuple(warnings)
+
+
+def _fleet_refresh_errors(batch: FleetRefreshResult) -> tuple[CliDiagnostic, ...]:
+    error_codes = {
+        "context_validation": "AGENT_REFRESH_CONTEXT_FAILED",
+        "detect": "AGENT_REFRESH_DETECTION_FAILED",
+        "plan": "AGENT_REFRESH_PLAN_FAILED",
+        "apply": "AGENT_REFRESH_APPLY_FAILED",
+    }
+    errors: list[CliDiagnostic] = []
+    for context_index, context in enumerate(batch.contexts):
+        for failure_index, failure in enumerate(context.failures):
+            client = f" for {failure.client.value}" if failure.client is not None else ""
+            stage = failure.stage.value.replace("_", " ")
+            errors.append(
+                CliDiagnostic(
+                    code=error_codes[failure.stage.value],
+                    message=sanitize_message(
+                        f"Context '{context.context_id}' {stage} failed{client}: "
+                        f"{_fleet_failure_reason(failure)}"
+                    ),
+                    path=f"$.contexts[{context_index}].failures[{failure_index}]",
+                )
+            )
+    return tuple(errors)
+
+
 def _opened_context_payload(opened: OpenedContext) -> dict[str, JsonValue]:
     return {
         "client": opened.client.value,
@@ -3510,6 +3741,61 @@ def _render_agent_plan(plan: AdapterPlan) -> None:
                 f"{candidate.packaged_now_hash}; local={candidate.local_hash}"
             )
         )
+
+
+def _render_fleet_diagnostics(
+    warnings: tuple[CliDiagnostic, ...],
+    errors: tuple[CliDiagnostic, ...],
+) -> None:
+    for warning in warnings:
+        location = f" ({warning.path})" if warning.path is not None else ""
+        output_console.print(Text(f"Warning: {warning.message}{location}"))
+    for error in errors:
+        output_console.print(Text(f"Failed: {error.message}"))
+
+
+def _render_fleet_refresh(batch: FleetRefreshResult) -> None:
+    mode = "apply" if batch.apply_requested else "preview"
+    table = Table(
+        title=f"Agent fleet refresh ({mode})",
+        show_lines=True,
+        padding=(0, 0),
+    )
+    table.add_column("Context")
+    table.add_column("Clients")
+    table.add_column("Refreshed")
+    table.add_column("Preserved edits")
+    table.add_column("Merge pending")
+    table.add_column("Skipped")
+    table.add_column("Failed")
+    for context in batch.contexts:
+        clients = ", ".join(client.value for client in context.clients) or "-"
+        refreshed = ", ".join(client.value for client in context.refreshed_clients) or "-"
+        if context.skip is not None:
+            skipped = context.skip.code.value
+        else:
+            skipped = ", ".join(client.value for client in context.skipped_clients) or "-"
+        failed = (
+            ", ".join(
+                (
+                    f"{failure.client.value}/{failure.stage.value}"
+                    if failure.client is not None
+                    else failure.stage.value
+                )
+                for failure in context.failures
+            )
+            or "-"
+        )
+        table.add_row(
+            context.context_id,
+            clients,
+            refreshed,
+            str(len(context.preserved_edits)),
+            str(len(context.merge_candidates)),
+            skipped,
+            failed,
+        )
+    output_console.print(table)
 
 
 def _render_agent_status(status: AdapterStatus) -> None:
