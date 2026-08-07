@@ -52,6 +52,19 @@ The advisory context registry is machine-local. Set `WORKCTX_CONTEXT_REGISTRY` t
 filesystem path when the registry JSON file must live somewhere other than its platform-specific
 default; this value is ordinary configuration, not a secret.
 
+Preview an adapter refresh for every registered context before applying it:
+
+```bash
+workctx agent refresh --all
+workctx agent refresh --all --yes
+```
+
+The default targets every detected available client; add `--agent codex`, `--agent claude`, or
+`--agent gemini` to narrow the batch. `--yes` is the only fleet approval, so the first command
+writes nothing. Missing roots and registry/context ID mismatches are warned and skipped. A failure
+in one valid context is reported without stopping later contexts, and the completed partial batch
+exits 6. Use `workctx agent install` when you intend to refresh only the current context.
+
 ## One context or many?
 
 Rule of thumb: separate boundaries (different clients, different employers,

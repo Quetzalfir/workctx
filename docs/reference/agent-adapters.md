@@ -138,6 +138,30 @@ hold. A modified generated target is a conflict and is preserved in report-only 
 precondition is rechecked while holding the project-local lock; output and manifest changes use a
 staged, recoverable transaction.
 
+## Fleet refresh
+
+`workctx agent refresh --all [--yes] [--agent codex|claude|gemini|all]` reuses that same install
+planner and apply path across the machine context registry. `--all` is required; refreshing one
+context remains `workctx agent install`. The registry is read in stable context-ID order without
+changing active-context selection or registering anything on use.
+
+Before client detection, each registration must still have a regular `context.yaml` whose ID
+exactly matches its registered ID. A missing root or marker and an ID mismatch are skipped with
+per-context warnings; the command never guesses a moved root or adopts the configured ID. For a
+valid context, only selected clients detected as `available` are planned. With the default
+`--agent all`, unavailable clients use the same `AGENT_CLIENT_UNAVAILABLE` warning as
+`agent install --agent all`; narrowing `--agent` applies the same availability rule to that one
+client.
+
+Without `--yes`, every eligible client plan is prepared and no install plan is applied. With
+`--yes`, each prepared plan is passed unchanged to `AgentAdapterService.install` with the exact
+plan-bound approvals already used by `agent install`. A detection, planning, or apply exception is
+captured in that context's result and never prevents later registered contexts from being
+processed. Any such failure yields exit 6 after the full batch; warning-only skips do not. Human
+output has one row per registration and counts or names refreshed clients, preserved plan entries,
+pending three-way merges, skips, and failures. JSON keeps each original plan and receipt, its
+application state, exact `merge_candidates`, and structured skip and failure reasons.
+
 Before a project mutation, the installer stores a pending trusted transition containing the old
 and new manifest digests and a digest of the exact ordered operation set. Pending state never
 authenticates an ordinary repair or uninstall. Normal completion or recovery must bind the
