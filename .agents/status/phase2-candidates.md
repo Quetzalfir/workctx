@@ -283,3 +283,27 @@ stale-install incident, 2026-08-07); version is only discoverable via
 package metadata. Add an eager `--version` flag and include the version in
 `workctx doctor` output so version skew between installs, MCP servers, and
 contexts is diagnosable in one command.
+
+## C-218 — Agent bridge hardening: orient-first, ask-once
+
+Operator report (2026-08-07): agents inside real contexts keep asking for
+facts the context already holds (GitHub access method, people and roles,
+permission flows). Two systemic gaps: agents do not orient themselves in
+the stored knowledge before asking, and repeated operator answers are not
+persisted, so the same question returns.
+
+Harden the packaged bridges, context template, and orientation-relevant
+skills with two mandatory rules:
+1. Orient before asking — at task start consult context.yaml policies and
+   the generated views (people-directory, resource-directory, glossary,
+   current-focus); before requesting any fact or access from the operator,
+   exhaust `workctx search`, `workctx ref`, `90_integrations/`,
+   `workctx secret list`, and `workctx connector list` (extends the
+   existing access-discovery rule beyond access to all context knowledge).
+2. Ask once, record forever — any fact the operator supplies in chat that
+   the context lacked MUST be persisted the same session through the
+   normal proposal flow (entity, integration note, or instructions.md
+   suggestion), so no agent asks for it again.
+
+Existing contexts receive this via WP-760 pristine freshness on the next
+`agent refresh --all`.
