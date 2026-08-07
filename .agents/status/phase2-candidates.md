@@ -260,7 +260,7 @@ instructions in AGENTS.md, which preserves them but freezes that file out of
 future contract updates; the personalization layer is today's correct home,
 and merge-assist closes the general case.
 
-## C-216 — Fleet refresh: one command to update every registered context
+## C-216 — Fleet refresh: one command to update every registered context — DELIVERED (WP-770, 2026-08-07)
 
 Operator request (2026-08-06): "si workctx ya sabe dónde están, ¿no podría
 haber un comando que los auto-actualice a todos?" Now that the context
