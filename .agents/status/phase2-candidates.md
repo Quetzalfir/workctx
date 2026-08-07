@@ -275,3 +275,11 @@ a per-context summary table (refreshed / preserved-edits / merge-pending /
 skipped / failed) plus a non-zero exit if anything failed. Without `--yes`
 it is a fleet-wide dry-run preview. Reuses the existing install planner
 verbatim; no new mutation machinery.
+
+## C-217 — Version visibility
+
+`workctx --version` does not exist (operator hit this while diagnosing a
+stale-install incident, 2026-08-07); version is only discoverable via
+package metadata. Add an eager `--version` flag and include the version in
+`workctx doctor` output so version skew between installs, MCP servers, and
+contexts is diagnosable in one command.
