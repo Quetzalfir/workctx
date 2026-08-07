@@ -259,3 +259,19 @@ precedent. Operator scenario: an agent recorded standing AWS-access
 instructions in AGENTS.md, which preserves them but freezes that file out of
 future contract updates; the personalization layer is today's correct home,
 and merge-assist closes the general case.
+
+## C-216 — Fleet refresh: one command to update every registered context
+
+Operator request (2026-08-06): "si workctx ya sabe dónde están, ¿no podría
+haber un comando que los auto-actualice a todos?" Now that the context
+registry (WP-750) plus register-on-use (WP-760) keep an accurate machine
+inventory, a single command should refresh agent adapters across it.
+
+Proposed shape: `workctx agent refresh --all [--yes] [--agent <name|all>]`.
+Per registered context: skip missing roots with a warning, plan per
+available client, apply only with the explicit batch `--yes` (D-045: nothing
+auto-approves), never abort the batch on one context's failure, and end with
+a per-context summary table (refreshed / preserved-edits / merge-pending /
+skipped / failed) plus a non-zero exit if anything failed. Without `--yes`
+it is a fleet-wide dry-run preview. Reuses the existing install planner
+verbatim; no new mutation machinery.
