@@ -284,7 +284,7 @@ package metadata. Add an eager `--version` flag and include the version in
 `workctx doctor` output so version skew between installs, MCP servers, and
 contexts is diagnosable in one command.
 
-## C-218 — Agent bridge hardening: orient-first, ask-once
+## C-218 — Agent bridge hardening: orient-first, ask-once — DELIVERED (WP-780, 2026-08-07)
 
 Operator report (2026-08-07): agents inside real contexts keep asking for
 facts the context already holds (GitHub access method, people and roles,
