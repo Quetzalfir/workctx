@@ -9,6 +9,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | CLI command | Envelope `command` | Primary `result` fields |
 | --- | --- | --- |
 | `doctor` | `doctor` | `checks` |
+| `guide` | `guide` | `schema_version`, `root`, `ownership`, `routing`, `never_edit`, `adapter_note`, `escape_hatch` |
 | `context init` | `context.init` | `root`, `context` |
 | `context register` | `context.register` | `id`, `path`, `active` |
 | `context list` | `context.list` | `count`, `contexts` |

@@ -916,6 +916,30 @@ def mcp_serve(
     serve_stdio(root)
 
 
+@app.command("guide")
+def guide_command(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Show deterministic file-placement and ownership guidance."""
+
+    from workctx.guide import guide_payload, render_guide
+
+    begin_command("guide", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    result = guide_payload(root)
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        output_console.print(render_guide(context_id=context_id), crop=False)
+
+
 @app.command()
 def doctor(
     json_output: Annotated[

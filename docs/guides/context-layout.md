@@ -15,6 +15,10 @@ context.yaml
 
 `04_views/` and `98_state/` must be rebuildable. Do not place the only copy of knowledge there. `04_views/` starts empty and is populated by `workctx view rebuild`.
 
+Run `workctx guide` inside a resolved context for the packaged ownership table, placement routes,
+and regeneration commands; use `workctx guide --json` for the same authoritative data in the CLI
+envelope.
+
 All context kinds and profiles use this required top-level layout. Profiles select defaults
 for how the context is used; they are not security roles and do not remove canonical zones.
 For example, a `light` profile may leave repository integrations unconfigured while retaining
