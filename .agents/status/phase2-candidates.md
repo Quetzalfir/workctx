@@ -307,3 +307,25 @@ skills with two mandatory rules:
 
 Existing contexts receive this via WP-760 pristine freshness on the next
 `agent refresh --all`.
+
+## C-219 — File placement and ownership guide (`workctx guide`)
+
+Operator request (2026-08-08): agents inside generated contexts need an
+always-discoverable answer to "where does this go, what may I overwrite,
+what must I never touch". Repeated real incidents: agents editing
+generated bridges directly (MQ425 AWS, Loftware git-identity) with false
+justifications, because ownership is not queryable in-context.
+
+Two pieces with guaranteed discovery:
+1. `workctx guide` (with `--json`): prints the placement and ownership
+   map for the resolved context — per-path ownership class (canonical via
+   proposals / user-owned / generated / machine-state), edit policy, the
+   where-does-it-go routing table (person fact, access fact, standing
+   preference, evidence, task, draft, workflow customization), and the
+   never-edit list with the escape hatch (stop; use agent repair/refresh
+   or ask the operator). Deterministic packaged content so it always
+   matches the installed version; ships with the tool, so every context
+   gets it on upgrade without per-context changes.
+2. One bridge sentence advertising the command before any file
+   creation/modification, so agents cannot claim ignorance; equivalent
+   bullet in the context template and the bootstrap-session skill.
