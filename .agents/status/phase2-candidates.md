@@ -329,3 +329,20 @@ Two pieces with guaranteed discovery:
 2. One bridge sentence advertising the command before any file
    creation/modification, so agents cannot claim ignorance; equivalent
    bullet in the context template and the bootstrap-session skill.
+
+## C-220 — First-class context-local custom skills
+
+Live incident (2026-08-17): an Incode agent authored a genuinely useful
+custom skill (mobile-identity-desktop-ui) and parked it unregistered in
+`.agents/skills/`, breaking the tree-vs-registry inventory check and
+failing the context's fleet refresh at plan time. Workaround applied: the
+lead registered it in the context `registry.yaml`, which works but marks
+the registry operator-edited forever (merge-pending noise, packaged
+registry updates frozen).
+
+Proposal: make context-local custom skills official — a registry section
+(or naming convention) for custom entries that does not count as an
+operator edit of the packaged inventory, renders to `.claude/skills/` and
+`.gemini/skills/` like packaged skills, is preserved across refreshes,
+and is surfaced distinctly in `workctx guide` and `agent status`. Include
+validation (skill lint) for custom skills at install time.
