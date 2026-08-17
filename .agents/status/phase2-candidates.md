@@ -346,3 +346,15 @@ operator edit of the packaged inventory, renders to `.claude/skills/` and
 `.gemini/skills/` like packaged skills, is preserved across refreshes,
 and is surfaced distinctly in `workctx guide` and `agent status`. Include
 validation (skill lint) for custom skills at install time.
+
+## C-221 — Historical template hashes for bridge healing
+
+Live incident (2026-08-17): jalasoft-internal's AGENTS.md was a byte-exact
+copy of an OLDER shipped context template — never operator-edited — but
+`_pristine_template_bridge_hash` compares only against the CURRENT
+packaged template, so healing could not prove pristineness and the bridge
+stayed operator-owned with permanent merge-pending noise. Fix: recognize
+the full set of historically shipped template bridge hashes (append-only
+tuple in the resources package) so any unedited template generation heals
+to generated ownership. Lead worked around it by deleting the pristine
+old-template bridge (backed up) so refresh regenerates it.
