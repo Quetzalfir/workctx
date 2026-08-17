@@ -308,7 +308,7 @@ skills with two mandatory rules:
 Existing contexts receive this via WP-760 pristine freshness on the next
 `agent refresh --all`.
 
-## C-219 — File placement and ownership guide (`workctx guide`)
+## C-219 — File placement and ownership guide (`workctx guide`) — DELIVERED (WP-790, 2026-08-17)
 
 Operator request (2026-08-08): agents inside generated contexts need an
 always-discoverable answer to "where does this go, what may I overwrite,
