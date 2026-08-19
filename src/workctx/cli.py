@@ -47,6 +47,7 @@ from workctx import __version__
 from workctx.doctor import DoctorCheck, run_doctor
 from workctx.domain import EntityType, TaskStatus
 from workctx.errors import (
+    ContextBoundaryError,
     InvalidContextError,
     StaleDerivedStateError,
     UnavailableDependencyError,
@@ -60,6 +61,7 @@ from workctx.presentation import (
     PresentationTyperGroup,
     begin_command,
     emit_success,
+    error_console,
     output_console,
     record_failure,
     sanitize_message,
@@ -1251,6 +1253,37 @@ def context_validate(
     )
 
 
+@context_app.command("refresh-meta")
+def context_refresh_meta(
+    path: Annotated[Path | None, typer.Argument(help="Context root or path inside it.")] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Install or refresh packaged reference schemas in an existing context."""
+
+    begin_command("context.refresh-meta", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path, positional_path=path)
+    context_id = load_context_config(root).id
+    schemas = _refresh_context_meta_schemas(root)
+    result: dict[str, JsonValue] = {
+        "root": str(root),
+        "schemas": [{"path": relative_path, "status": status} for relative_path, status in schemas],
+    }
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        updated = sum(status == "updated" for _, status in schemas)
+        unchanged = len(schemas) - updated
+        output_console.print(
+            Text(f"Refreshed packaged metadata: {updated} updated, {unchanged} unchanged.")
+        )
+
+
 @app.command("validate")
 def validate_alias(
     path: Annotated[Path | None, typer.Argument(help="Context root or path inside it.")] = None,
@@ -1288,7 +1321,11 @@ def proposal_validate(
 
     begin_command("proposal.validate", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
-    proposal = _load_transaction_proposal(file)
+    proposal = _load_transaction_proposal(
+        file,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
     validation = validate_proposal(root, proposal)
     result: dict[str, JsonValue] = {
         "validation": cast("dict[str, JsonValue]", validation.model_dump(mode="json"))
@@ -1326,7 +1363,11 @@ def proposal_show(
 
     begin_command("proposal.show", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
-    proposal = _load_transaction_proposal(file)
+    proposal = _load_transaction_proposal(
+        file,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
     preview = dry_run(root, proposal)
     _complete_transaction_preview(preview, json_output=json_output)
 
@@ -1360,7 +1401,11 @@ def transaction_apply(
 
     begin_command("transaction.apply", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
-    proposal = _load_transaction_proposal(file)
+    proposal = _load_transaction_proposal(
+        file,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
     if dry_run_only or not yes:
         preview = dry_run(root, proposal)
         confirmation = None if yes else "Re-run with --yes to apply these intended changes."
@@ -1996,6 +2041,68 @@ def _validate_context(
         emit_success(result=result, context_id=report.context_id, warnings=warnings)
     else:
         _render_validation(report, serialized_issues)
+
+
+def _refresh_context_meta_schemas(root: Path) -> tuple[tuple[str, str], ...]:
+    from workctx.adapters.filesystem import CanonicalStore, ContextZone
+    from workctx.validation.meta import packaged_meta_schemas
+
+    store = CanonicalStore(root)
+    schema_directory = store.resolve_path(
+        "99_meta/schemas",
+        zones=(ContextZone.META,),
+    )
+    if schema_directory.exists() or _is_link_or_junction(schema_directory):
+        _require_plain_meta_directory(schema_directory)
+    else:
+        with suppress(FileExistsError):
+            schema_directory.mkdir()
+        _require_plain_meta_directory(schema_directory)
+
+    outcomes: list[tuple[str, str]] = []
+    for schema in packaged_meta_schemas():
+        target = store.resolve_path(schema.relative_path, zones=(ContextZone.META,))
+        if target.parent != schema_directory:
+            raise ContextBoundaryError("Packaged metadata target has an unexpected parent.")
+        if _is_link_or_junction(target) or (target.exists() and not target.is_file()):
+            raise ContextBoundaryError("Packaged metadata target is not a regular file.")
+        try:
+            current = target.read_bytes() if target.is_file() else None
+        except OSError as exc:
+            raise ContextBoundaryError("Packaged metadata target could not be read.") from exc
+        if current == schema.content:
+            outcomes.append((schema.relative_path, "unchanged"))
+            continue
+        _atomic_replace_meta_schema(target, schema.content)
+        outcomes.append((schema.relative_path, "updated"))
+    return tuple(outcomes)
+
+
+def _require_plain_meta_directory(path: Path) -> None:
+    if _is_link_or_junction(path) or not path.is_dir():
+        raise ContextBoundaryError("Packaged metadata directory is not a plain directory.")
+
+
+def _is_link_or_junction(path: Path) -> bool:
+    return path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
+
+
+def _atomic_replace_meta_schema(target: Path, content: bytes) -> None:
+    import os
+    import secrets
+
+    temporary = target.with_name(f".{target.name}.{secrets.token_hex(12)}.tmp")
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    except OSError as exc:
+        raise UserCorrectableError("Packaged metadata could not be refreshed.") from exc
+    finally:
+        with suppress(FileNotFoundError):
+            temporary.unlink()
 
 
 @ref_app.command("show")
@@ -3109,10 +3216,16 @@ def _resolution_payload(resolution: ResolutionResult) -> dict[str, JsonValue]:
     return payload
 
 
-def _load_transaction_proposal(path: Path) -> TransactionProposal:
+def _load_transaction_proposal(
+    path: Path,
+    *,
+    context_id: str,
+    json_output: bool,
+) -> TransactionProposal:
     import json
 
     from workctx.domain.transactions import TransactionProposal
+    from workctx.validation.model_errors import model_validation_details
 
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -3123,6 +3236,19 @@ def _load_transaction_proposal(path: Path) -> TransactionProposal:
     try:
         return TransactionProposal.model_validate(payload)
     except ValidationError as exc:
+        errors = [
+            CliDiagnostic(
+                code="PROPOSAL_MODEL_INVALID",
+                message=sanitize_message(detail.message),
+                path=sanitize_message(detail.path, fallback=""),
+                repair_action="Correct this proposal field and retry.",
+            )
+            for detail in model_validation_details(exc)
+        ]
+        record_failure(result={}, context_id=context_id, errors=errors)
+        if not json_output:
+            for error in errors:
+                error_console.print(f"{error.path}: {error.message}")
         raise UserCorrectableError("Transaction proposal does not match the schema.") from exc
 
 

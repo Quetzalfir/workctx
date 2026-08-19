@@ -41,6 +41,7 @@ invalid canonical state.
 | `CLAIM-CURRENT-OVERLAP` | error | Current claims for one subject and predicate overlap in time. | Close or supersede the older interval so one current value applies at a time. |
 | `CLAIM-SUPERSESSION-MISSING` | error | A supersession ID has no canonical claim target. | Restore the referenced claim or correct the supersession ID. |
 | `CLAIM-SUPERSESSION-CYCLE` | error | Normalized claim supersession relations form a cycle. | Break the cycle so supersession history progresses in one direction. |
+| `META-SCHEMA-STALE` | advisory | A packaged reference schema under `99_meta/schemas/` is missing or differs from the installed version. | Run `workctx context refresh-meta` to materialize the current packaged reference schemas. |
 | `PROJECTION-STALE` | warning | A configured freshness probe reports stale derived projections. | Rebuild projections from canonical workspace files. |
 | `PROJECTION-BACKLINK-MISMATCH` | warning | Generated backlinks differ from canonical outbound edges. | Rebuild the backlink projection from canonical edges. |
 | `PROJECTION-FRESHNESS-UNKNOWN` | advisory | A configured probe cannot determine projection freshness. | Configure a projection-aware probe or verify projections independently. |

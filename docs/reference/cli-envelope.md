@@ -16,6 +16,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `context unregister` | `context.unregister` | `id`, `removed` |
 | `context inspect` | `context.inspect` | `root`, `context` |
 | `context validate` | `context.validate` | `root`, `issues` |
+| `context refresh-meta` | `context.refresh-meta` | `root`, `schemas` |
 | `validate` | `context.validate` | `root`, `issues` |
 | `inbox add` | `inbox.add` | `count`, `outcomes` |
 | `inbox list` | `inbox.list` | `count`, `artifacts` |
@@ -64,8 +65,11 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
-apply reports `dry_run: false` and includes the authenticated transaction receipt. Likewise,
-`agent install` returns the complete plan without changing files unless `--yes` is present.
+apply reports `dry_run: false` and includes the authenticated transaction receipt.
+`context refresh-meta` idempotently installs the packaged reference schemas under
+`99_meta/schemas/`; each schema reports `updated` or `unchanged`, and no other context file is
+modified. `agent install` returns the complete plan without changing files unless `--yes` is
+present.
 `agent refresh` requires `--all` and reads the machine context registry in stable context-ID
 order. It also previews every valid context by default. The context rows report `preview`,
 `applied`, `skipped`, or `failed`; each client-plan row separately reports its application state
@@ -113,6 +117,8 @@ Every JSON result has all of these fields:
 - successful envelopes have no errors; failed envelopes contain at least one error.
 - diagnostic messages are sanitized, bounded, and single-line. Unexpected failures expose
   a stable generic message instead of exception details or tracebacks.
+- proposal model failures emit one `PROPOSAL_MODEL_INVALID` error per Pydantic error, preserving
+  the field `path` and sanitized validation message without including the rejected input value.
 - `schema_version` is the envelope contract version. `duration_ms` is non-negative wall
   duration measured with a monotonic clock.
 
