@@ -347,7 +347,7 @@ operator edit of the packaged inventory, renders to `.claude/skills/` and
 and is surfaced distinctly in `workctx guide` and `agent status`. Include
 validation (skill lint) for custom skills at install time.
 
-## C-221 — Historical template hashes for bridge healing
+## C-221 — Historical template hashes for bridge healing — DELIVERED (lead fix, 2026-08-18)
 
 Live incident (2026-08-17): jalasoft-internal's AGENTS.md was a byte-exact
 copy of an OLDER shipped context template — never operator-edited — but
