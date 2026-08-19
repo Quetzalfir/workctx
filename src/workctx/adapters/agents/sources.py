@@ -149,6 +149,13 @@ class CanonicalRegistryMissingError(CanonicalInputMissingError):
 class CanonicalRegistryInvalidError(InvalidAdapterStateError):
     """The canonical registry is unsafe or violates its complete contract."""
 
+    def __init__(self, message: str, *, repair_action: str | None = None) -> None:
+        full_message = (
+            message if repair_action is None else f"{message} Repair action: {repair_action}"
+        )
+        super().__init__(full_message)
+        self.repair_action = repair_action
+
 
 class CanonicalSkillMissingError(CanonicalInputMissingError):
     """A skill declared by a valid local registry is absent."""
@@ -204,6 +211,7 @@ class CanonicalSkill:
     content_hash: str
     resources: tuple[CanonicalResource, ...] = ()
     override: ResolvedSkillOverride | None = None
+    custom: bool = False
 
     @property
     def path(self) -> str:
@@ -243,6 +251,8 @@ class CanonicalSourceSet:
     origin: SourceOrigin
     registry_content: bytes
     registry_hash: str
+    registry_skills_content: bytes
+    registry_without_custom_content: bytes
     skills: tuple[CanonicalSkill, ...]
     bridge_content: bytes
     bridge_hash: str
@@ -252,15 +262,23 @@ class CanonicalSourceSet:
     skill_overrides: SkillOverrides = field(default_factory=SkillOverrides)
 
     @property
+    def custom_skill_names(self) -> tuple[str, ...]:
+        """Return the context-local custom inventory in stable order."""
+
+        return tuple(skill.name for skill in self.skills if skill.custom)
+
+    @property
     def fingerprint(self) -> str:
         joined = "\n".join(
             [
                 self.registry_hash,
+                content_hash(self.registry_skills_content),
                 *(
                     value
                     for skill in self.skills
                     for value in (
                         skill.name,
+                        "custom" if skill.custom else "packaged",
                         skill.content_hash,
                         *(
                             f"{resource.relative_path}\0{resource.content_hash}"
@@ -299,6 +317,17 @@ class _ProductReference:
     end: int
 
 
+@dataclass(frozen=True, slots=True)
+class _RegistryDefinition:
+    """Validated registry data plus exact source sections used by freshness logic."""
+
+    content: bytes
+    skills: tuple[tuple[str, str], ...]
+    custom_skills: tuple[tuple[str, str], ...]
+    skills_content: bytes
+    without_custom_content: bytes
+
+
 def _yaml_mapping(content: bytes, description: str) -> dict[str, Any]:
     try:
         value = yaml.load(content.decode("utf-8"), Loader=_UniqueKeyLoader)
@@ -309,32 +338,73 @@ def _yaml_mapping(content: bytes, description: str) -> dict[str, Any]:
     return value
 
 
-def _registry_entries(content: bytes) -> tuple[tuple[str, str], ...]:
-    try:
-        registry = _yaml_mapping(content, "Skill registry")
-    except InvalidAdapterStateError as error:
-        raise CanonicalRegistryInvalidError(str(error)) from error
-    if (
-        set(registry) != {"schema_version", "skills"}
-        or type(registry["schema_version"]) is not int
-        or registry["schema_version"] != 1
-    ):
-        raise CanonicalRegistryInvalidError("Skill registry has an unsupported object shape")
-    raw_entries = registry["skills"]
+def _registry_section_span(text: str, name: str) -> tuple[int, int]:
+    """Return the exact character span occupied by one top-level registry field."""
+
+    def semantic_end(node: yaml.nodes.Node) -> int:
+        if isinstance(node, yaml.nodes.SequenceNode) and not node.flow_style:
+            return max(semantic_end(item) for item in node.value)
+        if isinstance(node, yaml.nodes.MappingNode) and not node.flow_style:
+            return max(semantic_end(child) for pair in node.value for child in pair)
+        return node.end_mark.index
+
+    node = yaml.compose(text, Loader=_UniqueKeyLoader)
+    if not isinstance(node, yaml.nodes.MappingNode):
+        raise CanonicalRegistryInvalidError("Skill registry must be a YAML mapping")
+    for key_node, value_node in node.value:
+        if not isinstance(key_node, yaml.nodes.ScalarNode) or key_node.value != name:
+            continue
+        start = key_node.start_mark.index
+        end = semantic_end(value_node)
+        # Block scalars end at the beginning of the first following line,
+        # whereas plain scalars end before their line terminator.  Extending a
+        # block scalar to the next newline would accidentally consume a
+        # boundary comment that belongs with the operator-owned custom section.
+        if end and text[end - 1] != "\n":
+            newline = text.find("\n", end)
+            end = len(text) if newline < 0 else newline + 1
+        return start, end
+    raise CanonicalRegistryInvalidError(f"Skill registry is missing the {name} section")
+
+
+def _registry_field_span(text: str, name: str) -> tuple[int, int]:
+    """Return one whole top-level field through the next field or end of document."""
+
+    node = yaml.compose(text, Loader=_UniqueKeyLoader)
+    if not isinstance(node, yaml.nodes.MappingNode):
+        raise CanonicalRegistryInvalidError("Skill registry must be a YAML mapping")
+    for index, (key_node, _value_node) in enumerate(node.value):
+        if not isinstance(key_node, yaml.nodes.ScalarNode) or key_node.value != name:
+            continue
+        end = (
+            node.value[index + 1][0].start_mark.index if index + 1 < len(node.value) else len(text)
+        )
+        return key_node.start_mark.index, end
+    raise CanonicalRegistryInvalidError(f"Skill registry is missing the {name} section")
+
+
+def _validated_registry_entries(
+    raw_entries: object,
+    *,
+    section: str,
+    seen: set[str],
+) -> tuple[tuple[str, str], ...]:
+    label = "Custom skill" if section == "custom_skills" else "Packaged skill"
     if not isinstance(raw_entries, list) or not raw_entries:
-        raise CanonicalRegistryInvalidError("Skill registry must contain a nonempty skills list")
+        raise CanonicalRegistryInvalidError(f"Skill registry {section} must be a nonempty list")
     entries: list[tuple[str, str]] = []
-    seen: set[str] = set()
     for raw in raw_entries:
         if not isinstance(raw, dict) or not all(isinstance(key, str) for key in raw):
-            raise CanonicalRegistryInvalidError("Skill registry entries must be mappings")
+            raise CanonicalRegistryInvalidError(
+                f"Skill registry {section} entries must be mappings"
+            )
         if not {"id", "side_effect_class"} <= set(raw) or set(raw) - {
             "id",
             "side_effect_class",
             "notes",
         }:
             raise CanonicalRegistryInvalidError(
-                "Skill registry entry has an unsupported object shape"
+                f"Skill registry {section} entry has an unsupported object shape"
             )
         name = raw["id"]
         side_effect = raw["side_effect_class"]
@@ -344,13 +414,17 @@ def _registry_entries(content: bytes) -> tuple[tuple[str, str], ...]:
             or _SKILL_NAME.fullmatch(name) is None
             or not 2 <= len(name) <= 80
         ):
-            raise CanonicalRegistryInvalidError("Skill registry contains an invalid skill ID")
+            raise CanonicalRegistryInvalidError(
+                f"Skill registry {section} contains an invalid skill ID"
+            )
         if name in seen:
-            raise CanonicalRegistryInvalidError(f"Skill registry contains duplicate ID: {name}")
+            raise CanonicalRegistryInvalidError(
+                f"Skill registry contains duplicate ID across skills sections: {name}"
+            )
         if not isinstance(side_effect, str) or side_effect not in _SIDE_EFFECT_CLASSES:
-            raise CanonicalRegistryInvalidError(f"Skill {name} has an invalid side-effect class")
+            raise CanonicalRegistryInvalidError(f"{label} {name} has an invalid side-effect class")
         if notes is not None and (not isinstance(notes, str) or not 1 <= len(notes) <= 500):
-            raise CanonicalRegistryInvalidError(f"Skill {name} has invalid registry notes")
+            raise CanonicalRegistryInvalidError(f"{label} {name} has invalid registry notes")
         if side_effect == "external_write" and (
             not isinstance(notes, str)
             or not re.match(
@@ -360,11 +434,89 @@ def _registry_entries(content: bytes) -> tuple[tuple[str, str], ...]:
             )
         ):
             raise CanonicalRegistryInvalidError(
-                f"External-write skill {name} lacks an explicit approval boundary"
+                f"External-write {label.lower()} {name} lacks an explicit approval boundary"
             )
         seen.add(name)
         entries.append((name, side_effect))
     return tuple(sorted(entries))
+
+
+def _registry_definition(content: bytes) -> _RegistryDefinition:
+    try:
+        registry = _yaml_mapping(content, "Skill registry")
+    except InvalidAdapterStateError as error:
+        raise CanonicalRegistryInvalidError(str(error)) from error
+    if (
+        not {"schema_version", "skills"} <= set(registry)
+        or set(registry) - {"schema_version", "skills", "custom_skills"}
+        or type(registry["schema_version"]) is not int
+        or registry["schema_version"] != 1
+    ):
+        raise CanonicalRegistryInvalidError("Skill registry has an unsupported object shape")
+    seen: set[str] = set()
+    packaged = _validated_registry_entries(registry["skills"], section="skills", seen=seen)
+    custom = (
+        _validated_registry_entries(
+            registry["custom_skills"],
+            section="custom_skills",
+            seen=seen,
+        )
+        if "custom_skills" in registry
+        else ()
+    )
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as error:  # pragma: no cover - mapped by _yaml_mapping above
+        raise CanonicalRegistryInvalidError("Skill registry must be strict UTF-8") from error
+    skills_start, skills_end = _registry_section_span(text, "skills")
+    if "custom_skills" in registry:
+        custom_start, custom_end = _registry_field_span(text, "custom_skills")
+        without_custom = (text[:custom_start] + text[custom_end:]).encode("utf-8")
+    else:
+        without_custom = content
+    return _RegistryDefinition(
+        content=content,
+        skills=packaged,
+        custom_skills=custom,
+        skills_content=text[skills_start:skills_end].encode("utf-8"),
+        without_custom_content=without_custom,
+    )
+
+
+def _registry_entries(content: bytes) -> tuple[tuple[str, str], ...]:
+    """Return packaged entries for compatibility with packaged-skill callers."""
+
+    return _registry_definition(content).skills
+
+
+def refresh_registry_skills(local_content: bytes, packaged_content: bytes) -> bytes:
+    """Rewrite only ``skills:`` while retaining local ``custom_skills:`` bytes exactly."""
+
+    local = _registry_definition(local_content)
+    packaged = _registry_definition(packaged_content)
+    if packaged.custom_skills:
+        raise CanonicalRegistryInvalidError(
+            "Packaged skill registry must not declare context-local custom_skills"
+        )
+    if not local.custom_skills:
+        return packaged_content
+    local_text = local_content.decode("utf-8")
+    start, end = _registry_section_span(local_text, "skills")
+    packaged_skills = packaged.skills_content.decode("utf-8")
+    refreshed = (local_text[:start] + packaged_skills + local_text[end:]).encode("utf-8")
+    refreshed_registry = _registry_definition(refreshed)
+    if refreshed_registry.custom_skills != local.custom_skills:
+        raise CanonicalRegistryInvalidError(
+            "Refreshing packaged skills changed the custom_skills inventory"
+        )
+    return refreshed
+
+
+def registry_freshness_parts(content: bytes) -> tuple[bytes, bytes]:
+    """Return exact ``skills:`` and registry-without-custom bytes for freshness checks."""
+
+    registry = _registry_definition(content)
+    return registry.skills_content, registry.without_custom_content
 
 
 def _callback_options(callback: Callable[..., object]) -> frozenset[str]:
@@ -616,20 +768,22 @@ def _validate_skill(
     content: bytes,
     *,
     link_exists: Callable[[str], bool],
+    custom: bool = False,
 ) -> None:
+    label = "Custom skill" if custom else "Canonical skill"
     if b"\x00" in content:
-        raise InvalidAdapterStateError(f"Canonical skill {name} contains a NUL byte")
+        raise InvalidAdapterStateError(f"{label} {name} contains a NUL byte")
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise InvalidAdapterStateError(f"Canonical skill {name} must be UTF-8") from error
+        raise InvalidAdapterStateError(f"{label} {name} must be UTF-8") from error
     assigned_secret = any(
         len(value) >= 12 and _PLACEHOLDER_VALUE.fullmatch(value) is None
         for match in _ASSIGNED_SECRET.finditer(text)
         if (value := match.group("value").strip("'\""))
     )
     if assigned_secret or any(pattern.search(content) for pattern in _TOKEN_PATTERNS):
-        raise InvalidAdapterStateError(f"Canonical skill {name} contains secret-like material")
+        raise InvalidAdapterStateError(f"{label} {name} contains secret-like material")
     path_scan_text = _HTML_CLOSING_TAG.sub(lambda match: " " * len(match.group(0)), text)
     absolute_path = any(
         label != "single-segment POSIX path"
@@ -638,34 +792,42 @@ def _validate_skill(
         for match in pattern.finditer(path_scan_text)
     )
     if absolute_path:
-        raise InvalidAdapterStateError(
-            f"Canonical skill {name} contains a machine-specific absolute path"
-        )
+        raise InvalidAdapterStateError(f"{label} {name} contains a machine-specific absolute path")
     lines = text.splitlines(keepends=True)
     if not lines or lines[0].rstrip("\r\n") != "---":
-        raise InvalidAdapterStateError(f"Canonical skill {name} lacks frontmatter")
+        raise InvalidAdapterStateError(f"{label} {name} lacks frontmatter")
     closing = next(
         (index for index, line in enumerate(lines[1:], 1) if line.rstrip("\r\n") == "---"),
         None,
     )
     if closing is None:
-        raise InvalidAdapterStateError(f"Canonical skill {name} has unterminated frontmatter")
-    metadata = _yaml_mapping("".join(lines[1:closing]).encode("utf-8"), f"Skill {name} frontmatter")
+        raise InvalidAdapterStateError(f"{label} {name} has unterminated frontmatter")
+    metadata = _yaml_mapping(
+        "".join(lines[1:closing]).encode("utf-8"),
+        f"{label} {name} frontmatter",
+    )
     if set(metadata) != {"name", "description"}:
-        raise InvalidAdapterStateError(f"Canonical skill {name} frontmatter has unsupported fields")
+        raise InvalidAdapterStateError(f"{label} {name} frontmatter has unsupported fields")
+    if metadata["name"] != name:
+        raise InvalidAdapterStateError(
+            f"{label} {name} violates the frontmatter name rule: name must match the registry ID"
+        )
     description = metadata["description"]
-    if (
-        metadata["name"] != name
-        or not isinstance(description, str)
-        or not 20 <= len(description) <= 600
-    ):
-        raise InvalidAdapterStateError(f"Canonical skill {name} frontmatter is invalid")
+    if not isinstance(description, str):
+        raise InvalidAdapterStateError(
+            f"{label} {name} violates the frontmatter description rule: expected a string"
+        )
+    if not 20 <= len(description) <= 600:
+        raise InvalidAdapterStateError(
+            f"{label} {name} violates the frontmatter description length rule: "
+            "expected 20-600 characters"
+        )
     link_issues = _internal_link_issues(text, link_exists)
     if link_issues:
-        raise InvalidAdapterStateError(f"Canonical skill {name} has {link_issues[0]}")
+        raise InvalidAdapterStateError(f"{label} {name} has {link_issues[0]}")
     product_issues = _product_reference_issues(text)
     if product_issues:
-        raise InvalidAdapterStateError(f"Canonical skill {name} has {product_issues[0]}")
+        raise InvalidAdapterStateError(f"{label} {name} has {product_issues[0]}")
 
 
 def _packaged_file(*parts: str) -> bytes:
@@ -851,7 +1013,14 @@ def _packaged_skill_resources(name: str) -> tuple[CanonicalResource, ...]:
 
 def _local_sources(
     root: Path,
-) -> tuple[bytes, dict[str, bytes], dict[str, tuple[CanonicalResource, ...]]] | None:
+) -> (
+    tuple[
+        _RegistryDefinition,
+        dict[str, bytes],
+        dict[str, tuple[CanonicalResource, ...]],
+    ]
+    | None
+):
     safe = SafeRoot(root)
     try:
         safe.require_directory(".agents/skills")
@@ -870,7 +1039,8 @@ def _local_sources(
             "Local .agents/skills exists without registry.yaml",
             path=".agents/skills/registry.yaml",
         )
-    entries = _registry_entries(registry_snapshot.content)
+    registry = _registry_definition(registry_snapshot.content)
+    entries = (*registry.skills, *registry.custom_skills)
     declared = {name for name, _side_effect in entries}
     try:
         directory_entries = safe.list_directory(".agents/skills")
@@ -909,7 +1079,7 @@ def _local_sources(
             skill=first_skill,
             missing_inputs=tuple(missing_inputs),
         )
-    return registry_snapshot.content, contents, resource_sets
+    return registry, contents, resource_sets
 
 
 def load_context_skill_overrides(
@@ -954,13 +1124,20 @@ def load_canonical_sources(
     if local is None:
         origin = SourceOrigin.PACKAGED
         registry_content = _packaged_file("skills", "registry.yaml")
-        entries = _registry_entries(registry_content)
+        registry = _registry_definition(registry_content)
+        if registry.custom_skills:
+            raise CanonicalRegistryInvalidError(
+                "Packaged skill registry must not declare context-local custom_skills"
+            )
+        entries = registry.skills
         contents = {name: _packaged_file("skills", name, "SKILL.md") for name, _ in entries}
         resource_sets = {name: _packaged_skill_resources(name) for name, _ in entries}
     else:
         origin = SourceOrigin.LOCAL
-        registry_content, contents, resource_sets = local
-        entries = _registry_entries(registry_content)
+        registry, contents, resource_sets = local
+        registry_content = registry.content
+        entries = (*registry.skills, *registry.custom_skills)
+    custom_names = {name for name, _side_effect in registry.custom_skills}
     skills: list[CanonicalSkill] = []
     local_safe = SafeRoot(physical_root) if origin is SourceOrigin.LOCAL else None
     overrides_by_name = selected_overrides.by_name
@@ -976,7 +1153,8 @@ def load_canonical_sources(
         else:
             source_path = f"skills/{name}/SKILL.md"
             link_exists = partial(_packaged_link_exists, source_path)
-        _validate_skill(name, content, link_exists=link_exists)
+        custom = name in custom_names
+        _validate_skill(name, content, link_exists=link_exists, custom=custom)
         skills.append(
             CanonicalSkill(
                 name=name,
@@ -985,6 +1163,7 @@ def load_canonical_sources(
                 content_hash=content_hash(content),
                 resources=resource_sets[name],
                 override=selected_override,
+                custom=custom,
             )
         )
     selected_bridge = bridge_path(client)
@@ -1000,6 +1179,8 @@ def load_canonical_sources(
         origin=origin,
         registry_content=registry_content,
         registry_hash=content_hash(registry_content),
+        registry_skills_content=registry.skills_content,
+        registry_without_custom_content=registry.without_custom_content,
         skills=tuple(skills),
         bridge_content=bridge_content,
         bridge_hash=content_hash(bridge_content),
@@ -1022,7 +1203,12 @@ def load_packaged_canonical_sources(
     root.resolve(strict=True)
     selected_overrides = SkillOverrides() if skill_overrides is None else skill_overrides
     registry_content = _packaged_file("skills", "registry.yaml")
-    entries = _registry_entries(registry_content)
+    registry = _registry_definition(registry_content)
+    if registry.custom_skills:
+        raise CanonicalRegistryInvalidError(
+            "Packaged skill registry must not declare context-local custom_skills"
+        )
+    entries = registry.skills
     overrides_by_name = selected_overrides.by_name
     skills: list[CanonicalSkill] = []
     for name, side_effect in entries:
@@ -1052,6 +1238,8 @@ def load_packaged_canonical_sources(
         origin=SourceOrigin.PACKAGED,
         registry_content=registry_content,
         registry_hash=content_hash(registry_content),
+        registry_skills_content=registry.skills_content,
+        registry_without_custom_content=registry.without_custom_content,
         skills=tuple(skills),
         bridge_content=bridge_content,
         bridge_hash=content_hash(bridge_content),
@@ -1101,7 +1289,12 @@ def compose_canonical_skill(
         resolved = _resolve_internal_link(primary_path, destination)
         return resolved is not None and resolved != primary_path and resolved in available_paths
 
-    _validate_skill(template.name, primary, link_exists=link_exists)
+    _validate_skill(
+        template.name,
+        primary,
+        link_exists=link_exists,
+        custom=template.custom,
+    )
     return CanonicalSkill(
         name=template.name,
         side_effect_class=template.side_effect_class,
@@ -1109,6 +1302,7 @@ def compose_canonical_skill(
         content_hash=content_hash(primary),
         resources=selected_resources,
         override=override,
+        custom=template.custom,
     )
 
 

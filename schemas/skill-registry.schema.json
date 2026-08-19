@@ -20,6 +20,14 @@
       "items": {
         "$ref": "#/$defs/skill"
       }
+    },
+    "custom_skills": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/skill"
+      }
     }
   },
   "$defs": {

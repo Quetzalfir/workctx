@@ -90,6 +90,11 @@ preserve and report it as operator-edited.
 
 ## Per-context skill overrides
 
+Overrides below replace the body of an existing packaged workflow. To add a new context-only
+workflow instead, register its entry under `custom_skills:` in `.agents/skills/registry.yaml` and
+author `.agents/skills/<id>/SKILL.md`. Custom skills pass the packaged skill lint, render for each
+installed client, survive packaged refreshes, and remain distinct from overrides.
+
 A context can replace the `SKILL.md` body of one packaged Work Context skill without changing the
 packaged kit. Overrides are context-local only; there is no user-level override layer. The fixed
 location is:

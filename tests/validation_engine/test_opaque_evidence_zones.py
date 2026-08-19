@@ -17,7 +17,7 @@ def test_secretlike_quarantined_text_is_not_content_scanned(tmp_path: Path) -> N
     quarantined = root / "00_inbox" / "quarantine" / "suspicious.md"
     quarantined.write_text('api_key = "sk-fictional-1234567890abcdef"\n', encoding="utf-8")
     raw = root / "00_inbox" / "raw" / "evidence.txt"
-    raw.write_text("C:\machine\specific\path\n", encoding="utf-8")
+    raw.write_text("C:\\machine\\specific\\path\n", encoding="utf-8")
     report = validate_workspace(root)
     assert report.ok
     assert not [i for i in report.issues if i.path and "00_inbox" in i.path]

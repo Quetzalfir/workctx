@@ -53,6 +53,47 @@ side-effect line for each resource, and the same exact resource bytes are copied
 skill directory. Resource paths use the manifest's portable ASCII segment grammar. Credential-
 capable names and content are rejected before copying. Canonical skill bytes are never changed.
 
+### Context-local custom skills
+
+A context can register an operator-owned workflow without placing it in the packaged inventory:
+
+```yaml
+schema_version: 1
+skills:
+  - id: bootstrap-session # Work Context packaged entries remain here.
+    side_effect_class: read_only
+custom_skills:
+  - id: fictional-release-check
+    side_effect_class: read_only
+    notes: Context-local workflow reviewed by the operator.
+```
+
+The matching source tree is `.agents/skills/fictional-release-check/`, with the same required
+`SKILL.md` frontmatter and optional linked resources as a packaged skill. Custom skills receive the
+same name, description-length (20-600 characters), link, resource-path, product-reference,
+absolute-path, and secret checks at plan time. Diagnostics name the custom skill and violated rule.
+Claude and Gemini render them into their ordinary client skill directories; Codex verifies and
+uses the canonical source directly.
+
+`custom_skills:` is the sanctioned context-local inventory and remains operator-owned. Adding or
+editing that section does not make the packaged `skills:` inventory operator-edited. During a
+Codex context refresh, Work Context compares and rewrites the exact packaged `skills:` section
+while preserving the authored `custom_skills:` section byte for byte. Custom source files never
+receive a package-driven replace or delete. `workctx agent status` exposes their IDs separately as
+`custom_skills`.
+
+This mixed-ownership registry is the one bounded specialization of the whole-file content-hash
+factor described below. The authenticated manifest must establish the packaged registry lineage;
+the plan binds the complete current registry preimage; parsing and validation establish the exact
+top-level section boundaries; and the transaction substitutes only the packaged `skills:` bytes.
+Any local edit within that managed `skills:` span remains preserved and merge-pending under the
+ordinary three-factor rule.
+
+An entry under `skills:` that is absent from the running package is not silently adopted as
+custom. Planning stops with a repair action that tells the operator to move that registry entry to
+`custom_skills:` while leaving its `.agents/skills/<id>/` source in place. This explicit migration
+prevents an older workaround from freezing future packaged registry updates.
+
 ## Client strategies
 
 | Client | Project markers used for detection | Skill strategy | Instruction bridge |

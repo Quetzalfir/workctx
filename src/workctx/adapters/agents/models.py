@@ -310,6 +310,7 @@ class AdapterStatus:
     skill_overrides: tuple[SkillOverrideStatus, ...] = ()
     skill_override_warnings: tuple[SkillOverrideWarning, ...] = ()
     merge_candidates: tuple[ManagedFileMerge, ...] = ()
+    custom_skills: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
