@@ -212,6 +212,7 @@ _HISTORICAL_TEMPLATE_BRIDGE_HASHES: dict[str, frozenset[str]] = {
             "sha256:9aced95da7c045aa8c9983ae3c67f0ef741263fbcf91bda879340fba293e966c",
             "sha256:dde5896c72a3ddc7d2b011e5c902f9c60610c6e79c14d30eb8520ced1fd0e27b",
             "sha256:eeca89470537e0b3ea039a20fbbd897914c2b1fb187922749c6497b9de1f8a6a",
+            "sha256:8c02628c9701be42a44841e6e775c9b5c5ba3c95cbf07cad9783d12dcffe5374",
         }
     ),
 }

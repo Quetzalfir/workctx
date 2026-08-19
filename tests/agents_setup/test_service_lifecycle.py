@@ -202,10 +202,16 @@ def test_codex_native_source_set_path_changes_are_stale_not_missing(
 
 
 @pytest.mark.parametrize(
-    ("client", "bridge_name", "skill_root", "other_skill_root"),
+    (
+        "client",
+        "bridge_name",
+        "skill_root",
+        "other_skill_root",
+        "other_skill_root_count",
+    ),
     [
-        (AgentClient.CLAUDE, "CLAUDE.md", ".claude/skills/", ".gemini/skills/"),
-        (AgentClient.GEMINI, "GEMINI.md", ".gemini/skills/", ".claude/skills/"),
+        (AgentClient.CLAUDE, "CLAUDE.md", ".claude/skills/", ".gemini/skills/", 0),
+        (AgentClient.GEMINI, "GEMINI.md", ".gemini/skills/", ".claude/skills/", 1),
     ],
 )
 def test_context_install_uses_target_flavored_self_contained_bridge_and_preserves_agents(
@@ -214,6 +220,7 @@ def test_context_install_uses_target_flavored_self_contained_bridge_and_preserve
     bridge_name: str,
     skill_root: str,
     other_skill_root: str,
+    other_skill_root_count: int,
 ) -> None:
     context = tmp_path / f"{client.value}-context"
     initialize_context(
@@ -234,7 +241,7 @@ def test_context_install_uses_target_flavored_self_contained_bridge_and_preserve
     bridge_text = bridge.read_text(encoding="utf-8")
     assert bridge.read_bytes() == packaged_bridge
     assert skill_root in bridge_text
-    assert other_skill_root not in bridge_text
+    assert bridge_text.count(other_skill_root) == other_skill_root_count
     assert "When `AGENTS.md` exists" in bridge_text
     assert "START-HERE.md" not in bridge_text
     assert ".agents/plan/" not in bridge_text

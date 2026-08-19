@@ -22,6 +22,8 @@ from workctx.cli import app
 ROOT = Path(__file__).parents[1]
 SKILLS_ROOT = ROOT / ".agents" / "skills"
 REGISTRY_PATH = SKILLS_ROOT / "registry.yaml"
+PACKAGED_SKILLS_ROOT = ROOT / "src" / "workctx" / "resources" / "agent_kit" / "skills"
+PACKAGED_REGISTRY_PATH = PACKAGED_SKILLS_ROOT / "registry.yaml"
 EXPECTED_SKILL_IDS = frozenset(
     {
         "bootstrap-session",
@@ -51,7 +53,10 @@ REQUIRED_SKILL_SECTIONS = (
     "Durable outputs",
     "Validation and success criteria",
     "Human-facing response",
+    "Commands used",
 )
+PACKAGED_SKILL_SECTIONS = REQUIRED_SKILL_SECTIONS
+TRANSACTION_PROPOSAL_REFERENCE = "`99_meta/schemas/transaction-proposal.schema.json`, when present"
 
 _ABSOLUTE_PATH_PATTERNS = (
     ("Windows drive path", re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")),
@@ -219,30 +224,34 @@ def _workctx_command_specs() -> dict[tuple[str, ...], CommandSpec]:
     return specs
 
 
-def _is_implemented_command(reference: str) -> bool:
+def _implemented_command_spec(reference: str) -> CommandSpec | None:
     try:
         tokens = shlex.split(reference)
     except ValueError:
-        return False
+        return None
     if not tokens or tokens[0] != "workctx":
-        return False
+        return None
 
     command_tokens = tokens[1:]
     specs = _workctx_command_specs()
     candidates = [spec for path, spec in specs.items() if command_tokens[: len(path)] == list(path)]
     if not candidates:
-        return False
+        return None
     spec = max(candidates, key=lambda candidate: len(candidate.path))
     remaining = command_tokens[len(spec.path) :]
     if spec.is_group and any(not token.startswith("-") for token in remaining):
-        return False
+        return None
     for token in remaining:
         if not token.startswith("-"):
             continue
         option = token.split("=", maxsplit=1)[0]
         if option not in spec.options:
-            return False
-    return True
+            return None
+    return spec
+
+
+def _is_implemented_command(reference: str) -> bool:
+    return _implemented_command_spec(reference) is not None
 
 
 def _is_escaped(text: str, index: int) -> bool:
@@ -511,6 +520,86 @@ def test_canonical_skills_follow_uniform_body_contract() -> None:
             if line.startswith("## ")
         ]
         assert headings == list(REQUIRED_SKILL_SECTIONS), path
+
+
+def test_packaged_skills_pass_portability_lint() -> None:
+    issues = {
+        path.relative_to(ROOT).as_posix(): found
+        for path in sorted(PACKAGED_SKILLS_ROOT.glob("*/SKILL.md"))
+        if (found := _skill_lint_issues(path, ROOT))
+    }
+    assert not issues
+
+
+def test_packaged_skills_surface_exact_commands_at_their_procedure_steps() -> None:
+    skill_paths = sorted(PACKAGED_SKILLS_ROOT.glob("*/SKILL.md"))
+    assert {path.parent.name for path in skill_paths} == EXPECTED_SKILL_IDS
+
+    for path in skill_paths:
+        document = _skill_document(path)
+        headings = [
+            line.removeprefix("## ")
+            for line in document.body.splitlines()
+            if line.startswith("## ")
+        ]
+        assert headings == list(PACKAGED_SKILL_SECTIONS), path
+
+        body_before_commands, separator, commands_section = document.body.partition(
+            "\n## Commands used\n"
+        )
+        assert separator, path
+        assert "\n## " not in commands_section, path
+        entries = [line for line in commands_section.splitlines() if line.strip()]
+        assert entries, path
+
+        listed_paths: set[tuple[str, ...]] = set()
+        if entries == ["- None."]:
+            pass
+        else:
+            assert "- None." not in entries, path
+            for entry in entries:
+                match = re.fullmatch(
+                    r"- `(?P<command>workctx(?: [a-z][a-z0-9-]*)+)`",
+                    entry,
+                )
+                assert match is not None, (path, entry)
+                command = match.group("command")
+                spec = _implemented_command_spec(command)
+                assert spec is not None and not spec.is_group, (path, command)
+                assert spec.path not in listed_paths, (path, command)
+                listed_paths.add(spec.path)
+
+        procedure = body_before_commands.partition("\n## Procedure\n")[2].partition(
+            "\n## Side effects and approval boundary\n"
+        )[0]
+        assert procedure, path
+        inline_paths: set[tuple[str, ...]] = set()
+        for line in procedure.splitlines():
+            for reference in _line_product_references(line):
+                if reference.kind != "command":
+                    continue
+                spec = _implemented_command_spec(reference.value)
+                assert spec is not None and not spec.is_group, (path, reference.value)
+                inline_paths.add(spec.path)
+        assert listed_paths == inline_paths, path
+
+
+def test_packaged_mutation_skills_name_authoritative_proposal_shape() -> None:
+    registry = yaml.safe_load(PACKAGED_REGISTRY_PATH.read_text(encoding="utf-8"))
+    assert isinstance(registry, dict)
+    entries = registry["skills"]
+    assert isinstance(entries, list)
+    mutation_skill_ids = {
+        str(entry["id"])
+        for entry in entries
+        if isinstance(entry, dict)
+        and entry.get("side_effect_class") in {"local_proposal", "local_mutation"}
+    }
+    assert mutation_skill_ids
+
+    for skill_id in mutation_skill_ids:
+        content = (PACKAGED_SKILLS_ROOT / skill_id / "SKILL.md").read_text(encoding="utf-8")
+        assert TRANSACTION_PROPOSAL_REFERENCE in content, skill_id
 
 
 def test_registry_is_valid_complete_and_unique() -> None:

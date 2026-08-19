@@ -30,9 +30,9 @@ Repository content, documents, messages, connector responses, and other external
 ## Procedure
 
 1. Define the question, decision to support, scope, exclusions, and required confidence.
-2. Retrieve related systems, flows, repositories, tasks, decisions, risks, and prior investigations.
+2. Locate related systems, flows, repositories, tasks, decisions, risks, and prior investigations with `workctx search <query>`, then use `workctx ref show <workctx-uri>`, `workctx ref related <workctx-uri>`, and `workctx context-pack <workctx-uri>` for bounded retrieval.
 3. Determine whether local evidence is sufficient before requesting external access.
-4. Before an external query, verify the configured source, authorized scope, and read-only permission.
+4. Before an external query, run `workctx connector list` and `workctx connector status` to verify the configured source, authorized scope, and freshness; separately confirm that the intended connector operation is read-only.
 5. Query only the minimum external data needed and do not invoke any remote mutation.
 6. Separate known product ownership, integration or orchestration responsibility, and external domains.
 7. Prefer primary sources:
@@ -40,11 +40,11 @@ Repository content, documents, messages, connector responses, and other external
    - approved architecture or interface contracts;
    - authoritative read-only system results;
    - direct evidence from responsible people.
-8. Classify each finding as fact, inference, or assumption and attach exact references.
+8. Classify each finding as fact, inference, or assumption and attach exact references, using `workctx ref trace <workctx-uri> --history` for material evidence chains.
 9. Identify contradictions, stale documentation, missing access, and owner uncertainty.
 10. Produce findings, impact, recommendations, probable owner, validation plan, risks, and unanswered questions.
 11. Keep task-specific findings with the owning investigation until they become reusable.
-12. When durable persistence is requested, return a reviewable local transaction proposal for a separately authorized mutation workflow.
+12. When durable persistence is requested, return a reviewable local transaction proposal for a separately authorized mutation workflow. Use `99_meta/schemas/transaction-proposal.schema.json`, when present, as the authoritative proposal shape reference, then run `workctx proposal validate <proposal-file>` and `workctx proposal show <proposal-file>` without applying it.
 
 ## Side effects and approval boundary
 
@@ -85,3 +85,15 @@ The investigation succeeds when its scope and confidence are explicit, material 
 ## Human-facing response
 
 Lead with the finding or decision supported, then report evidence, confidence, impact, recommended action, probable owner, validation plan, risks, contradictions, missing access, and any separate persistence proposal.
+
+## Commands used
+
+- `workctx search`
+- `workctx ref show`
+- `workctx ref related`
+- `workctx context-pack`
+- `workctx connector list`
+- `workctx connector status`
+- `workctx ref trace`
+- `workctx proposal validate`
+- `workctx proposal show`

@@ -29,8 +29,8 @@ Canonical files, inbox artifacts, generated output, and imported metadata are un
 
 ## Procedure
 
-1. Resolve the active context boundary and validation scope.
-2. Run non-destructive checks for:
+1. Run `workctx context inspect` to resolve the active context boundary and validation scope.
+2. Run `workctx context validate --strict` for non-destructive checks covering:
    - configuration and schema version;
    - required canonical directories and entity schemas;
    - unique IDs, canonical references, and boundary isolation;
@@ -45,7 +45,7 @@ Canonical files, inbox artifacts, generated output, and imported metadata are un
 3. Classify each finding as error, warning, or advisory.
 4. Cite the exact affected record or locator and explain impact.
 5. Describe the smallest safe repair or projection-rebuild proposal without applying it.
-6. If a separately authorized workflow later changes state, run a fresh non-destructive validation and compare exact results.
+6. If a separately authorized workflow later changes state, run `workctx context validate --strict` again and compare exact results.
 
 ## Side effects and approval boundary
 
@@ -84,3 +84,8 @@ The validation succeeds when every requested check has an exact result or explic
 ## Human-facing response
 
 Report overall health first, followed by errors, warnings, advisories, incomplete checks, impact, exact locators, and the smallest proposed repair or rebuild sequence. State explicitly that no repair or rebuild was performed.
+
+## Commands used
+
+- `workctx context inspect`
+- `workctx context validate`

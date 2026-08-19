@@ -19,6 +19,11 @@ DISCOVERY_SENTENCE = (
     "Before creating or modifying a file whose placement or ownership is uncertain, run "
     "`workctx guide`; generated files are never hand-edited."
 )
+SKILL_PATH_SENTENCE = (
+    "Skills live at `<context root>/.agents/skills/` (Claude renders under "
+    "`.claude/skills/`); resolve them from the context root, never the current working "
+    "directory; before declaring a skill unavailable, list that directory."
+)
 ORIENTATION_MARKERS = (
     "`context.yaml` policies",
     "`04_views/people-directory.md`",
@@ -30,7 +35,7 @@ ORIENTATION_MARKERS = (
     "`workctx secret list`",
     "`workctx connector list`",
     "relevant entities",
-    "`workctx ref`",
+    "`workctx ref show <workctx-uri>`",
     "Asking the operator something the context already answers is a protocol violation.",
 )
 RETENTION_MARKERS = (
@@ -65,6 +70,13 @@ def test_bootstrap_session_orients_before_asking_and_records_new_facts() -> None
     assert "Reference secret names only, never values." in content
     assert "`workctx guide`" in content
     assert "generated files are never" in content
+
+
+@pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
+def test_prompt_surfaces_resolve_skills_from_the_context_root(relative_path: str) -> None:
+    content = (ROOT / relative_path).read_text(encoding="utf-8")
+
+    assert content.count(SKILL_PATH_SENTENCE) == 1
 
 
 @pytest.mark.parametrize("relative_path", BRIDGE_SURFACES)
