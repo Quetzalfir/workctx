@@ -45,7 +45,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `usage evaluate` | `usage.evaluate` | `count`, `candidates` |
 | `usage suggest` | `usage.suggest` | `candidate_count`, `created_count`, `skipped_count`, `created`, `skipped` |
 | `agent detect` | `agent.detect` | `clients` |
-| `agent status` | `agent.status` | `statuses` (including `merge_candidates`) |
+| `agent status` | `agent.status` | `statuses` (including distinct `custom_skills` and `merge_candidates`) |
 | `agent install` | `agent.install` | `applied`, `plans` (including `merge_candidates` and `adopts_trust`), `receipts` |
 | `agent refresh` | `agent.refresh` | `apply_requested`, `selected_clients`, `count`, `contexts` (including per-plan application state, `merge_candidates`, and skip/failure reasons), `summary` |
 | `agent repair` | `agent.repair` | `applied`, `plans`, `receipts` |

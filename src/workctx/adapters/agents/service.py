@@ -124,6 +124,8 @@ from .sources import (
     load_context_skill_overrides,
     load_packaged_canonical_sources,
     load_packaged_skill_primary,
+    refresh_registry_skills,
+    registry_freshness_parts,
     restore_packaged_skill_sources,
 )
 
@@ -147,11 +149,11 @@ class _PreparedPlan:
 
 @dataclass(frozen=True, slots=True)
 class _CanonicalFileChange:
-    """One package-driven canonical file transition authorized by its manifest hash."""
+    """One package-driven canonical transition bound to an exact current-file hash."""
 
     path: str
     content: bytes | None
-    recorded_hash: str | None
+    authority_hash: str | None
     reason: str
 
 
@@ -310,7 +312,7 @@ def _source_selection_digest(
             {
                 "path": change.path,
                 "desired_hash": (None if change.content is None else content_hash(change.content)),
-                "recorded_hash": change.recorded_hash,
+                "authority_hash": change.authority_hash,
             }
             for change in canonical_changes
         ],
@@ -839,6 +841,8 @@ def _select_codex_context_sources(
         )
 
     local_skills = {skill.name: skill for skill in local.skills}
+    local_packaged_skills = {skill.name: skill for skill in local.skills if not skill.custom}
+    local_custom_skills = {skill.name: skill for skill in local.skills if skill.custom}
     packaged_skills = {skill.name: skill for skill in packaged.skills}
     recorded_skills = {skill.name: skill for skill in manifest.skills}
     active_overrides = local.skill_overrides.by_name
@@ -849,36 +853,65 @@ def _select_codex_context_sources(
     recorded_registry_hash = manifest.registry.content_hash
     local_registry_hash = local.registry_hash
     packaged_registry_hash = packaged.registry_hash
-    package_removed_skills = set(local_skills) - set(packaged_skills)
-    registry_operator_edited = local_registry_hash not in {
+    package_removed_skills = set(local_packaged_skills) - set(packaged_skills)
+    registry_matches_managed_generation = local_registry_hash in {
         recorded_registry_hash,
         packaged_registry_hash,
     }
+    if local.custom_skill_names:
+        registry_matches_managed_generation = registry_matches_managed_generation or (
+            content_hash(local.registry_without_custom_content) == recorded_registry_hash
+            or local.registry_skills_content == packaged.registry_skills_content
+        )
+    registry_operator_edited = not registry_matches_managed_generation
     use_packaged_registry = not registry_operator_edited and not package_removed_skills
     preserved_registry_hash: str | None = None
     if registry_operator_edited:
+        packaged_now_content = refresh_registry_skills(
+            local.registry_content,
+            packaged.registry_content,
+        )
         managed_states.append(
             _ManagedFileState(
                 path=manifest.registry.path,
                 recorded_at_adoption_hash=recorded_registry_hash,
-                packaged_now_hash=packaged_registry_hash,
+                packaged_now_hash=content_hash(packaged_now_content),
                 local_hash=local_registry_hash,
             )
         )
         preserved_registry_hash = recorded_registry_hash
-    elif use_packaged_registry and local_registry_hash != packaged_registry_hash:
+    effective_registry_content = (
+        refresh_registry_skills(local.registry_content, packaged.registry_content)
+        if use_packaged_registry
+        else local.registry_content
+    )
+    effective_registry_hash = content_hash(effective_registry_content)
+    if use_packaged_registry and local_registry_hash != effective_registry_hash:
+        # A custom-bearing registry is intentionally mixed-ownership. The deterministic
+        # rewrite changes only the validated packaged section, preserves custom bytes, and
+        # remains bound to the exact complete local preimage through this authority hash.
         changes.append(
             _CanonicalFileChange(
                 path=manifest.registry.path,
-                content=packaged.registry_content,
-                recorded_hash=recorded_registry_hash,
-                reason="Refresh pristine canonical skill registry from the current package",
+                content=effective_registry_content,
+                authority_hash=(
+                    local_registry_hash if local.custom_skill_names else recorded_registry_hash
+                ),
+                reason=(
+                    "Refresh packaged skills in the canonical registry while preserving "
+                    "custom_skills verbatim"
+                    if local.custom_skill_names
+                    else "Refresh pristine canonical skill registry from the current package"
+                ),
             )
         )
 
-    registry_source = packaged if use_packaged_registry else local
+    selected_registry_skills = [
+        *(packaged.skills if use_packaged_registry else tuple(local_packaged_skills.values())),
+        *local_custom_skills.values(),
+    ]
     selected_skills: list[CanonicalSkill] = []
-    for selected_registry_skill in registry_source.skills:
+    for selected_registry_skill in selected_registry_skills:
         name = selected_registry_skill.name
         local_skill = local_skills.get(name)
         packaged_skill = packaged_skills.get(name)
@@ -912,7 +945,7 @@ def _select_codex_context_sources(
                 _CanonicalFileChange(
                     path=path,
                     content=content,
-                    recorded_hash=None,
+                    authority_hash=None,
                     reason="Materialize a newly packaged canonical skill file",
                 )
                 for path, content in sorted(packaged_files.items())
@@ -942,7 +975,7 @@ def _select_codex_context_sources(
                         _CanonicalFileChange(
                             path=path,
                             content=None,
-                            recorded_hash=recorded_hash,
+                            authority_hash=recorded_hash,
                             reason="Remove a pristine canonical skill resource no longer packaged",
                         )
                     )
@@ -965,7 +998,7 @@ def _select_codex_context_sources(
                     _CanonicalFileChange(
                         path=path,
                         content=packaged_content,
-                        recorded_hash=None,
+                        authority_hash=None,
                         reason="Materialize a newly packaged canonical skill file",
                     )
                 )
@@ -981,7 +1014,7 @@ def _select_codex_context_sources(
                         _CanonicalFileChange(
                             path=path,
                             content=packaged_content,
-                            recorded_hash=recorded_hash,
+                            authority_hash=recorded_hash,
                             reason=(
                                 "Refresh pristine manifest-tracked canonical skill file "
                                 "from the current package"
@@ -1007,10 +1040,15 @@ def _select_codex_context_sources(
         template = packaged_skill if use_packaged_registry else selected_registry_skill
         selected_skills.append(compose_canonical_skill(template, selected_files))
 
+    registry_skills_content, registry_without_custom_content = registry_freshness_parts(
+        effective_registry_content
+    )
     selected_sources = replace(
         local,
-        registry_content=registry_source.registry_content,
-        registry_hash=registry_source.registry_hash,
+        registry_content=effective_registry_content,
+        registry_hash=effective_registry_hash,
+        registry_skills_content=registry_skills_content,
+        registry_without_custom_content=registry_without_custom_content,
         skills=tuple(sorted(selected_skills, key=lambda skill: skill.name)),
     )
     ordered_changes = tuple(sorted(changes, key=lambda change: change.path))
@@ -1122,17 +1160,38 @@ class AgentAdapterService:
         )
         codex_restore_names = _removed_codex_override_names(manifest, local)
         local = restore_packaged_skill_sources(local, codex_restore_names)
+        packaged: CanonicalSourceSet | None = None
+        if layout.is_context:
+            packaged = load_packaged_canonical_sources(
+                layout.root,
+                layout.client,
+                personalization=personalization,
+            )
+            packaged_names = {skill.name for skill in packaged.skills}
+            misplaced = tuple(
+                sorted(
+                    skill.name
+                    for skill in local.skills
+                    if not skill.custom and skill.name not in packaged_names
+                )
+            )
+            if misplaced:
+                names = ", ".join(misplaced)
+                raise CanonicalRegistryInvalidError(
+                    f"The packaged skills section contains context-local entries: {names}.",
+                    repair_action=(
+                        f"Move {names} from skills: to custom_skills: in "
+                        ".agents/skills/registry.yaml and leave the source directories under "
+                        ".agents/skills/<id>/."
+                    ),
+                )
         if manifest is None or layout.client is not AgentClient.CODEX or not layout.is_context:
             return _SourceSelection(
                 sources=local,
                 fingerprint=local.fingerprint,
                 codex_restore_names=codex_restore_names,
             )
-        packaged = load_packaged_canonical_sources(
-            layout.root,
-            layout.client,
-            personalization=personalization,
-        )
+        assert packaged is not None
         return _select_codex_context_sources(
             local,
             packaged,
@@ -1403,12 +1462,16 @@ class AgentAdapterService:
                 warnings=(str(error),),
                 repair_blocked=True,
             )
-        return self._derive_freshness(
+        derived = self._derive_freshness(
             layout,
             manifest,
             source_selection,
             transaction.orphan_directories,
             authority_warning,
+        )
+        return replace(
+            derived,
+            custom_skills=source_selection.sources.custom_skill_names,
         )
 
     def _status_missing_input(
@@ -2584,10 +2647,10 @@ class AgentAdapterService:
         for change in source_selection.canonical_changes:
             target = _observe_plan_target(safe, change.path, observations)
             canonical_targets[change.path] = target
-            if change.recorded_hash is None:
+            if change.authority_hash is None:
                 if target.exists:
                     authority_failures.append(change.path)
-            elif not target.exists or target.content_hash != change.recorded_hash:
+            elif not target.exists or target.content_hash != change.authority_hash:
                 authority_failures.append(change.path)
         managed_file_states = list(source_selection.managed_file_states)
         if old_manifest is not None and old_manifest.components is not None:

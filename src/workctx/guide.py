@@ -222,8 +222,16 @@ GUIDE = GuideDefinition(
             ".agents/skills/",
             OwnershipClass.ADAPTER_MANAGED,
             EditPolicy.PRESERVED_BUT_FREEZES_UPDATES,
-            "Canonical skill sources; packaged context files refresh only while their tracked "
-            "bytes remain pristine.",
+            "Canonical packaged skill sources declared under registry.yaml skills; packaged "
+            "context files refresh only while their tracked bytes remain pristine.",
+        ),
+        OwnershipEntry(
+            ".agents/skills/registry.yaml custom_skills + .agents/skills/<id>/",
+            OwnershipClass.OPERATOR_OWNED,
+            EditPolicy.EDIT_FREELY,
+            "Sanctioned context-local custom skill registration and source home; Work Context "
+            "validates these files, renders them for clients, and never replaces them from the "
+            "packaged kit.",
         ),
         OwnershipEntry(
             "AGENTS.md",
@@ -307,6 +315,11 @@ GUIDE = GuideDefinition(
             "operator-owned override flow",
         ),
         RoutingEntry(
+            "custom agent workflow",
+            "custom_skills in .agents/skills/registry.yaml + .agents/skills/<id>/",
+            "operator-reviewed custom skill registration",
+        ),
+        RoutingEntry(
             "secret material",
             "nowhere in the context; keep reference names only",
             "the configured secret reference name",
@@ -337,7 +350,8 @@ GUIDE = GuideDefinition(
     adapter_note=(
         "Adapter-managed files use manifest or adoption hashes. Existing operator-owned bridges "
         "and MCP configuration stay untouched; hand-editing a managed file is preserved but "
-        "freezes updates and blocks repair or refresh."
+        "freezes updates and blocks repair or refresh. Registered custom_skills and their "
+        ".agents/skills/<id>/ sources are operator-owned and do not freeze packaged refreshes."
     ),
     escape_hatch=(
         "If a generated file seems to require a manual edit, stop, run `workctx agent repair` "

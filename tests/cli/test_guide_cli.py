@@ -37,6 +37,10 @@ EXPECTED_OWNERSHIP = {
     "README.md": ("operator-owned", "edit freely"),
     "instructions.md": ("operator-owned", "edit freely"),
     ".agents/skills/": ("adapter-managed", "preserved-but-freezes-updates"),
+    ".agents/skills/registry.yaml custom_skills + .agents/skills/<id>/": (
+        "operator-owned",
+        "edit freely",
+    ),
     "AGENTS.md": ("adapter-managed", "preserved-but-freezes-updates"),
     "CLAUDE.md": ("adapter-managed", "preserved-but-freezes-updates"),
     "GEMINI.md": ("adapter-managed", "preserved-but-freezes-updates"),
@@ -74,6 +78,11 @@ EXPECTED_ROUTING = [
         "kind": "workflow customization",
         "destination": "06_overrides/skills/<name>/SKILL.md",
         "via": "operator-owned override flow",
+    },
+    {
+        "kind": "custom agent workflow",
+        "destination": "custom_skills in .agents/skills/registry.yaml + .agents/skills/<id>/",
+        "via": "operator-reviewed custom skill registration",
     },
     {
         "kind": "secret material",

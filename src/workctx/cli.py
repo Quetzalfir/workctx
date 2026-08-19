@@ -3635,6 +3635,7 @@ def _adapter_status_payload(status: AdapterStatus) -> dict[str, JsonValue]:
         "mcp_configuration": _feature_status_payload(status.mcp_configuration),
         "warnings": [sanitize_message(warning) for warning in status.warnings],
         "repair_blocked": status.repair_blocked,
+        "custom_skills": list(status.custom_skills),
         "merge_candidates": [
             _managed_file_merge_payload(candidate) for candidate in status.merge_candidates
         ],
@@ -3950,6 +3951,8 @@ def _render_fleet_refresh(batch: FleetRefreshResult) -> None:
 
 def _render_agent_status(status: AdapterStatus) -> None:
     output_console.print(Text(f"{status.client.value}: {status.state.value}"))
+    if status.custom_skills:
+        output_console.print(Text(f"  custom skills: {', '.join(status.custom_skills)}"))
     for candidate in status.merge_candidates:
         output_console.print(
             Text(
