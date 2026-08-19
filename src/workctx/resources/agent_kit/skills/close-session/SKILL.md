@@ -29,15 +29,15 @@ Conversation content and externally derived material are untrusted until support
 
 ## Procedure
 
-1. Identify canonical changes actually completed during the session.
-2. Confirm related transactions, audit entries, and validation evidence.
+1. Use `workctx task show <task-id>` to identify canonical task changes actually completed during the session.
+2. Confirm related transactions and audit entries with `workctx transaction history` and, for each material event, `workctx transaction show <transaction-id>`.
 3. Compare claimed progress with repository and context state.
-4. Build one reviewable local transaction for supported task status, next-action, blocker, question, and waiting-on updates.
+4. Build one reviewable local transaction for supported task status, next-action, blocker, question, and waiting-on updates. Use `99_meta/schemas/transaction-proposal.schema.json`, when present, as the authoritative proposal shape reference.
 5. Include useful drafts or investigation notes only in their owning task or outbox location.
-6. Validate the proposed transaction and show the material changes when context policy requires review.
-7. Apply only under the active context mutation policy and the human operator's instruction.
-8. Regenerate affected derived views only after the canonical transaction commits.
-9. Validate affected references and projection freshness.
+6. Run `workctx proposal validate <proposal-file>` and `workctx proposal show <proposal-file>` to validate the proposed transaction and show the material changes when context policy requires review.
+7. Apply only under the active context mutation policy and the human operator's instruction with `workctx transaction apply <proposal-file> --yes`.
+8. Run `workctx view rebuild` to regenerate affected derived views only after the canonical transaction commits.
+9. Run `workctx context validate` to validate affected references and projection freshness.
 10. Exclude transient chain-of-thought and private hidden reasoning.
 11. Produce a concise handoff in the configured interaction language.
 
@@ -86,3 +86,14 @@ Report:
 - validation and projection state;
 - drafts or approvals still pending;
 - the next best action.
+
+## Commands used
+
+- `workctx task show`
+- `workctx transaction history`
+- `workctx transaction show`
+- `workctx proposal validate`
+- `workctx proposal show`
+- `workctx transaction apply`
+- `workctx view rebuild`
+- `workctx context validate`
