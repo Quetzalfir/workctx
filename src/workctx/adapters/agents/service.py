@@ -200,21 +200,39 @@ class _SourceSelection:
         )
 
 
-def _pristine_template_bridge_hash(bridge_path: str) -> str | None:
-    """Hash of the context template's copy of a bridge file, when one ships.
+# Append-only: every hash of a context-template bridge file ever shipped in a
+# release or integrated on master. A context created from ANY of these template
+# generations holds workctx-generated content, so healing must recognize all of
+# them, not only the current template. When the template changes, append the new
+# hash here; a guard test fails until the mapping is updated.
+_HISTORICAL_TEMPLATE_BRIDGE_HASHES: dict[str, frozenset[str]] = {
+    "AGENTS.md": frozenset(
+        {
+            "sha256:2d3bc378415a286d713512a71b3187fc28a57b8cc6d8b2ff04e3a98dce4d3daf",
+            "sha256:9aced95da7c045aa8c9983ae3c67f0ef741263fbcf91bda879340fba293e966c",
+            "sha256:dde5896c72a3ddc7d2b011e5c902f9c60610c6e79c14d30eb8520ced1fd0e27b",
+            "sha256:eeca89470537e0b3ea039a20fbbd897914c2b1fb187922749c6497b9de1f8a6a",
+        }
+    ),
+}
 
-    A bridge file whose bytes exactly match the packaged context template is
+
+def _pristine_template_bridge_hashes(bridge_path: str) -> frozenset[str]:
+    """Hashes of every shipped context-template generation of a bridge file.
+
+    A bridge file whose bytes exactly match ANY shipped context template is
     workctx-generated content, not operator writing, so installation may
     replace it with the full adapter bridge.
     """
 
     name = PurePosixPath(bridge_path).name
+    historical = _HISTORICAL_TEMPLATE_BRIDGE_HASHES.get(name, frozenset())
     resource = resources.files("workctx.resources.context_template").joinpath(name)
     try:
         content = resource.read_bytes()
     except (FileNotFoundError, OSError):
-        return None
-    return "sha256:" + hashlib.sha256(content).hexdigest()
+        return historical
+    return historical | {"sha256:" + hashlib.sha256(content).hexdigest()}
 
 
 def _utc_now() -> datetime:
@@ -2900,13 +2918,14 @@ class AgentAdapterService:
             else None
         )
         if old_bridge is not None and old_bridge.ownership == "user-owned":
-            # A recorded user-owned bridge whose CURRENT bytes are exactly the
-            # packaged context template was misclassified at an earlier
-            # install (the template ships the file); heal it like a fresh one.
+            # A recorded user-owned bridge whose CURRENT bytes are exactly a
+            # shipped context-template generation was misclassified at an
+            # earlier install (the template ships the file); heal it like a
+            # fresh one.
             if (
                 target.exists
                 and target.content_hash is not None
-                and target.content_hash == _pristine_template_bridge_hash(sources.bridge_path)
+                and target.content_hash in _pristine_template_bridge_hashes(sources.bridge_path)
             ):
                 mutations.append(FileMutation(sources.bridge_path, target, sources.bridge_content))
                 planned.append(
@@ -2942,7 +2961,7 @@ class AgentAdapterService:
         if target.content_hash is None:
             raise InvalidAdapterStateError("Instruction bridge content hash is unavailable")
         if old_bridge is None:
-            if target.content_hash == _pristine_template_bridge_hash(sources.bridge_path):
+            if target.content_hash in _pristine_template_bridge_hashes(sources.bridge_path):
                 mutations.append(FileMutation(sources.bridge_path, target, sources.bridge_content))
                 planned.append(
                     PlannedChange(
