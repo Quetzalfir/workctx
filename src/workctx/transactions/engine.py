@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import os
 import re
 import stat
@@ -448,11 +449,7 @@ class TransactionEngine:
             )
             post_report = _run_with_heartbeat(
                 lock,
-                lambda: self._workspace_validator(
-                    self._root,
-                    strict=True,
-                    freshness_probe=None,
-                ),
+                lambda: self._post_apply_workspace_report(compiled),
             )
             if not post_report.ok or any(
                 item.severity is DiagnosticSeverity.ERROR for item in postcondition_diagnostics
@@ -560,6 +557,23 @@ class TransactionEngine:
                 raise LockFenceError(
                     "The transaction heartbeat could not refresh its lease"
                 ) from heartbeat_failure
+
+    def _post_apply_workspace_report(
+        self,
+        compiled: _CompiledProposal,
+    ) -> ValidationReport:
+        if _accepts_strict_paths(self._workspace_validator):
+            return self._workspace_validator(
+                self._root,
+                strict=True,
+                strict_paths=_strict_validation_paths(compiled),
+                freshness_probe=None,
+            )
+        return self._workspace_validator(
+            self._root,
+            strict=True,
+            freshness_probe=None,
+        )
 
     def recover(
         self,
@@ -2441,6 +2455,28 @@ def _applied_targets(effects: Sequence[OperationEffect]) -> tuple[str, ...]:
         if effect.destination is not None:
             targets.append(effect.destination)
     return tuple(targets)
+
+
+def _strict_validation_paths(compiled: _CompiledProposal) -> tuple[str, ...]:
+    """Return final postimages whose warnings must remain strict apply vetoes."""
+
+    return tuple(
+        relative_path
+        for relative_path, content in compiled.final_files.items()
+        if content is not None
+    )
+
+
+def _accepts_strict_paths(validator: WorkspaceValidator) -> bool:
+    """Preserve compatibility with injected validators using the legacy seam."""
+
+    try:
+        parameters = inspect.signature(validator).parameters
+    except (TypeError, ValueError):
+        return False
+    return "strict_paths" in parameters or any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
 
 
 def _audit_applied_targets(operations: Sequence[AuditOperation]) -> tuple[str, ...]:

@@ -79,9 +79,11 @@ from workctx.transactions.models import (
     TransactionDiagnostic,
 )
 from workctx.validation import Severity, ValidationIssue, validate_workspace
+from workctx.validation.model_errors import model_validation_details
 
 _WINDOWS_ABSOLUTE_PATH = re.compile(r"^[A-Za-z]:[\\/]")
 _TASK_ID = re.compile(TASK_ID_PATTERN)
+_PROPOSAL_TOOL_NAMES = frozenset({"proposal_validate", "transaction_dry_run", "transaction_apply"})
 
 _Handler = Callable[[dict[str, Any]], ToolResponse]
 
@@ -603,6 +605,23 @@ class McpToolService:
                 ),
             )
         if isinstance(error, ValidationError):
+            if name in _PROPOSAL_TOOL_NAMES:
+                return self._failure(
+                    name,
+                    *(
+                        self._diagnostic(
+                            code="PROPOSAL_MODEL_INVALID",
+                            category=ErrorCategory.USAGE_CONFIGURATION,
+                            message=detail.message,
+                            path=detail.path,
+                            repair_action="Correct this proposal field and retry.",
+                        )
+                        for detail in model_validation_details(
+                            error,
+                            prefix="$.proposal",
+                        )
+                    ),
+                )
             return self._failure(
                 name,
                 self._diagnostic(

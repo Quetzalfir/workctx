@@ -186,6 +186,13 @@ _DEFINITIONS = (
         "Break the cycle so supersession history progresses in one direction.",
     ),
     DiagnosticDefinition(
+        "META-SCHEMA-STALE",
+        Severity.ADVISORY,
+        "A packaged reference schema under 99_meta/schemas/ is missing or differs "
+        "from the installed version.",
+        "Run workctx context refresh-meta to materialize the current packaged reference schemas.",
+    ),
+    DiagnosticDefinition(
         "PROJECTION-STALE",
         Severity.WARNING,
         "The configured freshness probe reports stale derived projections.",

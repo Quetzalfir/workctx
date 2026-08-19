@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -45,6 +45,7 @@ from workctx.validation.freshness import (
     FreshnessProbe,
     FreshnessState,
 )
+from workctx.validation.meta import REFRESH_META_REPAIR_ACTION, packaged_meta_schemas
 from workctx.validation.report import Severity, ValidationIssue, ValidationReport
 
 REQUIRED_DIRECTORIES = (
@@ -203,11 +204,13 @@ class WorkspaceValidator:
         *,
         root: Path,
         strict: bool,
+        strict_paths: Collection[str] | None,
         freshness_probe: FreshnessProbe | None,
     ) -> None:
         resolved_root = root.expanduser().resolve()
         self._root = resolved_root
         self._strict = strict
+        self._strict_paths = None if strict_paths is None else frozenset(strict_paths)
         self._freshness_probe = freshness_probe
         self._report = ValidationReport(context_root=resolved_root)
         self._texts: dict[Path, str] = {}
@@ -225,6 +228,7 @@ class WorkspaceValidator:
         self._check_required_directories()
         self._read_workspace_text()
         self._load_context_config()
+        self._check_packaged_meta_schemas()
         self._load_canonical_documents()
         self._build_identity_index()
         if self._report.context_id is not None:
@@ -337,6 +341,27 @@ class WorkspaceValidator:
             self._add("CTX-CONFIG", "context.yaml")
             return
         self._report.context_id = config.id
+
+    def _check_packaged_meta_schemas(self) -> None:
+        for schema in packaged_meta_schemas():
+            target = self._root.joinpath(*PurePosixPath(schema.relative_path).parts)
+            try:
+                current = None if _is_link_or_junction(target) else target.read_bytes()
+            except (OSError, ValueError):
+                current = None
+            if current != schema.content:
+                self._report.issues.append(
+                    ValidationIssue(
+                        severity=Severity.ADVISORY,
+                        code="META-SCHEMA-STALE",
+                        message=(
+                            "A packaged reference schema is missing or differs from the "
+                            "installed version."
+                        ),
+                        path=schema.relative_path,
+                        repair_action=REFRESH_META_REPAIR_ACTION,
+                    )
+                )
 
     def _load_canonical_documents(self) -> None:
         for path, content in sorted(
@@ -831,7 +856,11 @@ class WorkspaceValidator:
         for issue in self._report.issues:
             severity = (
                 Severity.ERROR
-                if self._strict and issue.severity is Severity.WARNING
+                if (
+                    self._strict
+                    and issue.severity is Severity.WARNING
+                    and (self._strict_paths is None or issue.path in self._strict_paths)
+                )
                 else issue.severity
             )
             normalized_issues.append(replace(issue, severity=severity))
