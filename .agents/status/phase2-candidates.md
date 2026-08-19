@@ -330,7 +330,7 @@ Two pieces with guaranteed discovery:
    creation/modification, so agents cannot claim ignorance; equivalent
    bullet in the context template and the bootstrap-session skill.
 
-## C-220 — First-class context-local custom skills
+## C-220 — First-class context-local custom skills — DELIVERED (WP-820, 2026-08-18)
 
 Live incident (2026-08-17): an Incode agent authored a genuinely useful
 custom skill (mobile-identity-desktop-ui) and parked it unregistered in
