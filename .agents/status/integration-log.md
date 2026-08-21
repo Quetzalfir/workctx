@@ -63,3 +63,4 @@
 | 2026-08-18 | WP-800-skill-commands | capture 244b0b8 | merge 0983e56 | lead gate: 1719 passed; mirror sync + template hash appended (C-221 guard) + section-contract unification | accepted+integrated | realignment wave 1/3 |
 | 2026-08-18 | WP-810-validation-realignment | capture | merge db9de8c | lead gate: 1735 passed; mirror sync, META-SCHEMA-STALE registered+documented | accepted+integrated (1 defect round) | realignment wave 2/3; poison fix |
 | 2026-08-18 | WP-820-custom-skills | capture | merge | lead gate: 1741 passed (worker sandbox ran zero pytest bodies — lead ran all); three-path code review | accepted+integrated | C-220 delivered |
+| 2026-08-21 | LEAD-msix-diagnosis | lead fix | direct | full gate: ruff+format+mypy 0, pytest 1748 passed; doctor check live-verified against a real container | committed | operator-agent-found: secret list vs check split; Codex shadow purged (held Aug-3 trust record) |
