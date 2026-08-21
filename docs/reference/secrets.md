@@ -49,7 +49,11 @@ workctx secret import ../legacy.env --shred
   environment variable and writes only to the OS credential store.
 - `check` reports whether the name resolves and whether `env` or `os-store` wins.
 - `list` reports names and per-layer presence only. With no usable keyring backend, OS-store
-  presence is `null` and the command emits a `SECRET_BACKEND_UNAVAILABLE` warning.
+  presence is `null` and the command emits a `SECRET_BACKEND_UNAVAILABLE` warning. Names come
+  from a machine-local names-only index file; set `WORKCTX_SECRET_INDEX` to a full plain
+  filesystem path to relocate that index (ordinary configuration, not a secret). Processes
+  running inside an application container can otherwise read a stale per-app copy of the
+  index while keyring resolution keeps working — `workctx doctor` reports that condition.
 - `unset` removes only the OS-store entry. It warns when an environment override still resolves.
 - `import` parses a UTF-8 dotenv file completely before storing any pair. Shell-style names are
   normalized from snake case to lowercase kebab-case. Blank lines, full-line comments, trailing

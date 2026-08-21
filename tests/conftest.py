@@ -9,6 +9,7 @@ import pytest
 from platformdirs import user_config_path as platform_user_config_path
 
 import workctx.adapters.filesystem.registry as registry_module
+import workctx.secrets._index as secret_index_module
 
 _REAL_REGISTRY_PATH = (
     platform_user_config_path("workctx", appauthor=False) / registry_module.REGISTRY_FILENAME
@@ -59,8 +60,17 @@ def isolated_user_config_dir(
         "WORKCTX_CONTEXT_REGISTRY",
         str(user_config / registry_module.REGISTRY_FILENAME),
     )
+    monkeypatch.setenv(
+        secret_index_module.SECRET_INDEX_ENV,
+        str(user_config / secret_index_module.INDEX_FILENAME),
+    )
     monkeypatch.setattr(
         registry_module,
+        "user_config_path",
+        lambda *_args, **_kwargs: user_config,
+    )
+    monkeypatch.setattr(
+        secret_index_module,
         "user_config_path",
         lambda *_args, **_kwargs: user_config,
     )

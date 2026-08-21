@@ -21,6 +21,7 @@ from workctx.secrets.models import SecretRef
 
 INDEX_SCHEMA_VERSION = 1
 INDEX_FILENAME = "secret-names.json"
+SECRET_INDEX_ENV = "WORKCTX_SECRET_INDEX"
 _LOCK_TIMEOUT_SECONDS = 5.0
 _LOCK_POLL_SECONDS = 0.01
 
@@ -106,7 +107,15 @@ class SecretNamesIndex:
 
 
 def _default_index_path() -> Path:
-    return user_config_path("workctx", appauthor=False) / INDEX_FILENAME
+    override = os.environ.get(SECRET_INDEX_ENV)
+    if override is None:
+        return user_config_path("workctx", appauthor=False) / INDEX_FILENAME
+    if not override.strip():
+        raise SecretIndexError
+    selected = Path(override).expanduser()
+    if not selected.is_absolute():
+        raise SecretIndexError
+    return selected.absolute()
 
 
 def _parse_index(value: object) -> tuple[str, ...]:
