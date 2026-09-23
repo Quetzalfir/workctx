@@ -4,10 +4,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from transactions.support import create_operation, initialize_transaction_context, proposal
 
 from workctx.errors import UserCorrectableError
 from workctx.mcp.application import McpToolService
 from workctx.mcp.models import ToolResponse
+from workctx.transactions.ledger import find_event_by_proposal_id
+from workctx.validation.secret_acknowledgments import SECRET_SCAN_ACKNOWLEDGMENTS_PATH
 
 from .support import (
     ALL_TOOL_NAMES,
@@ -201,6 +204,54 @@ def test_transaction_tools_validate_dry_run_apply_and_rebuild_end_to_end(
     audit = service.invoke("audit_summary", {"schema_version": 1})
     assert audit.envelope.ok is True
     assert audit.envelope.result["audit"]["event_count"] == 1
+
+
+@pytest.mark.integration
+def test_transaction_apply_possible_secret_acknowledgment_has_mcp_parity(
+    tmp_path: Path,
+) -> None:
+    secret_value = "FICTIONAL_MCP_ACK_VALUE_123456"
+    target = "02_knowledge/PRJ-mcp-secret.md"
+    root = initialize_transaction_context(tmp_path / "mcp-secret-context")
+    transaction = proposal(
+        "mcp-secret-ack",
+        [
+            create_operation(
+                "PRJ-mcp-secret",
+                body=f"api_key = {secret_value}\n",
+            )
+        ],
+    )
+    payload = transaction.model_dump(mode="json")
+    service = McpToolService(root)
+
+    blocked = service.invoke(
+        "transaction_apply",
+        {"schema_version": 1, "approved": True, "proposal": payload},
+    )
+    assert blocked.envelope.ok is False
+    assert "TXN-POSSIBLE-SECRET" in error_codes(blocked)
+    assert secret_value not in blocked.model_dump_json()
+
+    applied = service.invoke(
+        "transaction_apply",
+        {
+            "schema_version": 1,
+            "approved": True,
+            "proposal": payload,
+            "acknowledge_possible_secret": [target],
+        },
+    )
+
+    assert applied.envelope.ok is True, applied.envelope.model_dump(mode="json")
+    assert set(applied.envelope.result["receipt"]["applied_targets"]) == {
+        target,
+        SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+    }
+    event = find_event_by_proposal_id(root, transaction.id)
+    assert event is not None
+    assert event.acknowledged_paths == [target]
+    assert secret_value not in applied.model_dump_json()
 
 
 @pytest.mark.parametrize("tool_name", ALL_TOOL_NAMES)

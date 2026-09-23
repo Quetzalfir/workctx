@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from bisect import bisect_right
 from collections import defaultdict
 from collections.abc import Collection, Iterator, Mapping
 from copy import deepcopy
@@ -47,6 +49,11 @@ from workctx.validation.freshness import (
 )
 from workctx.validation.meta import REFRESH_META_REPAIR_ACTION, packaged_meta_schemas
 from workctx.validation.report import Severity, ValidationIssue, ValidationReport
+from workctx.validation.secret_acknowledgments import (
+    SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+    SecretScanAcknowledgment,
+    load_secret_scan_acknowledgments,
+)
 
 REQUIRED_DIRECTORIES = (
     "00_inbox",
@@ -115,8 +122,14 @@ _BODY_REFERENCE = re.compile(
     r"(?i:workctx|artifact|repo):[^\s<>\[\]{}\"'`]+)"
 )
 _SECRET_MARKERS = (
-    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
-    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{12,}"),
+    (
+        "private-key marker",
+        re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    ),
+    (
+        "bearer-token marker",
+        re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{12,}"),
+    ),
 )
 _SECRET_ASSIGNMENT = re.compile(
     r"(?i)(?<![A-Za-z0-9_-])(?:\$env:)?(?P<key>[A-Za-z][A-Za-z0-9_-]*)"
@@ -196,6 +209,12 @@ class _ReferenceCandidate:
     is_document_identity: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class _PossibleSecretFinding:
+    line: int
+    kind: str
+
+
 class WorkspaceValidator:
     """Read-only, deterministic integrity engine for one context root."""
 
@@ -214,6 +233,8 @@ class WorkspaceValidator:
         self._freshness_probe = freshness_probe
         self._report = ValidationReport(context_root=resolved_root)
         self._texts: dict[Path, str] = {}
+        self._text_bytes: dict[Path, bytes] = {}
+        self._secret_acknowledgments: dict[str, SecretScanAcknowledgment] = {}
         self._documents: list[_ParsedDocument] = []
         self._records: list[_ModelRecord] = []
         self._identities: dict[str, _ModelRecord] = {}
@@ -276,7 +297,8 @@ class WorkspaceValidator:
                 self._add("CTX-UNREADABLE-PATH", relative)
                 continue
             try:
-                content = path.read_text(encoding="utf-8")
+                raw_content = path.read_bytes()
+                content = raw_content.decode("utf-8")
             except UnicodeDecodeError:
                 self._add("CTX-NON-UTF8", relative)
                 if _is_canonical_file_candidate(path, Path(relative)):
@@ -289,12 +311,71 @@ class WorkspaceValidator:
                 continue
 
             self._texts[path] = content
+            self._text_bytes[path] = raw_content
             if not _defer_absolute_path_scan(path, Path(relative), content) and (
                 _contains_durable_absolute_path(content)
             ):
                 self._add("CTX-ABSOLUTE-PATH", relative)
-            if _contains_possible_secret(content):
-                self._add("CTX-POSSIBLE-SECRET", relative)
+
+        self._load_secret_acknowledgments()
+        self._check_possible_secrets()
+
+    def _load_secret_acknowledgments(self) -> None:
+        path = self._root.joinpath(*PurePosixPath(SECRET_SCAN_ACKNOWLEDGMENTS_PATH).parts)
+        content = self._texts.get(path)
+        if content is None:
+            return
+        try:
+            record = load_secret_scan_acknowledgments(content)
+        except (RecursionError, TypeError, ValueError, yaml.YAMLError):
+            self._add(
+                "CTX-SECRET-ACKNOWLEDGMENT-INVALID",
+                SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+            )
+            return
+        self._secret_acknowledgments = {
+            acknowledged_path.casefold(): acknowledgment
+            for acknowledged_path, acknowledgment in record.by_path().items()
+        }
+
+    def _check_possible_secrets(self) -> None:
+        for path, content in sorted(
+            self._texts.items(), key=lambda item: item[0].relative_to(self._root).as_posix()
+        ):
+            findings = _possible_secret_findings(content)
+            if not findings:
+                continue
+            relative = path.relative_to(self._root).as_posix()
+            acknowledgment = self._secret_acknowledgments.get(relative.casefold())
+            content_hash = f"sha256:{hashlib.sha256(self._text_bytes[path]).hexdigest()}"
+            acknowledged = (
+                acknowledgment is not None and acknowledgment.content_hash == content_hash
+            )
+            for finding in findings:
+                if acknowledged:
+                    message = (
+                        f"Possible secret at line {finding.line}: {finding.kind}; the operator "
+                        "acknowledgment matches this file's content hash."
+                    )
+                    definition = DIAGNOSTIC_DEFINITIONS["CTX-POSSIBLE-SECRET"]
+                    self._report.issues.append(
+                        ValidationIssue(
+                            severity=Severity.ADVISORY,
+                            code=definition.code,
+                            message=message,
+                            path=relative,
+                            repair_action=definition.repair_action,
+                        )
+                    )
+                    continue
+                self._add(
+                    "CTX-POSSIBLE-SECRET",
+                    relative,
+                    (
+                        f"Possible secret at line {finding.line}: {finding.kind}; the "
+                        "acknowledgment is missing or stale for this file's content hash."
+                    ),
+                )
 
     def _load_context_config(self) -> None:
         path = self._root / "context.yaml"
@@ -939,10 +1020,26 @@ def contains_possible_secret(content: str) -> bool:
 
 
 def _contains_possible_secret(content: str) -> bool:
-    if any(pattern.search(content) for pattern in _SECRET_MARKERS):
-        return True
+    return bool(_possible_secret_findings(content))
+
+
+def _possible_secret_findings(content: str) -> tuple[_PossibleSecretFinding, ...]:
+    line_starts = [0]
+    offset = 0
+    for line in content.splitlines(keepends=True):
+        offset += len(line)
+        if offset < len(content):
+            line_starts.append(offset)
+
+    located: list[tuple[int, int, str]] = []
+    for kind, pattern in _SECRET_MARKERS:
+        located.extend(
+            (bisect_right(line_starts, match.start()), match.start(), kind)
+            for match in pattern.finditer(content)
+        )
     for match in _SECRET_ASSIGNMENT.finditer(content):
-        normalized_key = match.group("key").lower().replace("-", "_")
+        key = match.group("key")
+        normalized_key = key.lower().replace("-", "_")
         compact_key = normalized_key.replace("_", "")
         if any(
             normalized_key == suffix
@@ -951,8 +1048,18 @@ def _contains_possible_secret(content: str) -> bool:
             or compact_key.endswith(suffix.replace("_", ""))
             for suffix in _SECRET_KEY_SUFFIXES
         ):
-            return True
-    return False
+            located.append(
+                (
+                    bisect_right(line_starts, match.start()),
+                    match.start(),
+                    f"assignment to key '{key}'",
+                )
+            )
+    located.sort(key=lambda item: (item[0], item[1], item[2]))
+    return tuple(
+        _PossibleSecretFinding(line=line_number, kind=kind)
+        for line_number, _column, kind in located
+    )
 
 
 def _defer_absolute_path_scan(path: Path, relative: Path, content: str) -> bool:

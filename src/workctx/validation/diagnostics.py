@@ -59,8 +59,19 @@ _DEFINITIONS = (
     DiagnosticDefinition(
         "CTX-POSSIBLE-SECRET",
         Severity.ERROR,
-        "A workspace text file contains a secret-looking assignment or private-key marker.",
-        "Remove the value and store only an approved secret reference.",
+        "A workspace text file contains a located secret-looking pattern whose acknowledgment "
+        "is missing or stale.",
+        "Use the reported line and pattern to redact the value or replace it with a secret "
+        "reference name. Only when the operator explicitly confirms the text is not a live "
+        "credential, re-apply with --acknowledge-possible-secret; never acknowledge merely to "
+        "clear an error.",
+    ),
+    DiagnosticDefinition(
+        "CTX-SECRET-ACKNOWLEDGMENT-INVALID",
+        Severity.ERROR,
+        "A secret-scan acknowledgment record or requested acknowledgment is invalid.",
+        "Use a written context-relative path whose staged content reports CTX-POSSIBLE-SECRET, "
+        "or repair the canonical acknowledgment file to match its schema.",
     ),
     DiagnosticDefinition(
         "DOC-PARSE",

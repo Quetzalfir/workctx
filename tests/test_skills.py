@@ -602,6 +602,23 @@ def test_packaged_mutation_skills_name_authoritative_proposal_shape() -> None:
         assert TRANSACTION_PROPOSAL_REFERENCE in content, skill_id
 
 
+@pytest.mark.parametrize("skill_id", ("process-evidence", "curate-knowledge"))
+def test_packaged_evidence_skills_require_safe_explicit_secret_acknowledgment(
+    skill_id: str,
+) -> None:
+    content = (PACKAGED_SKILLS_ROOT / skill_id / "SKILL.md").read_text(encoding="utf-8")
+
+    for marker in (
+        "`CTX-POSSIBLE-SECRET`",
+        "reported line and pattern",
+        "redact the value or replace it with a secret reference name",
+        "operator explicitly confirms the text is not a live credential",
+        "`--acknowledge-possible-secret`",
+        "never merely to clear an error",
+    ):
+        assert marker in content, (skill_id, marker)
+
+
 def test_registry_is_valid_complete_and_unique() -> None:
     schema = json.loads(
         (ROOT / "schemas" / "skill-registry.schema.json").read_text(encoding="utf-8")

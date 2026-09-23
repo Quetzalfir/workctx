@@ -20,7 +20,11 @@ from workctx.domain.transactions import (
 ROOT = Path(__file__).parents[2]
 SCHEMA_ROOT = ROOT / "schemas"
 FIXTURE_ROOT = ROOT / "tests" / "workspace" / "fixtures"
-SCHEMA_NAMES = ("transaction-proposal.schema.json", "audit-event.schema.json")
+SCHEMA_NAMES = (
+    "transaction-proposal.schema.json",
+    "audit-event.schema.json",
+    "secret-scan-acknowledgments.schema.json",
+)
 CONTENT_HASH = f"sha256:{'a' * 64}"
 
 
@@ -332,6 +336,15 @@ def test_positive_audit_event_round_trips_and_has_one_canonical_line() -> None:
     assert AuditEvent.model_validate_json(event.model_dump_json()) == event
 
 
+def test_empty_acknowledged_paths_preserve_historical_canonical_event_bytes() -> None:
+    payload = _load_fixture("positive", "audit-event")
+    event = AuditEvent.model_validate(payload)
+
+    assert event.acknowledged_paths == []
+    assert b'"acknowledged_paths"' not in event.canonical_line_bytes()
+    assert event.event_hash == payload["event_hash"]
+
+
 def test_apply_audit_event_variant_is_schema_and_model_valid() -> None:
     payload = _load_fixture("positive", "audit-event")
     payload.update(
@@ -353,6 +366,37 @@ def test_apply_audit_event_variant_is_schema_and_model_valid() -> None:
 
     _validator("audit-event.schema.json").validate(payload)
     assert AuditEvent.model_validate(payload).action == "apply"
+
+
+def test_apply_audit_event_records_only_written_acknowledged_paths() -> None:
+    payload = _load_fixture("positive", "audit-event")
+    operations = payload["operations"]
+    if not isinstance(operations, list) or not isinstance(operations[0], dict):
+        raise TypeError("Expected a positive audit operation fixture")
+    target = operations[0]["target"]
+    payload.update(
+        {
+            "actor": {
+                "type": "human",
+                "id": "fictional-operator",
+                "agent": None,
+                "model": None,
+            },
+            "action": "apply",
+            "result": "committed",
+            "source_refs": [],
+            "acknowledged_paths": [target],
+        }
+    )
+    payload.pop("event_hash")
+    event = AuditEvent.seal(AuditEventContent.model_validate(payload))
+    payload = event.model_dump(mode="json")
+
+    _validator("audit-event.schema.json").validate(payload)
+    event = AuditEvent.model_validate(payload)
+
+    assert event.acknowledged_paths == [target]
+    assert b'"acknowledged_paths"' in event.canonical_line_bytes()
 
 
 @pytest.mark.parametrize(

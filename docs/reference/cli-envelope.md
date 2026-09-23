@@ -31,9 +31,9 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `context-pack` | `context-pack` | `pack` |
 | `proposal validate` | `proposal.validate` | `validation` |
 | `proposal show` | `proposal.show` | `dry_run` |
-| `transaction apply` | `transaction.apply` | `dry_run`, then `preview` or `receipt` |
-| `transaction history` | `transaction.history` | `summary`, `events` |
-| `transaction show` | `transaction.show` | `event` |
+| `transaction apply` | `transaction.apply` | `dry_run`, then `preview` or `receipt`; acknowledgment previews include the staged metadata-file effect |
+| `transaction history` | `transaction.history` | `summary`, `events` including optional `acknowledged_paths` |
+| `transaction show` | `transaction.show` | `event` including optional `acknowledged_paths` |
 | `search` | `search` | `query`, `count`, `hits` |
 | `task list` | `task.list` | `count`, `tasks` |
 | `task show` | `task.show` | `task` |
@@ -65,7 +65,10 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 
 `transaction apply` is a dry run unless `--yes` is present; `--dry-run` wins when both flags
 are supplied. A preview reports `dry_run: true` and never applies the proposal. An approved
-apply reports `dry_run: false` and includes the authenticated transaction receipt.
+apply reports `dry_run: false` and includes the authenticated transaction receipt. The repeatable
+`--acknowledge-possible-secret <path>` option is valid only with `--yes`, including a
+`--dry-run --yes` preview, and only for transaction-written postimages that actually trigger
+`CTX-POSSIBLE-SECRET`; the acknowledgment metadata write is shown as another exact effect.
 `context refresh-meta` idempotently installs the packaged reference schemas under
 `99_meta/schemas/`; each schema reports `updated` or `unchanged`, and no other context file is
 modified. `agent install` returns the complete plan without changing files unless `--yes` is

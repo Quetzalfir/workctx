@@ -41,6 +41,7 @@ ENVELOPE_VALIDATOR = Draft202012Validator(
 runner = CliRunner()
 TIMESTAMP = "2026-08-02T12:00:00Z"
 TIMESTAMP_ID = "20260802T120000Z"
+SECRET_VALUE = "FICTIONAL_CLI_ACKNOWLEDGMENT_VALUE_123456"
 
 
 def _envelope(result: Any, *, exit_code: int, command: str) -> dict[str, Any]:
@@ -169,6 +170,15 @@ def _write_proposal(
         encoding="utf-8",
     )
     return path
+
+
+def _write_secret_proposal(directory: Path, slug: str) -> tuple[Path, str]:
+    payload = _proposal_payload(slug)
+    operation = payload["operations"][0]
+    operation["payload"]["body"] = f"api_key = {SECRET_VALUE}\n"
+    path = directory / f"{slug}.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path, operation["target"]
 
 
 def _tree_hashes(root: Path) -> dict[str, str]:
@@ -310,6 +320,106 @@ def test_transaction_apply_with_yes_authenticates_receipt(tmp_path: Path) -> Non
     event = authenticate_apply_result(root, receipt)
     assert event.id == receipt.ledger_event_id
     assert (root / "02_knowledge" / "PRJ-commit.md").is_file()
+
+
+def test_secret_acknowledgment_requires_yes_without_mutation(tmp_path: Path) -> None:
+    root = _initialize(tmp_path / "ctx")
+    proposal, target = _write_secret_proposal(tmp_path, "secret-no-approval")
+    before = _tree_hashes(root)
+
+    payload = _envelope(
+        runner.invoke(
+            app,
+            [
+                "transaction",
+                "apply",
+                str(proposal),
+                "--acknowledge-possible-secret",
+                target,
+                "--context",
+                str(root),
+                "--json",
+            ],
+        ),
+        exit_code=2,
+        command="transaction.apply",
+    )
+
+    assert payload["errors"][0]["code"] == "TXN-APPROVAL-REQUIRED"
+    assert SECRET_VALUE not in json.dumps(payload)
+    assert _tree_hashes(root) == before
+
+
+def test_secret_acknowledgment_dry_run_previews_metadata_without_writing(
+    tmp_path: Path,
+) -> None:
+    root = _initialize(tmp_path / "ctx")
+    proposal, target = _write_secret_proposal(tmp_path, "secret-preview")
+    before = _tree_hashes(root)
+
+    payload = _envelope(
+        runner.invoke(
+            app,
+            [
+                "transaction",
+                "apply",
+                str(proposal),
+                "--dry-run",
+                "--yes",
+                "--acknowledge-possible-secret",
+                target,
+                "--context",
+                str(root),
+                "--json",
+            ],
+        ),
+        exit_code=0,
+        command="transaction.apply",
+    )
+
+    effects = payload["result"]["preview"]["effects"]
+    assert {effect["target"] for effect in effects} >= {
+        target,
+        "99_meta/secret-scan-acknowledgments.yaml",
+    }
+    assert SECRET_VALUE not in json.dumps(payload)
+    assert _tree_hashes(root) == before
+
+
+def test_secret_acknowledgment_apply_records_path_without_leaking_value(
+    tmp_path: Path,
+) -> None:
+    root = _initialize(tmp_path / "ctx")
+    proposal, target = _write_secret_proposal(tmp_path, "secret-commit")
+
+    payload = _envelope(
+        runner.invoke(
+            app,
+            [
+                "transaction",
+                "apply",
+                str(proposal),
+                "--yes",
+                "--acknowledge-possible-secret",
+                target,
+                "--context",
+                str(root),
+                "--json",
+            ],
+        ),
+        exit_code=0,
+        command="transaction.apply",
+    )
+
+    receipt = ApplyResult.model_validate(payload["result"]["receipt"])
+    event = authenticate_apply_result(root, receipt)
+    assert event.acknowledged_paths == [target]
+    assert "99_meta/secret-scan-acknowledgments.yaml" in receipt.applied_targets
+    assert SECRET_VALUE not in json.dumps(payload)
+    assert (
+        SECRET_VALUE.encode()
+        not in (root / "99_meta" / "secret-scan-acknowledgments.yaml").read_bytes()
+    )
 
 
 def test_stale_revision_apply_maps_to_conflict_exit_four(tmp_path: Path) -> None:

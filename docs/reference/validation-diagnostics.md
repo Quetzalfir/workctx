@@ -20,7 +20,8 @@ invalid canonical state.
 | `CTX-UNREADABLE-PATH` | error | A workspace file or directory could not be inspected. | Restore read access and rerun validation so the path can be checked. |
 | `CTX-ABSOLUTE-PATH` | warning | A durable value contains a machine-specific absolute path. | Replace it with a context-relative path or canonical durable URI. |
 | `CTX-PATH-ESCAPE` | error | A workspace link crosses a read boundary, or an artifact path is unsafe or non-portable. | Remove the link or use a portable forward-slash artifact path inside the context root. |
-| `CTX-POSSIBLE-SECRET` | error | Text contains a secret-looking assignment or private-key marker. | Remove the value and store only an approved secret reference. |
+| `CTX-POSSIBLE-SECRET` | error | Text contains a located secret-looking pattern whose acknowledgment is missing or stale. | Use the reported line and pattern to redact the value or replace it with a secret reference name. Only when the operator explicitly confirms the text is not a live credential, re-apply with `--acknowledge-possible-secret`; never acknowledge merely to clear an error. |
+| `CTX-SECRET-ACKNOWLEDGMENT-INVALID` | error | A secret-scan acknowledgment record or requested acknowledgment is invalid. | Use a written context-relative path whose staged content reports `CTX-POSSIBLE-SECRET`, or repair the canonical acknowledgment file to match its schema. |
 | `DOC-PARSE` | error | A canonical Markdown, YAML, or JSON document cannot be parsed. | Repair its syntax and required frontmatter delimiters. |
 | `DOC-MODEL` | error | A canonical document does not satisfy its integrated domain model. | Correct its fields to satisfy the current typed domain contract. |
 | `DOC-FILENAME-ID` | error | A canonical document filename does not match its frontmatter ID. | Rename the file to its immutable ID while preserving the appropriate extension. |

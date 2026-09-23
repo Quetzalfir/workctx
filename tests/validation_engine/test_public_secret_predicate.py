@@ -6,6 +6,7 @@ from workctx.validation import contains_possible_secret
 def test_secret_like_values_are_detected() -> None:
     assert contains_possible_secret('api_key = "sk-fictional-1234567890abcdef"')
     assert contains_possible_secret("-----BEGIN RSA PRIVATE KEY-----")
+    assert contains_possible_secret("api_key =\nsk-fictional-1234567890abcdef")
 
 
 def test_ordinary_prose_is_not_flagged() -> None:
