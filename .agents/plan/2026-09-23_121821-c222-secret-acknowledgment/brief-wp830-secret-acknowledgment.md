@@ -75,3 +75,15 @@ rejected for paths without findings and for unwritten paths; ledger
 event content; MCP parity; bridge/guide/skill content assertions. Full
 gate where the sandbox allows; declare limits explicitly; existing tests
 stay green.
+
+## Amendment 1 (lead, 2026-09-23)
+
+Worker blocker accepted. Two files are ADDED to the allowed paths, each
+for one additive change only:
+- `src/workctx/domain/transactions.py`: `AuditEventContent` gains an
+  OPTIONAL acknowledged-paths field (default empty); existing ledger
+  events remain valid and hash verification of prior chains is
+  untouched.
+- `src/workctx/mcp/contracts.py`: the `transaction_apply` input schema
+  gains the same OPTIONAL argument — a backward-compatible extension of
+  the version 1 tool surface per ADR 0012. No other contract changes.
