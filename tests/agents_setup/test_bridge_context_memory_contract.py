@@ -47,6 +47,14 @@ RETENTION_MARKERS = (
     "Did the operator repeat or newly supply any fact?",
     "it must be recorded before closing.",
 )
+SECRET_ACKNOWLEDGMENT_MARKERS = (
+    "`CTX-POSSIBLE-SECRET`",
+    "reported line and pattern",
+    "redact the value or replace it with a secret reference name",
+    "operator explicitly confirms the text is not a live credential",
+    "`--acknowledge-possible-secret`",
+    "never acknowledge merely to clear an error",
+)
 
 
 @pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
@@ -59,6 +67,16 @@ def test_prompt_surface_orients_before_asking_and_records_new_facts(
         assert marker in content, (relative_path, marker)
     assert content.count("workctx secret list") == 1
     assert content.count("protocol violation") == 1
+
+
+@pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
+def test_prompt_surface_requires_safe_explicit_secret_acknowledgment(
+    relative_path: str,
+) -> None:
+    content = (ROOT / relative_path).read_text(encoding="utf-8")
+
+    for marker in SECRET_ACKNOWLEDGMENT_MARKERS:
+        assert marker in content, (relative_path, marker)
 
 
 def test_bootstrap_session_orients_before_asking_and_records_new_facts() -> None:

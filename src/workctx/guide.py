@@ -356,7 +356,10 @@ GUIDE = GuideDefinition(
     escape_hatch=(
         "If a generated file seems to require a manual edit, stop, run `workctx agent repair` "
         "or `workctx agent refresh`, or ask the operator — editing it directly freezes it out "
-        "of updates and blocks refresh."
+        "of updates and blocks refresh. On `CTX-POSSIBLE-SECRET`, use the reported line and "
+        "pattern to redact the value or replace it with a secret reference name; only after "
+        "the operator explicitly confirms the text is not a live credential may you re-apply "
+        "with `--acknowledge-possible-secret`, and never acknowledge merely to clear an error."
     ),
 )
 

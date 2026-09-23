@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -763,6 +764,47 @@ def test_secret_diagnostic_never_echoes_value(canonical_workspace: FixtureWorksp
     assert secret not in issue.message
     assert secret not in (issue.repair_action or "")
     assert secret not in (issue.path or "")
+
+
+def test_secret_findings_report_every_exact_line_and_value_free_pattern_kind(
+    canonical_workspace: FixtureWorkspace,
+) -> None:
+    bearer_value = "FICTIONAL_BEARER_VALUE_123456"
+    assigned_value = "FICTIONAL_ASSIGNED_VALUE_123456"
+    path = canonical_workspace.root / "02_knowledge" / "notes" / "located.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "ordinary text\n"
+        "-----BEGIN PRIVATE KEY-----\n"
+        "another ordinary line\n"
+        f"Authorization: Bearer {bearer_value}\n"
+        "still ordinary\n"
+        f"service_api_key = {assigned_value}\n",
+        encoding="utf-8",
+    )
+
+    report = validate_workspace(canonical_workspace.root)
+    issues = [issue for issue in report.issues if issue.code == "CTX-POSSIBLE-SECRET"]
+
+    assert [issue.message.split(";", 1)[0] for issue in issues] == [
+        "Possible secret at line 2: private-key marker",
+        "Possible secret at line 4: bearer-token marker",
+        "Possible secret at line 6: assignment to key 'service_api_key'",
+    ]
+    serialized = json.dumps(
+        [
+            {
+                "severity": issue.severity.value,
+                "code": issue.code,
+                "message": issue.message,
+                "path": issue.path,
+                "repair_action": issue.repair_action,
+            }
+            for issue in report.issues
+        ]
+    )
+    assert bearer_value not in serialized
+    assert assigned_value not in serialized
 
 
 @pytest.mark.parametrize(

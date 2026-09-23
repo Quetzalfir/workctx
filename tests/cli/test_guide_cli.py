@@ -111,6 +111,18 @@ def _normalized(text: str) -> str:
     return " ".join(text.split())
 
 
+def test_guide_escape_hatch_requires_safe_explicit_secret_acknowledgment() -> None:
+    for marker in (
+        "CTX-POSSIBLE-SECRET",
+        "reported line and pattern",
+        "redact the value or replace it with a secret reference name",
+        "operator explicitly confirms the text is not a live credential",
+        "--acknowledge-possible-secret",
+        "never acknowledge merely to clear an error",
+    ):
+        assert marker in GUIDE.escape_hatch
+
+
 def test_human_guide_contains_every_class_routing_section_and_escape_hatch(
     tmp_path: Path,
 ) -> None:
@@ -127,6 +139,10 @@ def test_human_guide_contains_every_class_routing_section_and_escape_hatch(
     for ownership_class in OwnershipClass:
         assert ownership_class.value in result.stdout
     assert _normalized(GUIDE.escape_hatch) in _normalized(result.stdout)
+    assert "CTX-POSSIBLE-SECRET" in result.stdout
+    assert "reported line and pattern" in result.stdout
+    assert "--acknowledge-possible-secret" in result.stdout
+    assert "never acknowledge merely to clear an error" in result.stdout
 
 
 def test_json_shape_pins_paths_classes_policies_and_routing_entries(tmp_path: Path) -> None:

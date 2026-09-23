@@ -16,7 +16,9 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -377,6 +379,7 @@ class AuditEventContent(_ContractModel):
     result: Literal["committed", "rolled_back"]
     base_revision: Revision
     source_refs: list[str]
+    acknowledged_paths: list[ContextPath] = Field(default_factory=list)
     operations: list[AuditOperation] = Field(min_length=1)
     prev_hash: Revision
 
@@ -394,6 +397,13 @@ class AuditEventContent(_ContractModel):
         if len(canonical) != len(set(canonical)):
             raise ValueError("source_refs must contain unique durable references")
         return canonical
+
+    @field_validator("acknowledged_paths")
+    @classmethod
+    def validate_acknowledged_paths(cls, values: list[str]) -> list[str]:
+        if len({_path_key(value) for value in values}) != len(values):
+            raise ValueError("acknowledged_paths must contain unique context paths")
+        return values
 
     @model_validator(mode="after")
     def validate_producer_invariants(self) -> Self:
@@ -415,12 +425,38 @@ class AuditEventContent(_ContractModel):
                 )
             if self.source_refs:
                 raise ValueError("Recovery audit events cannot claim proposal source references")
+            if self.acknowledged_paths:
+                raise ValueError("Recovery audit events cannot record acknowledged paths")
         for value in self.source_refs:
             _require_local_reference_context(value, self.context_id)
+        written_paths = {
+            operation.destination if isinstance(operation, AuditMoveOperation) else operation.target
+            for operation in self.operations
+            if not isinstance(operation, AuditDeleteGeneratedOperation)
+        }
+        if any(path not in written_paths for path in self.acknowledged_paths):
+            raise ValueError("Acknowledged paths must be written by the audit event")
         return self
 
+    @model_serializer(mode="wrap")
+    def _omit_empty_acknowledged_paths(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        # The additive field stays absent when empty in EVERY serialization
+        # path — the domain canonical bytes AND the generic ledger serializer
+        # behind compute_event_hash — so historical events keep their original
+        # canonical bytes and event hashes, and the two paths can never
+        # disagree about them.
+        data: dict[str, object] = handler(self)
+        if not data.get("acknowledged_paths"):
+            data.pop("acknowledged_paths", None)
+        return data
+
+    def _canonical_event_data(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
     def expected_event_hash(self) -> str:
-        data = self.model_dump(mode="json")
+        data = self._canonical_event_data()
         data["event_hash"] = ""
         payload = json.dumps(
             data,
@@ -444,14 +480,14 @@ class AuditEvent(AuditEventContent):
 
     @classmethod
     def seal(cls, content: AuditEventContent) -> AuditEvent:
-        data = content.model_dump(mode="json")
+        data = content._canonical_event_data()
         data["event_hash"] = content.expected_event_hash()
         return cls.model_validate(data)
 
     def canonical_line_bytes(self) -> bytes:
         return (
             json.dumps(
-                self.model_dump(mode="json"),
+                self._canonical_event_data(),
                 ensure_ascii=False,
                 allow_nan=False,
                 separators=(",", ":"),

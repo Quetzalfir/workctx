@@ -1383,6 +1383,16 @@ def transaction_apply(
         bool,
         typer.Option("--yes", help="Approve and apply the reviewed local transaction."),
     ] = False,
+    acknowledge_possible_secret: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--acknowledge-possible-secret",
+            help=(
+                "Acknowledge a staged CTX-POSSIBLE-SECRET path after operator confirmation; "
+                "repeatable and valid only with --yes."
+            ),
+        ),
+    ] = None,
     context_path: Annotated[
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
@@ -1401,13 +1411,31 @@ def transaction_apply(
 
     begin_command("transaction.apply", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
+    context_id = load_context_config(root).id
+    acknowledged_paths = tuple(acknowledge_possible_secret or ())
+    if acknowledged_paths and not yes:
+        error = CliDiagnostic(
+            code="TXN-APPROVAL-REQUIRED",
+            message="Secret-scan acknowledgment requires explicit --yes approval.",
+            path="$.yes",
+        )
+        record_failure(
+            result={"dry_run": bool(dry_run_only)},
+            context_id=context_id,
+            errors=[error],
+        )
+        raise UsageConfigurationError(error.message)
     proposal = _load_transaction_proposal(
         file,
-        context_id=load_context_config(root).id,
+        context_id=context_id,
         json_output=json_output,
     )
     if dry_run_only or not yes:
-        preview = dry_run(root, proposal)
+        preview = dry_run(
+            root,
+            proposal,
+            acknowledge_possible_secret=acknowledged_paths,
+        )
         confirmation = None if yes else "Re-run with --yes to apply these intended changes."
         _complete_transaction_preview(
             preview,
@@ -1418,7 +1446,12 @@ def transaction_apply(
         return
 
     try:
-        receipt = apply(root, proposal, approved=bool(yes))
+        receipt = apply(
+            root,
+            proposal,
+            approved=bool(yes),
+            acknowledge_possible_secret=acknowledged_paths,
+        )
     except ProposalValidationError as exc:
         validation = exc.result
         warnings, errors = _transaction_cli_diagnostics(validation.diagnostics)

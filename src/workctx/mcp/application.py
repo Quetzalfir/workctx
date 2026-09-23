@@ -478,7 +478,12 @@ class McpToolService:
 
     def _transaction_apply(self, arguments: dict[str, Any]) -> ToolResponse:
         proposal = TransactionProposal.model_validate(arguments["proposal"])
-        result = apply(self._root, proposal, approved=True)
+        result = apply(
+            self._root,
+            proposal,
+            approved=True,
+            acknowledge_possible_secret=tuple(arguments.get("acknowledge_possible_secret", ())),
+        )
         warnings: tuple[McpDiagnostic, ...] = ()
         if result.projection.state is ProjectionState.STALE:
             warnings = (

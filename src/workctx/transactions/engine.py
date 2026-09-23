@@ -11,13 +11,14 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import suppress
 from contextvars import ContextVar, Token
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from threading import Event, Thread
 from typing import Literal
 from urllib.parse import quote
 
+import yaml
 from pydantic import BaseModel
 
 from workctx.adapters.filesystem import (
@@ -104,7 +105,19 @@ from workctx.transactions.models import (
     RecoveryStrategy,
     TransactionDiagnostic,
 )
-from workctx.validation import Severity, ValidationReport, validate_workspace
+from workctx.validation import (
+    Severity,
+    ValidationReport,
+    contains_possible_secret,
+    validate_workspace,
+)
+from workctx.validation.secret_acknowledgments import (
+    SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+    SecretScanAcknowledgment,
+    SecretScanAcknowledgments,
+    dump_secret_scan_acknowledgments,
+    load_secret_scan_acknowledgments,
+)
 
 _OPERATION_ZONES = (
     ContextZone.INBOX,
@@ -160,6 +173,7 @@ class _CompiledProposal:
     identities: frozenset[str]
     artifact_ids: frozenset[str]
     artifact_digests: frozenset[str]
+    acknowledged_paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,10 +310,18 @@ class TransactionEngine:
             diagnostics=analysis.diagnostics,
         )
 
-    def dry_run(self, proposal: TransactionProposal) -> DryRunResult:
+    def dry_run(
+        self,
+        proposal: TransactionProposal,
+        *,
+        acknowledge_possible_secret: Sequence[str] = (),
+    ) -> DryRunResult:
         """Describe exact ordered effects without acquiring a lock or writing files."""
 
-        analysis = self._analyze_read_only(proposal)
+        analysis = self._analyze_read_only(
+            proposal,
+            acknowledge_possible_secret=tuple(acknowledge_possible_secret),
+        )
         return DryRunResult(
             proposal_id=proposal.id,
             context_id=proposal.context_id,
@@ -315,9 +337,11 @@ class TransactionEngine:
         *,
         approved: bool = False,
         session_id: str | None = None,
+        acknowledge_possible_secret: Sequence[str] = (),
     ) -> ApplyResult:
         """Atomically apply one proposal and return its durable commit receipt."""
 
+        requested_acknowledgments = tuple(acknowledge_possible_secret)
         lock = self._lock_factory(
             self._root,
             session_id or f"transaction-{proposal.id}",
@@ -357,9 +381,10 @@ class TransactionEngine:
                     verification=verification,
                     projection_report=projection_report,
                     check_duplicate=False,
+                    acknowledge_possible_secret=requested_acknowledgments,
                 ),
             )
-            if proposal.approval == "required" and not approved:
+            if (proposal.approval == "required" or requested_acknowledgments) and not approved:
                 analysis = _with_diagnostic(
                     analysis,
                     _diagnostic(
@@ -393,6 +418,7 @@ class TransactionEngine:
                     lambda: self._proposal_event(
                         proposal,
                         operations=_intent_audit_operations(prepared_intent),
+                        acknowledged_paths=compiled.acknowledged_paths,
                         action="apply",
                         result="rolled_back",
                         prev_hash=verification.head_hash,
@@ -464,6 +490,7 @@ class TransactionEngine:
                     lambda: self._proposal_event(
                         proposal,
                         operations=compiled.audit_operations,
+                        acknowledged_paths=compiled.acknowledged_paths,
                         action="apply",
                         result="rolled_back",
                         prev_hash=verification.head_hash,
@@ -504,6 +531,7 @@ class TransactionEngine:
                 lambda: self._proposal_event(
                     proposal,
                     operations=compiled.audit_operations,
+                    acknowledged_paths=compiled.acknowledged_paths,
                     action="apply",
                     result="committed",
                     prev_hash=verification.head_hash,
@@ -712,7 +740,12 @@ class TransactionEngine:
                     "The transaction heartbeat could not refresh its lease"
                 ) from heartbeat_failure
 
-    def _analyze_read_only(self, proposal: TransactionProposal) -> _Analysis:
+    def _analyze_read_only(
+        self,
+        proposal: TransactionProposal,
+        *,
+        acknowledge_possible_secret: Sequence[str] = (),
+    ) -> _Analysis:
         verification = verify_ledger(self._root)
         projection = self._projection_factory(self._root)
         return self._analyze(
@@ -720,6 +753,7 @@ class TransactionEngine:
             projection=projection,
             verification=verification,
             projection_report=None,
+            acknowledge_possible_secret=acknowledge_possible_secret,
         )
 
     def _analyze(
@@ -730,6 +764,7 @@ class TransactionEngine:
         verification: LedgerVerification,
         projection_report: RebuildReport | None,
         check_duplicate: bool = True,
+        acknowledge_possible_secret: Sequence[str] = (),
     ) -> _Analysis:
         diagnostics: list[TransactionDiagnostic] = []
         if proposal.context_id != self._store.context_id:
@@ -787,7 +822,6 @@ class TransactionEngine:
                 )
             )
 
-        diagnostics.extend(_secret_diagnostics(proposal))
         if any(item.severity is DiagnosticSeverity.ERROR for item in diagnostics):
             return _Analysis(tuple(diagnostics), None)
         try:
@@ -818,6 +852,17 @@ class TransactionEngine:
             )
             return _Analysis(tuple(diagnostics), None)
         diagnostics.extend(compile_diagnostics)
+        compiled, acknowledgment_diagnostics = self._compile_secret_acknowledgments(
+            compiled,
+            acknowledge_possible_secret,
+        )
+        diagnostics.extend(acknowledgment_diagnostics)
+        diagnostics.extend(
+            _secret_diagnostics(
+                proposal,
+                acknowledged_paths=compiled.acknowledged_paths,
+            )
+        )
         diagnostics.extend(
             self._condition_diagnostics(
                 proposal.preconditions,
@@ -1055,6 +1100,192 @@ class TransactionEngine:
                 artifact_digests=frozenset(artifact_digests),
             ),
             tuple(diagnostics),
+        )
+
+    def _compile_secret_acknowledgments(
+        self,
+        compiled: _CompiledProposal,
+        requested_paths: Sequence[str],
+    ) -> tuple[_CompiledProposal, tuple[TransactionDiagnostic, ...]]:
+        acknowledgment_key = SECRET_SCAN_ACKNOWLEDGMENTS_PATH.casefold()
+        if any(path.casefold() == acknowledgment_key for path in compiled.final_files):
+            return (
+                compiled,
+                (
+                    _invalid_secret_acknowledgment_diagnostic(
+                        SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                        "The proposal cannot write or move the acknowledgment file directly.",
+                    ),
+                ),
+            )
+        if not requested_paths:
+            return compiled, ()
+
+        diagnostics: list[TransactionDiagnostic] = []
+        eligible: list[tuple[int, str, bytes]] = []
+        seen: set[str] = set()
+        for index, candidate in enumerate(requested_paths):
+            diagnostic_path = f"acknowledge_possible_secret[{index}]"
+            if not isinstance(candidate, str):
+                diagnostics.append(
+                    _invalid_secret_acknowledgment_diagnostic(
+                        diagnostic_path,
+                        "A requested acknowledgment path is not a string.",
+                    )
+                )
+                continue
+            key = candidate.casefold()
+            if key in seen:
+                diagnostics.append(
+                    _invalid_secret_acknowledgment_diagnostic(
+                        diagnostic_path,
+                        "Each requested acknowledgment path must be unique.",
+                    )
+                )
+                continue
+            seen.add(key)
+            content = compiled.final_files.get(candidate)
+            if content is None:
+                diagnostics.append(
+                    _invalid_secret_acknowledgment_diagnostic(
+                        diagnostic_path,
+                        "An acknowledgment path is not a written transaction postimage.",
+                    )
+                )
+                continue
+            try:
+                text = content.decode("utf-8")
+            except UnicodeDecodeError:
+                diagnostics.append(
+                    _invalid_secret_acknowledgment_diagnostic(
+                        diagnostic_path,
+                        "An acknowledgment path does not contain UTF-8 text.",
+                    )
+                )
+                continue
+            if not contains_possible_secret(text):
+                diagnostics.append(
+                    _invalid_secret_acknowledgment_diagnostic(
+                        diagnostic_path,
+                        "A written acknowledgment path has no possible-secret finding.",
+                    )
+                )
+                continue
+            eligible.append((index, candidate, content))
+
+        if diagnostics:
+            return compiled, tuple(diagnostics)
+        try:
+            acknowledgment_path = self._resolve_operation_path(SECRET_SCAN_ACKNOWLEDGMENTS_PATH)
+            current = self._read_operation_file(acknowledgment_path)
+        except (OSError, ValueError):
+            return (
+                compiled,
+                (
+                    _invalid_secret_acknowledgment_diagnostic(
+                        SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                        "The canonical secret-scan acknowledgment path is not a readable "
+                        "regular file.",
+                    ),
+                ),
+            )
+        if current is None:
+            existing: tuple[SecretScanAcknowledgment, ...] = ()
+        else:
+            try:
+                existing = load_secret_scan_acknowledgments(current.decode("utf-8")).acknowledgments
+            except (RecursionError, UnicodeError, TypeError, ValueError, yaml.YAMLError):
+                return (
+                    compiled,
+                    (
+                        _invalid_secret_acknowledgment_diagnostic(
+                            SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                            "The canonical secret-scan acknowledgment file is invalid.",
+                        ),
+                    ),
+                )
+
+        acknowledged_at = self._timestamp()
+        entries = {entry.path.casefold(): entry for entry in existing}
+        accepted_paths: list[str] = []
+        try:
+            for _index, path, content in eligible:
+                previous = entries.get(path.casefold())
+                entries[path.casefold()] = SecretScanAcknowledgment(
+                    path=path,
+                    content_hash=_content_hash(content),
+                    acknowledged_at=acknowledged_at,
+                    note=None if previous is None else previous.note,
+                )
+                accepted_paths.append(path)
+            record = SecretScanAcknowledgments(
+                acknowledgments=tuple(
+                    sorted(entries.values(), key=lambda entry: (entry.path.casefold(), entry.path))
+                )
+            )
+        except ValueError:
+            return (
+                compiled,
+                (
+                    _invalid_secret_acknowledgment_diagnostic(
+                        "acknowledge_possible_secret",
+                        "A requested acknowledgment path is invalid.",
+                    ),
+                ),
+            )
+
+        acknowledgment_content = dump_secret_scan_acknowledgments(record)
+        postimage_hash = _content_hash(acknowledgment_content)
+        operation: Literal["create", "update"]
+        if current is None:
+            audit_operation: AuditOperation = AuditCreateOperation(
+                op="create",
+                target=SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                postimage_hash=postimage_hash,
+            )
+            operation = "create"
+            preimage_hash = None
+        else:
+            preimage_hash = _content_hash(current)
+            audit_operation = AuditUpdateOperation(
+                op="update",
+                target=SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                preimage_hash=preimage_hash,
+                postimage_hash=postimage_hash,
+            )
+            operation = "update"
+
+        final_files = dict(compiled.final_files)
+        final_files[SECRET_SCAN_ACKNOWLEDGMENTS_PATH] = acknowledgment_content
+        self._remember_prepared_target(SECRET_SCAN_ACKNOWLEDGMENTS_PATH)
+        return (
+            replace(
+                compiled,
+                writes=(
+                    *compiled.writes,
+                    StagedWrite(
+                        SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                        acknowledgment_content,
+                    ),
+                ),
+                effects=(
+                    *compiled.effects,
+                    OperationEffect(
+                        order=len(compiled.effects),
+                        op=operation,
+                        target=SECRET_SCAN_ACKNOWLEDGMENTS_PATH,
+                        preimage_hash=preimage_hash,
+                        postimage_hash=postimage_hash,
+                        hand_edits=False,
+                    ),
+                ),
+                audit_operations=(*compiled.audit_operations, audit_operation),
+                final_files=final_files,
+                acknowledged_paths=tuple(
+                    sorted(accepted_paths, key=lambda path: (path.casefold(), path))
+                ),
+            ),
+            (),
         )
 
     def _prepare_document(self, target: str, payload: DocumentPayload) -> StagedWrite:
@@ -1726,24 +1957,28 @@ class TransactionEngine:
         proposal: TransactionProposal,
         *,
         operations: Sequence[AuditOperation],
+        acknowledged_paths: Sequence[str] = (),
         action: Literal["apply", "recovery"],
         result: Literal["committed", "rolled_back"],
         prev_hash: str,
     ) -> AuditEvent:
-        content = AuditEventContent(
-            schema_version=1,
-            id=f"AUD-{proposal.id.removeprefix('TXP-')}",
-            proposal_id=proposal.id,
-            context_id=proposal.context_id,
-            timestamp=self._timestamp(),
-            actor=proposal.actor,
-            action=action,
-            result=result,
-            base_revision=prev_hash,
-            source_refs=proposal.source_refs,
-            operations=list(operations),
-            prev_hash=prev_hash,
-        )
+        payload: dict[str, object] = {
+            "schema_version": 1,
+            "id": f"AUD-{proposal.id.removeprefix('TXP-')}",
+            "proposal_id": proposal.id,
+            "context_id": proposal.context_id,
+            "timestamp": self._timestamp(),
+            "actor": proposal.actor,
+            "action": action,
+            "result": result,
+            "base_revision": prev_hash,
+            "source_refs": proposal.source_refs,
+            "operations": list(operations),
+            "prev_hash": prev_hash,
+        }
+        if acknowledged_paths:
+            payload["acknowledged_paths"] = list(acknowledged_paths)
+        content = AuditEventContent.model_validate(payload)
         return AuditEvent.seal(content)
 
     def _intent_event(
@@ -1902,8 +2137,16 @@ def validate_proposal(
     return TransactionEngine(context_root).validate_proposal(proposal)
 
 
-def dry_run(context_root: Path, proposal: TransactionProposal) -> DryRunResult:
-    return TransactionEngine(context_root).dry_run(proposal)
+def dry_run(
+    context_root: Path,
+    proposal: TransactionProposal,
+    *,
+    acknowledge_possible_secret: Sequence[str] = (),
+) -> DryRunResult:
+    return TransactionEngine(context_root).dry_run(
+        proposal,
+        acknowledge_possible_secret=acknowledge_possible_secret,
+    )
 
 
 def apply(
@@ -1912,11 +2155,13 @@ def apply(
     *,
     approved: bool = False,
     session_id: str | None = None,
+    acknowledge_possible_secret: Sequence[str] = (),
 ) -> ApplyResult:
     return TransactionEngine(context_root).apply(
         proposal,
         approved=approved,
         session_id=session_id,
+        acknowledge_possible_secret=acknowledge_possible_secret,
     )
 
 
@@ -2008,14 +2253,11 @@ def _workspace_diagnostics(report: ValidationReport) -> tuple[TransactionDiagnos
     }
     diagnostics: list[TransactionDiagnostic] = []
     for issue in report.issues:
-        message = issue.message
-        if issue.code == "CTX-POSSIBLE-SECRET":
-            message = "A workspace location contains a secret-looking value."
         diagnostics.append(
             _diagnostic(
                 issue.code,
                 severity_map[issue.severity],
-                message,
+                issue.message,
                 path=issue.path,
                 repair_action=issue.repair_action,
             )
@@ -2023,9 +2265,46 @@ def _workspace_diagnostics(report: ValidationReport) -> tuple[TransactionDiagnos
     return tuple(diagnostics)
 
 
-def _secret_diagnostics(proposal: TransactionProposal) -> tuple[TransactionDiagnostic, ...]:
+def _invalid_secret_acknowledgment_diagnostic(
+    path: str,
+    message: str,
+) -> TransactionDiagnostic:
+    return _diagnostic(
+        "CTX-SECRET-ACKNOWLEDGMENT-INVALID",
+        DiagnosticSeverity.ERROR,
+        message,
+        path=path,
+        repair_action=(
+            "Use a written context-relative path whose staged content reports "
+            "CTX-POSSIBLE-SECRET, or repair the canonical acknowledgment file to match "
+            "its schema."
+        ),
+    )
+
+
+def _secret_diagnostics(
+    proposal: TransactionProposal,
+    *,
+    acknowledged_paths: Sequence[str] = (),
+) -> tuple[TransactionDiagnostic, ...]:
     serialized = proposal.model_dump(mode="json")
-    locations = tuple(_secret_locations(serialized))
+    acknowledged = set(acknowledged_paths)
+    ignored_prefixes = tuple(
+        f"$.operations[{index}].payload"
+        for index, operation in enumerate(proposal.operations)
+        if isinstance(operation, (CreateOperation, UpdateOperation))
+        and operation.target in acknowledged
+    )
+    locations = tuple(
+        location
+        for location in _secret_locations(serialized)
+        if not any(
+            location == prefix
+            or location.startswith(f"{prefix}.")
+            or location.startswith(f"{prefix}[")
+            for prefix in ignored_prefixes
+        )
+    )
     return tuple(
         _diagnostic(
             "TXN-POSSIBLE-SECRET",

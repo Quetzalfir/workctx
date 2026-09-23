@@ -80,6 +80,25 @@ shows backend presence for indexed names. If an OS-store write succeeds but the 
 update fails, `set` reports failure and repeating the same command repairs the index without
 printing or persisting the value elsewhere.
 
+## Possible-secret acknowledgments
+
+`CTX-POSSIBLE-SECRET` reports every finding by 1-based line number and pattern kind without
+including matched value bytes. First redact the value or replace it with a configured secret
+reference name. Only when the operator explicitly confirms that the reported text is not a live
+credential may an approved transaction be retried with the repeatable option below:
+
+```text
+workctx transaction apply proposal.json --yes \
+  --acknowledge-possible-secret 02_knowledge/example.md
+```
+
+The transaction stages `99_meta/secret-scan-acknowledgments.yaml` atomically with the flagged
+postimage and records the acknowledged paths in the audit event. Each entry binds the
+context-relative path to the exact SHA-256 content hash and a UTC acknowledgment timestamp; an
+optional note is limited to 500 characters. The file is never created without an entry. Validation
+downgrades matching findings to advisory severity, while a missing entry or any byte change makes
+the acknowledgment stale and restores the error. Never acknowledge merely to clear validation.
+
 ## Safety boundary
 
 Do not put plaintext credentials in a context, repository, local-only workspace file, command

@@ -50,7 +50,12 @@ EXPECTED_PROPERTIES = {
     },
     "proposal_validate": {"schema_version", "proposal", "approved"},
     "transaction_dry_run": {"schema_version", "proposal", "approved"},
-    "transaction_apply": {"schema_version", "proposal", "approved"},
+    "transaction_apply": {
+        "schema_version",
+        "proposal",
+        "approved",
+        "acknowledge_possible_secret",
+    },
     "index_rebuild": {"schema_version", "approved"},
     "draft_save": {
         "schema_version",
@@ -204,3 +209,12 @@ def test_runtime_contract_validator_requires_literal_true_approval() -> None:
         validate_tool_arguments(contract, {"schema_version": 1, "approved": False})
 
     assert captured.value.path == "$.approved"
+
+
+def test_transaction_apply_acknowledgment_argument_is_optional_and_repeatable() -> None:
+    contract = next(item for item in TOOL_CONTRACTS if item.name == "transaction_apply")
+    schema = contract.input_schema
+
+    assert "acknowledge_possible_secret" not in schema["required"]
+    assert schema["properties"]["acknowledge_possible_secret"]["type"] == "array"
+    assert schema["properties"]["acknowledge_possible_secret"]["uniqueItems"] is True

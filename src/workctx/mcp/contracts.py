@@ -325,7 +325,25 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
     _contract(
         "transaction_apply",
         "Atomically apply one reviewed transaction proposal in the bound context.",
-        {"proposal": {"type": "object", "additionalProperties": True}},
+        {
+            "proposal": {"type": "object", "additionalProperties": True},
+            "acknowledge_possible_secret": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1000,
+                "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "pattern": r"^[^\r\n\x00-\x1f\x7f]+$",
+                },
+                "uniqueItems": True,
+                "description": (
+                    "Written staged paths whose exact possible-secret findings the operator "
+                    "explicitly confirms are not live credentials."
+                ),
+            },
+        },
         required=("proposal",),
         mutation=True,
     ),
