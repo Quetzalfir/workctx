@@ -359,7 +359,7 @@ tuple in the resources package) so any unedited template generation heals
 to generated ownership. Lead worked around it by deleting the pristine
 old-template bridge (backed up) so refresh regenerates it.
 
-## C-222 — Locatable secret findings and operator-acknowledged overrides
+## C-222 — Locatable secret findings and operator-acknowledged overrides — DELIVERED (WP-830, 2026-09-23)
 
 Live incident (2026-09-23, Loftware): a canonical investigation report
 tripped CTX-POSSIBLE-SECRET at transaction apply; the rollback was
