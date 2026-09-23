@@ -358,3 +358,28 @@ the full set of historically shipped template bridge hashes (append-only
 tuple in the resources package) so any unedited template generation heals
 to generated ownership. Lead worked around it by deleting the pristine
 old-template bridge (backed up) so refresh regenerates it.
+
+## C-222 — Locatable secret findings and operator-acknowledged overrides
+
+Live incident (2026-09-23, Loftware): a canonical investigation report
+tripped CTX-POSSIBLE-SECRET at transaction apply; the rollback was
+correct, but the agent could not learn WHICH text fired (the detector is
+a boolean) and no legitimate path exists for an operator-confirmed false
+positive, so the context's memory update stayed blocked.
+
+Two pieces:
+1. Locatable findings: CTX-POSSIBLE-SECRET diagnostics name the line
+   number and the pattern kind — private-key marker, bearer-token
+   marker, or assignment to key '<key name>' — never any matched value
+   bytes. Enough to redact; zero leak surface.
+2. Durable operator acknowledgment: `workctx transaction apply --yes
+   --acknowledge-possible-secret <path>` (repeatable) stages an entry in
+   canonical `99_meta/secret-scan-acknowledgments.yaml` — path, exact
+   content hash, timestamp, optional note — inside the same audited
+   transaction. Validation downgrades a finding to advisory only while
+   the file's content hash matches its acknowledgment; any change
+   revives the error. The ledger event records the acknowledged paths.
+   MCP transaction_apply gains the same optional argument. Redaction
+   remains the first-line remedy; acknowledgment requires the operator's
+   explicit confirmation that the flagged text is not a live credential,
+   and bridges/skills/guide say exactly that.
