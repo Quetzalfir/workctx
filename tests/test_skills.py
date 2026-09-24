@@ -531,6 +531,26 @@ def test_packaged_skills_pass_portability_lint() -> None:
     assert not issues
 
 
+def test_packaged_draft_replies_requires_operator_voice_and_conversation_language() -> None:
+    content = (PACKAGED_SKILLS_ROOT / "draft-replies" / "SKILL.md").read_text(encoding="utf-8")
+
+    for marker in (
+        "Write every draft in the operator's first person, as if the operator typed it.",
+        "natural, human register appropriate to the relationship",
+        "assistant phrasing",
+        "AI disclaimers",
+        "sign-offs the operator would not write",
+        "meta commentary inside the message body",
+        "Detect the target conversation's established language from recent messages",
+        "follow the current exchange and the recipient's latest relevant message",
+        "Never infer language from a person's name or company.",
+        "an explicit operator instruction for that message > the operator's configured "
+        "default in context or user `instructions.md` > English",
+    ):
+        assert marker in content, marker
+    assert "recipient's language" not in content
+
+
 def test_packaged_skills_surface_exact_commands_at_their_procedure_steps() -> None:
     skill_paths = sorted(PACKAGED_SKILLS_ROOT.glob("*/SKILL.md"))
     assert {path.parent.name for path in skill_paths} == EXPECTED_SKILL_IDS

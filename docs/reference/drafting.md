@@ -5,6 +5,12 @@ Drafting is a deterministic local workflow around canonical Markdown documents i
 `delivery_state: unsent`. Saving a draft is never evidence that a message was sent or a
 document was published.
 
+Every outbound body, whether only drafted or later sent with `workctx outbox send`, must
+sound natural in the operator's first person and use the target conversation's language
+detected from recent messages, never from a person's name or company. When no conversation
+language is detectable, use an explicit instruction for that message, then the configured
+context or user default, then English.
+
 ## Public API
 
 `workctx.drafting` exports:
