@@ -384,7 +384,7 @@ Two pieces:
    explicit confirmation that the flagged text is not a live credential,
    and bridges/skills/guide say exactly that.
 
-## C-223 — Outbound voice and conversation language
+## C-223 — Outbound voice and conversation language — DELIVERED (WP-840, 2026-09-24)
 
 Operator instruction (2026-09-24): agent-drafted messages must speak in
 the operator's first person, sound natural and human (no assistant
