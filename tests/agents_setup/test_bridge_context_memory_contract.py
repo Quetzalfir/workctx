@@ -55,6 +55,14 @@ SECRET_ACKNOWLEDGMENT_MARKERS = (
     "`--acknowledge-possible-secret`",
     "never acknowledge merely to clear an error",
 )
+OUTBOUND_VOICE_SENTENCE = (
+    "For any outbound message drafted or sent through Work Context, including an outbox "
+    "send, write naturally in the operator's first person; detect the target conversation's "
+    "established language from recent messages in its channel, chat, or thread, never infer "
+    "language from a person's name or company, and when no conversation language is "
+    "detectable use this fallback order: an explicit operator instruction for that message > "
+    "the operator's configured default in context or user `instructions.md` > English."
+)
 
 
 @pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
@@ -77,6 +85,15 @@ def test_prompt_surface_requires_safe_explicit_secret_acknowledgment(
 
     for marker in SECRET_ACKNOWLEDGMENT_MARKERS:
         assert marker in content, (relative_path, marker)
+
+
+@pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
+def test_prompt_surface_requires_operator_voice_and_conversation_language(
+    relative_path: str,
+) -> None:
+    content = (ROOT / relative_path).read_text(encoding="utf-8")
+
+    assert content.count(OUTBOUND_VOICE_SENTENCE) == 1, relative_path
 
 
 def test_bootstrap_session_orients_before_asking_and_records_new_facts() -> None:
