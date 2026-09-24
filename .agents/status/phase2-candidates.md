@@ -383,3 +383,23 @@ Two pieces:
    remains the first-line remedy; acknowledgment requires the operator's
    explicit confirmation that the flagged text is not a live credential,
    and bridges/skills/guide say exactly that.
+
+## C-223 — Outbound voice and conversation language
+
+Operator instruction (2026-09-24): agent-drafted messages must speak in
+the operator's first person, sound natural and human (no assistant
+register, no AI sign-offs or meta commentary), and be written in the
+language of the target channel, chat, or thread — detected from that
+conversation's recent messages, never inferred from a name or company.
+Fallback order when no conversation language is detectable: an explicit
+operator instruction for that message > the operator's configured default
+(context or user instructions.md) > English. Packaged into draft-replies,
+the bridges, and the context template so every context gets it.
+
+## C-224 — Topics: a third organizational level inside a project (DECISION PENDING)
+
+Operator question (2026-09-24): company > project > topic. Topics hold
+topic-specific knowledge, tasks, evidence, and drafts; common information
+sits above them without heavy cross-referencing. Options and lead
+recommendation recorded in the conversation; awaiting the operator's
+choice before any build.
