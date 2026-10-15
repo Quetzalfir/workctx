@@ -404,7 +404,7 @@ sits above them without heavy cross-referencing. Options and lead
 recommendation recorded in the conversation; awaiting the operator's
 choice before any build.
 
-## C-225 — Working-output areas, baseline-relative apply gating, concise human voice
+## C-225 — Working-output areas, baseline-relative apply gating, concise human voice — DELIVERED (WP-850, 2026-10-14)
 
 Field audit (2026-10-14) of all four operator contexts: canonical
 knowledge is healthy everywhere, but three contexts fail validation
