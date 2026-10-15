@@ -151,6 +151,19 @@
         }
       }
     },
+    "topics": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Computed topic-activity settings; heat is never authored.",
+      "properties": {
+        "heat_half_life_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90,
+          "default": 7
+        }
+      }
+    },
     "working_dirs": {
       "type": "array",
       "description": "Top-level non-canonical working-output directories.",

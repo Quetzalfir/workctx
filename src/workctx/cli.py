@@ -27,8 +27,9 @@ if TYPE_CHECKING:
     )
     from workctx.adapters.filesystem.registry import ContextInventoryEntry
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
+    from workctx.checkpoints import CheckpointSaveResult
     from workctx.connectors import SyncResult
-    from workctx.domain import Topic
+    from workctx.domain import Topic, TopicHeat
     from workctx.domain.transactions import AuditEvent, TransactionProposal
     from workctx.drafting import SendPreview, SendResult
     from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
@@ -105,6 +106,8 @@ task_app = typer.Typer(help="Query projected canonical tasks.")
 app.add_typer(task_app, name="task")
 topic_app = typer.Typer(help="Manage context-local durable-subject topics.")
 app.add_typer(topic_app, name="topic")
+checkpoint_app = typer.Typer(help="Save and check canonical session checkpoints.")
+app.add_typer(checkpoint_app, name="checkpoint")
 suggestion_app = typer.Typer(help="Inspect and review canonical suggestion records.")
 app.add_typer(suggestion_app, name="suggestion")
 usage_app = typer.Typer(help="Inspect opt-in local usage signals and create advisory records.")
@@ -1939,23 +1942,74 @@ def topic_list(
 ) -> None:
     """List active topics, or every lifecycle state with --all."""
 
-    from workctx.topics import list_topics
+    from workctx.topics import compute_topic_heat, list_topics
 
     begin_command("topic.list", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
     topics = list_topics(root, include_all=include_all)
+    heat_by_slug = {item.slug: item for item in compute_topic_heat(root)}
     result: dict[str, JsonValue] = {
         "count": len(topics),
-        "topics": [_topic_payload(topic) for topic in topics],
+        "topics": [
+            _topic_payload(
+                topic,
+                heat=heat_by_slug.get(topic.slug),
+                include_heat=True,
+            )
+            for topic in topics
+        ],
     }
     context_id = load_context_config(root).id
     if json_output:
         emit_success(result=result, context_id=context_id)
     else:
         for topic in topics:
-            output_console.print(Text(f"{topic.slug} [{topic.status.value}]: {topic.name}"))
+            heat = heat_by_slug.get(topic.slug)
+            heat_text = "n/a" if heat is None else f"{heat.heat.value} {heat.score:.6f}"
+            output_console.print(
+                Text(f"{topic.slug} [{topic.status.value}; {heat_text}]: {topic.name}")
+            )
         if not topics:
             output_console.print(Text("No topics are registered."))
+
+
+@topic_app.command("heat")
+def topic_heat(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List active topics by computed heat, score, and last activity."""
+
+    from workctx.topics import compute_topic_heat
+
+    begin_command("topic.heat", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    topics = compute_topic_heat(root)
+    result: dict[str, JsonValue] = {
+        "count": len(topics),
+        "topics": [cast("dict[str, JsonValue]", topic.model_dump(mode="json")) for topic in topics],
+    }
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+        return
+    for topic in topics:
+        last_activity = (
+            "never" if topic.last_activity is None else topic.last_activity.date().isoformat()
+        )
+        output_console.print(
+            Text(
+                f"{topic.slug} [{topic.heat.value}] score={topic.score:.6f} "
+                f"last={last_activity}: {topic.name}"
+            )
+        )
+    if not topics:
+        output_console.print(Text("No active topics are registered."))
 
 
 @topic_app.command("add")
@@ -2108,6 +2162,143 @@ def topic_review(
             )
         if not candidates:
             output_console.print(Text("No topic merge candidates found."))
+
+
+@checkpoint_app.command("save")
+def checkpoint_save(
+    label: Annotated[str, typer.Argument(help="Short session checkpoint label.")],
+    references: Annotated[
+        list[str] | None,
+        typer.Option("--ref", help="Canonical workctx:// item URI; repeatable."),
+    ] = None,
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Optional active topic slug or alias."),
+    ] = None,
+    from_pack: Annotated[
+        Path | None,
+        typer.Option(
+            "--from-pack",
+            help="JSON output file from the last workctx context-pack command.",
+        ),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve the audited local checkpoint save."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Preview or apply an audited canonical checkpoint save."""
+
+    from workctx.checkpoints import save_checkpoint
+
+    begin_command("checkpoint.save", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    saved = save_checkpoint(
+        root,
+        label,
+        references=() if references is None else references,
+        topic=topic,
+        from_pack=from_pack,
+        approved=yes,
+    )
+    _complete_checkpoint_save(
+        saved,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
+
+
+@checkpoint_app.command("check")
+def checkpoint_check(
+    checkpoint_id: Annotated[str, typer.Argument(help="Canonical CHK-... checkpoint ID.")],
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Report checkpoint items as green, yellow, or red plus new topic items."""
+
+    from workctx.checkpoints import check_checkpoint
+
+    begin_command("checkpoint.check", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    checked = check_checkpoint(root, checkpoint_id)
+    result = cast("dict[str, JsonValue]", checked.model_dump(mode="json"))
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+        return
+    output_console.print(Text(f"{checked.checkpoint_id}: {checked.label}", style="bold"))
+    for item in checked.items:
+        details = ""
+        if item.changes:
+            current_revision = (
+                "none" if item.current_revision is None else item.current_revision.isoformat()
+            )
+            details = f"; changes={','.join(item.changes)}; current_revision={current_revision}"
+        output_console.print(
+            Text(f"{item.status.value}: {item.uri} ({item.reason.value}{details})")
+        )
+        for successor in item.successors:
+            output_console.print(Text(f"  successor: {successor.uri} @ {successor.source_path}"))
+    for new_item in checked.new_items:
+        output_console.print(Text(f"new: {new_item.uri} @ {new_item.source_path}"))
+    output_console.print(
+        Text(
+            f"green={checked.counts.green} yellow={checked.counts.yellow} "
+            f"red={checked.counts.red} new={checked.counts.new}"
+        )
+    )
+
+
+@checkpoint_app.command("list")
+def checkpoint_list(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List canonical checkpoints in newest-first order."""
+
+    from workctx.checkpoints import list_checkpoints
+
+    begin_command("checkpoint.list", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    checkpoints = list_checkpoints(root)
+    result: dict[str, JsonValue] = {
+        "count": len(checkpoints),
+        "checkpoints": [
+            cast("dict[str, JsonValue]", checkpoint.model_dump(mode="json"))
+            for checkpoint in checkpoints
+        ],
+    }
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+        return
+    for checkpoint in checkpoints:
+        topic_text = "" if checkpoint.topic is None else f" topic={checkpoint.topic}"
+        output_console.print(
+            Text(
+                f"{checkpoint.id} {checkpoint.created_at.isoformat()} "
+                f"{checkpoint.label}{topic_text} items={len(checkpoint.items)}"
+            )
+        )
+    if not checkpoints:
+        output_console.print(Text("No checkpoints are saved."))
 
 
 @app.command("brief")
@@ -3293,6 +3484,15 @@ def _projection_reader(context_path: Path | None) -> SQLiteProjection:
 
 def _render_brief_payload(payload: BriefPayload) -> None:
     output_console.print(Text(f"Daily brief — {payload.context_id}", style="bold"))
+    output_console.print(Text("Hot topics", style="bold"))
+    if payload.hot_topics:
+        for topic in payload.hot_topics:
+            output_console.print(
+                Text(f"  {topic.slug} [{topic.heat.value}] score={topic.score:.6f}")
+            )
+    else:
+        output_console.print(Text("  None"))
+
     output_console.print(Text("Today focus", style="bold"))
     if payload.today_focus:
         for task in payload.today_focus:
@@ -3679,8 +3879,27 @@ def _resolve_topic_filter(root: Path, value: str | None, *, topic_only: bool) ->
     return resolve_topic(root, value).slug
 
 
-def _topic_payload(topic: Topic) -> dict[str, JsonValue]:
-    return cast("dict[str, JsonValue]", topic.model_dump(mode="json"))
+def _topic_payload(
+    topic: Topic,
+    *,
+    heat: TopicHeat | None = None,
+    include_heat: bool = False,
+) -> dict[str, JsonValue]:
+    payload = cast("dict[str, JsonValue]", topic.model_dump(mode="json"))
+    if not include_heat:
+        return payload
+    payload.update(
+        {
+            "heat": None if heat is None else heat.heat.value,
+            "score": None if heat is None else heat.score,
+            "last_activity": (
+                None
+                if heat is None or heat.last_activity is None
+                else heat.last_activity.isoformat()
+            ),
+        }
+    )
+    return payload
 
 
 def _topic_review_payload(candidate: TopicReviewCandidate) -> dict[str, JsonValue]:
@@ -3744,6 +3963,40 @@ def _complete_topic_mutation(
     elif mutation.preview is not None:
         _render_transaction_preview(mutation.preview)
         output_console.print(Text("Re-run with --yes to approve this local mutation."))
+
+
+def _complete_checkpoint_save(
+    saved: CheckpointSaveResult,
+    *,
+    context_id: str,
+    json_output: bool,
+) -> None:
+    result: dict[str, JsonValue] = {
+        "applied": saved.applied,
+        "checkpoint": cast("dict[str, JsonValue]", saved.checkpoint.model_dump(mode="json")),
+        "proposal_id": saved.proposal_id,
+    }
+    warnings: list[CliDiagnostic] = []
+    if saved.preview is not None:
+        result["preview"] = cast("dict[str, JsonValue]", saved.preview.model_dump(mode="json"))
+        warnings, _errors = _transaction_cli_diagnostics(saved.preview.diagnostics)
+    if saved.receipt is not None:
+        result["receipt"] = cast("dict[str, JsonValue]", saved.receipt.model_dump(mode="json"))
+        receipt_warnings, _errors = _transaction_cli_diagnostics(saved.receipt.diagnostics)
+        warnings.extend(receipt_warnings)
+    if json_output:
+        emit_success(result=result, context_id=context_id, warnings=warnings)
+        return
+    if saved.receipt is not None:
+        output_console.print(
+            Text(
+                f"Saved checkpoint {saved.checkpoint.id}; "
+                f"ledger event {saved.receipt.ledger_event_id}."
+            )
+        )
+    elif saved.preview is not None:
+        _render_transaction_preview(saved.preview)
+        output_console.print(Text("Re-run with --yes to approve this checkpoint save."))
 
 
 def _outbox_preview_payload(preview: SendPreview) -> dict[str, JsonValue]:

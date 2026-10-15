@@ -16,6 +16,15 @@ from workctx.topics.guard import (
     normalize_subject,
     normalized_edit_distance,
 )
+from workctx.topics.heat import (
+    COOL_SCORE_FLOOR,
+    DEFAULT_HEAT_HALF_LIFE_DAYS,
+    HOT_SCORE_FLOOR,
+    WARM_SCORE_FLOOR,
+    assign_heat_buckets,
+    compute_topic_heat,
+    decayed_activity_score,
+)
 from workctx.topics.registry import load_registry, resolve_active_topic
 from workctx.topics.service import (
     TopicMutationResult,
@@ -30,7 +39,11 @@ from workctx.topics.service import (
 )
 
 __all__ = [
+    "COOL_SCORE_FLOOR",
+    "DEFAULT_HEAT_HALF_LIFE_DAYS",
     "EDIT_DISTANCE_THRESHOLD",
+    "HOT_SCORE_FLOOR",
+    "WARM_SCORE_FLOOR",
     "DuplicateRule",
     "NormalizedSubject",
     "TopicDuplicateError",
@@ -44,6 +57,9 @@ __all__ = [
     "TopicService",
     "add_topic",
     "add_topic_alias",
+    "assign_heat_buckets",
+    "compute_topic_heat",
+    "decayed_activity_score",
     "find_duplicate_topics",
     "list_topics",
     "load_registry",

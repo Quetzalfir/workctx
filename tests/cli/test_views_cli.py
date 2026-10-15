@@ -110,6 +110,7 @@ def test_brief_emits_structured_payload_and_compact_human_output(
         "context_id",
         "generated_at",
         "source_revision",
+        "hot_topics",
         "today_focus",
         "blockers",
         "waiting_on",
@@ -120,6 +121,7 @@ def test_brief_emits_structured_payload_and_compact_human_output(
     assert brief["context_id"] == "views-cli"
     assert brief["generated_at"] == "2026-08-02T18:00:00Z"
     assert brief["source_revision"] == ZERO_REVISION
+    assert brief["hot_topics"] == []
     assert [task["id"] for task in brief["today_focus"]] == ["TASK-2026-040"]
     assert [task["id"] for task in brief["blockers"]] == ["TASK-2026-040"]
     assert brief["waiting_on"][0]["display_name"] == "Jordan"
@@ -131,6 +133,7 @@ def test_brief_emits_structured_payload_and_compact_human_output(
     assert human.exit_code == 0, human.output
     assert human.stderr == ""
     assert "Daily brief — views-cli" in human.stdout
+    assert "Hot topics" in human.stdout
     assert "Today focus" in human.stdout
     assert "TASK-2026-040" in human.stdout
     assert "Blockers" in human.stdout

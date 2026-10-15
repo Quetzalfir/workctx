@@ -17,6 +17,10 @@ def test_mcp_topic_list_and_filtered_reads_match_cli_semantics(tmp_path: Path) -
         "alpha",
         "beta",
     ]
+    assert all(
+        {"heat", "score", "last_activity"} <= set(topic)
+        for topic in listed.envelope.result["topics"]
+    )
 
     searched = service.invoke(
         "search",

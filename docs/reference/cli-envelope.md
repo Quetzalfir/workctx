@@ -22,7 +22,7 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `inbox list` | `inbox.list` | `count`, `artifacts` |
 | `artifact show` | `artifact.show` | `artifact` |
 | `artifact verify` | `artifact.verify` | `verification` |
-| `brief` | `brief` | `schema_version`, `context_id`, `generated_at`, `source_revision`, `today_focus`, `blockers`, `waiting_on`, `stale_claims`, `recent_ledger_activity` |
+| `brief` | `brief` | `schema_version`, `context_id`, `generated_at`, `source_revision`, `hot_topics`, `today_focus`, `blockers`, `waiting_on`, `stale_claims`, `recent_ledger_activity` |
 | `view rebuild` | `view.rebuild` | `schema_version`, `context_id`, `generated_at`, `source_revision`, `views` |
 | `index rebuild` | `index.rebuild` | `root`, `trigger`, `counts`, `skipped` |
 | `ref show` | `ref.show` | `resolution` |
@@ -37,11 +37,15 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `search` | `search` | `query`, `count`, `hits` |
 | `task list` | `task.list` | `count`, `tasks` |
 | `task show` | `task.show` | `task` |
-| `topic list` | `topic.list` | `count`, `topics` |
+| `topic list` | `topic.list` | `count`, `topics` including computed `heat`, `score`, and `last_activity` |
+| `topic heat` | `topic.heat` | `count`, `topics` sorted by heat with `score` and `last_activity` |
 | `topic add` | `topic.add` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
 | `topic alias` | `topic.alias` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
 | `topic merge` | `topic.merge` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
 | `topic review` | `topic.review` | `count`, `candidates` |
+| `checkpoint save` | `checkpoint.save` | `applied`, `checkpoint`, `proposal_id`, then optional `preview` or `receipt` |
+| `checkpoint check` | `checkpoint.check` | `checkpoint_id`, `label`, `checkpoint_created_at`, `checked_at`, `topic`, `items`, `new_items`, `counts` |
+| `checkpoint list` | `checkpoint.list` | `count`, `checkpoints` |
 | `suggestion list` | `suggestion.list` | `count`, `suggestions` |
 | `suggestion show` | `suggestion.show` | `suggestion` |
 | `suggestion adopt` | `suggestion.adopt` | `operation`, `suggestion`, `receipt` |
@@ -85,6 +89,9 @@ fatal; unchanged errors on untouched paths become one non-fatal
 every affected document in one transaction. `search`, `task list`, `context-pack`, and `brief`
 accept `--topic`; aliases resolve to their active canonical slug, and untagged common-layer
 documents remain included unless `--topic-only` is also present.
+`checkpoint save` likewise previews by default and applies only with `--yes`; the canonical
+checkpoint contains content-free URI/path/revision/hash metadata and is committed through the
+audited transaction engine. `checkpoint check` and `checkpoint list` are read-only.
 `context refresh-meta` idempotently installs the packaged reference schemas under
 `99_meta/schemas/`; each schema reports `updated` or `unchanged`, and no other context file is
 modified. `agent install` returns the complete plan without changing files unless `--yes` is

@@ -45,6 +45,7 @@ READ_TOOLS = (
     "context_pack",
     "task_list",
     "topic_list",
+    "checkpoint_check",
     "task_show",
     "inbox_list",
     "audit_summary",

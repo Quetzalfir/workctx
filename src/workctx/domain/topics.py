@@ -31,6 +31,27 @@ class TopicStatus(StrEnum):
     ARCHIVED = "archived"
 
 
+class TopicHeatBucket(StrEnum):
+    """Computed topic-activity band, ordered from most to least active."""
+
+    HOT = "hot"
+    WARM = "warm"
+    COOL = "cool"
+    COLD = "cold"
+
+
+class TopicHeat(BaseModel):
+    """One computed topic heat result; this record is never authored canonically."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    slug: TopicSlug
+    name: str = Field(min_length=1, max_length=200)
+    score: float = Field(ge=0)
+    heat: TopicHeatBucket
+    last_activity: AwareDatetime | None
+
+
 class TopicDistinction(BaseModel):
     """Operator-reviewed reason that two guard matches are distinct subjects."""
 
@@ -250,6 +271,8 @@ __all__ = [
     "TOPIC_SLUG_PATTERN",
     "Topic",
     "TopicDistinction",
+    "TopicHeat",
+    "TopicHeatBucket",
     "TopicRegistry",
     "TopicResolution",
     "TopicSlug",

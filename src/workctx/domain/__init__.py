@@ -6,6 +6,12 @@ File-level path ownership during a wave is assigned per work order; see
 """
 
 from workctx.domain.artifacts import ArtifactManifest, ArtifactSourceType, ArtifactStatus
+from workctx.domain.checkpoints import (
+    CHECKPOINT_ID_PATTERN,
+    CHECKPOINTS_DIRECTORY,
+    Checkpoint,
+    CheckpointItem,
+)
 from workctx.domain.claims import Claim, ClaimStatus
 from workctx.domain.entities import EntityFrontmatter
 from workctx.domain.ids import (
@@ -54,6 +60,8 @@ from workctx.domain.topics import (
     TOPICS_REGISTRY_PATH,
     Topic,
     TopicDistinction,
+    TopicHeat,
+    TopicHeatBucket,
     TopicRegistry,
     TopicResolution,
     TopicSlug,
@@ -64,6 +72,8 @@ from workctx.domain.topics import (
 from workctx.domain.vocabulary import EntityType
 
 __all__ = [
+    "CHECKPOINTS_DIRECTORY",
+    "CHECKPOINT_ID_PATTERN",
     "SOURCE_LOCATOR_ADAPTER",
     "TOPICS_REGISTRY_PATH",
     "TOPIC_SLUG_PATTERN",
@@ -72,6 +82,8 @@ __all__ = [
     "ArtifactReference",
     "ArtifactSourceType",
     "ArtifactStatus",
+    "Checkpoint",
+    "CheckpointItem",
     "Claim",
     "ClaimId",
     "ClaimStatus",
@@ -103,6 +115,8 @@ __all__ = [
     "TaskType",
     "Topic",
     "TopicDistinction",
+    "TopicHeat",
+    "TopicHeatBucket",
     "TopicRegistry",
     "TopicResolution",
     "TopicSlug",
