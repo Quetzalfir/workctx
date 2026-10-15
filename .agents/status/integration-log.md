@@ -69,3 +69,4 @@
 | 2026-10-14 | WP-850-context-hygiene | capture | merge | worker suite 1801 passed (sandbox shim); lead gate: ruff+format+mypy 0, pytest 1805 passed | accepted+integrated | C-225; unblocks Incode/Loftware/MQ425 canonical applies |
 | 2026-10-15 | RELEASE-0.3.0-alpha | tag a9bec43 | gh release | local gate 1805; first matrix failed on 4 POSIX runners (console-width-dependent test, test-only) -> width pinned in 978d5d2 | published | product artifacts unaffected; matrix GREEN 6+build on dispatch 38698874882 (978d5d2) |
 | 2026-10-15 | WP-860-topics-core | capture | merge | worker suite 1878 (sandbox shim); lead gate after master merge: ruff+format+mypy 0, pytest 1882 passed | accepted+integrated | ADR 0015 slice 1: registry, guard, facets, filters, merge/review |
+| 2026-10-15 | WP-870-heat-checkpoints | capture | merge | worker suite 1891 (sandbox shim); lead gate after master merge: ruff+format+mypy 0, pytest 1895 passed | accepted+integrated | ADR 0015 slice 2 |
