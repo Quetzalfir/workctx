@@ -403,3 +403,20 @@ topic-specific knowledge, tasks, evidence, and drafts; common information
 sits above them without heavy cross-referencing. Options and lead
 recommendation recorded in the conversation; awaiting the operator's
 choice before any build.
+
+## C-225 — Working-output areas, baseline-relative apply gating, concise human voice
+
+Field audit (2026-10-14) of all four operator contexts: canonical
+knowledge is healthy everywhere, but three contexts fail validation
+entirely because agents park working material (client source checkouts,
+SDK bundles, node_modules junctions into the Codex runtime, probe
+scripts, reports) in ad-hoc root folders (`outputs/`, `output/`,
+`reports/`): 2 path escapes, ~580 possible-secret findings, ~2,900
+absolute-path warnings. Those pre-existing errors in untouched files
+block every canonical transaction (Incode memory updates stalled).
+Triage: almost all findings are false positives (minified bundles,
+secret-reference code), except one real exposure — a copied client
+service config with plaintext production credentials (operator
+notified; removal is the operator's decision). Operator also asked that
+outbound messages be concise, direct, and human — lists when they help,
+technical detail without filler.
