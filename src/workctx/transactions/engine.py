@@ -107,6 +107,7 @@ from workctx.transactions.models import (
 )
 from workctx.validation import (
     Severity,
+    ValidationIssue,
     ValidationReport,
     contains_possible_secret,
     validate_workspace,
@@ -322,6 +323,14 @@ class TransactionEngine:
             proposal,
             acknowledge_possible_secret=tuple(acknowledge_possible_secret),
         )
+        if analysis.compiled is not None:
+            analysis = replace(
+                analysis,
+                diagnostics=(
+                    *analysis.diagnostics,
+                    *self._predicted_workspace_diagnostics(analysis.compiled),
+                ),
+            )
         return DryRunResult(
             proposal_id=proposal.id,
             context_id=proposal.context_id,
@@ -397,6 +406,10 @@ class TransactionEngine:
             if not analysis.valid or analysis.compiled is None:
                 raise ProposalValidationError(_validation_result(proposal, analysis))
             compiled = analysis.compiled
+            baseline_report = _run_with_heartbeat(
+                lock,
+                self._baseline_workspace_report,
+            )
 
             lock.verify_fence()
             prepared_intent = _run_with_heartbeat(
@@ -477,7 +490,14 @@ class TransactionEngine:
                 lock,
                 lambda: self._post_apply_workspace_report(compiled),
             )
-            if not post_report.ok or any(
+            workspace_diagnostics = _baseline_relative_workspace_diagnostics(
+                baseline_report,
+                post_report,
+                written_paths=_strict_validation_paths(compiled),
+            )
+            if any(
+                item.severity is DiagnosticSeverity.ERROR for item in workspace_diagnostics
+            ) or any(
                 item.severity is DiagnosticSeverity.ERROR for item in postcondition_diagnostics
             ):
                 _run_stager_step(
@@ -521,7 +541,7 @@ class TransactionEngine:
                     projection=_fresh_projection_status(),
                     diagnostics=(
                         *postcondition_diagnostics,
-                        *_workspace_diagnostics(post_report),
+                        *workspace_diagnostics,
                     ),
                 )
                 raise PostconditionRollbackError(recovery_result)
@@ -560,6 +580,11 @@ class TransactionEngine:
                 ledger_event_hash=event.event_hash,
                 ledger_source_refs=tuple(event.source_refs),
                 projection=projection_status,
+                diagnostics=tuple(
+                    diagnostic
+                    for diagnostic in workspace_diagnostics
+                    if diagnostic.severity is not DiagnosticSeverity.ERROR
+                ),
             )
         except PostconditionRollbackError:
             raise
@@ -589,19 +614,55 @@ class TransactionEngine:
     def _post_apply_workspace_report(
         self,
         compiled: _CompiledProposal,
+        *,
+        overlay_files: Mapping[str, bytes | None] | None = None,
     ) -> ValidationReport:
-        if _accepts_strict_paths(self._workspace_validator):
-            return self._workspace_validator(
-                self._root,
-                strict=True,
-                strict_paths=_strict_validation_paths(compiled),
-                freshness_probe=None,
-            )
-        return self._workspace_validator(
-            self._root,
-            strict=True,
-            freshness_probe=None,
+        return self._call_workspace_validator(
+            strict=_accepts_validator_parameter(self._workspace_validator, "strict_paths"),
+            strict_paths=_strict_validation_paths(compiled),
+            overlay_files=overlay_files,
         )
+
+    def _baseline_workspace_report(self) -> ValidationReport:
+        return self._call_workspace_validator(strict=False)
+
+    def _predicted_workspace_diagnostics(
+        self,
+        compiled: _CompiledProposal,
+    ) -> tuple[TransactionDiagnostic, ...]:
+        baseline_report = self._baseline_workspace_report()
+        predicted_report = self._post_apply_workspace_report(
+            compiled,
+            overlay_files=compiled.final_files,
+        )
+        return _baseline_relative_workspace_diagnostics(
+            baseline_report,
+            predicted_report,
+            written_paths=_strict_validation_paths(compiled),
+        )
+
+    def _call_workspace_validator(
+        self,
+        *,
+        strict: bool,
+        strict_paths: Sequence[str] | None = None,
+        overlay_files: Mapping[str, bytes | None] | None = None,
+    ) -> ValidationReport:
+        arguments: dict[str, object] = {
+            "strict": strict,
+            "freshness_probe": None,
+        }
+        if strict_paths is not None and _accepts_validator_parameter(
+            self._workspace_validator,
+            "strict_paths",
+        ):
+            arguments["strict_paths"] = strict_paths
+        if overlay_files is not None and _accepts_validator_parameter(
+            self._workspace_validator,
+            "overlay_files",
+        ):
+            arguments["overlay_files"] = overlay_files
+        return self._workspace_validator(self._root, **arguments)
 
     def recover(
         self,
@@ -2245,21 +2306,66 @@ def _invalid_task_relation_diagnostic(path: str) -> TransactionDiagnostic:
     )
 
 
-def _workspace_diagnostics(report: ValidationReport) -> tuple[TransactionDiagnostic, ...]:
+def _workspace_issue_diagnostic(issue: ValidationIssue) -> TransactionDiagnostic:
     severity_map = {
         Severity.ERROR: DiagnosticSeverity.ERROR,
         Severity.WARNING: DiagnosticSeverity.WARNING,
         Severity.ADVISORY: DiagnosticSeverity.ADVISORY,
     }
-    diagnostics: list[TransactionDiagnostic] = []
-    for issue in report.issues:
+    return _diagnostic(
+        issue.code,
+        severity_map[issue.severity],
+        issue.message,
+        path=issue.path,
+        repair_action=issue.repair_action,
+    )
+
+
+def _workspace_diagnostics(report: ValidationReport) -> tuple[TransactionDiagnostic, ...]:
+    """Preserve the report-to-transaction adapter used by ingestion orchestration."""
+
+    return tuple(_workspace_issue_diagnostic(issue) for issue in report.issues)
+
+
+def _baseline_relative_workspace_diagnostics(
+    baseline: ValidationReport,
+    post: ValidationReport,
+    *,
+    written_paths: Sequence[str],
+) -> tuple[TransactionDiagnostic, ...]:
+    written = {path.casefold() for path in written_paths}
+    baseline_error_keys = {(issue.code, issue.path) for issue in baseline.errors}
+    post_errors = list(post.errors)
+    post_errors.extend(
+        replace(issue, severity=Severity.ERROR)
+        for issue in post.warnings
+        if issue.path is not None and issue.path.casefold() in written
+    )
+
+    blocking = [
+        issue
+        for issue in post_errors
+        if (
+            (issue.path is not None and issue.path.casefold() in written)
+            or (issue.code, issue.path) not in baseline_error_keys
+        )
+    ]
+    preexisting_untouched = [
+        issue
+        for issue in post_errors
+        if issue not in blocking and (issue.code, issue.path) in baseline_error_keys
+    ]
+    diagnostics = [_workspace_issue_diagnostic(issue) for issue in blocking]
+    if preexisting_untouched:
+        count = len(preexisting_untouched)
         diagnostics.append(
             _diagnostic(
-                issue.code,
-                severity_map[issue.severity],
-                issue.message,
-                path=issue.path,
-                repair_action=issue.repair_action,
+                "TXN-PREEXISTING-WORKSPACE-ERRORS",
+                DiagnosticSeverity.ADVISORY,
+                f"{count} pre-existing validation error(s) remain on untouched workspace paths.",
+                repair_action=(
+                    "Run `workctx context validate` and repair the reported workspace errors."
+                ),
             )
         )
     return tuple(diagnostics)
@@ -2746,14 +2852,14 @@ def _strict_validation_paths(compiled: _CompiledProposal) -> tuple[str, ...]:
     )
 
 
-def _accepts_strict_paths(validator: WorkspaceValidator) -> bool:
+def _accepts_validator_parameter(validator: WorkspaceValidator, name: str) -> bool:
     """Preserve compatibility with injected validators using the legacy seam."""
 
     try:
         parameters = inspect.signature(validator).parameters
     except (TypeError, ValueError):
         return False
-    return "strict_paths" in parameters or any(
+    return name in parameters or any(
         parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
     )
 

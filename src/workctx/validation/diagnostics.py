@@ -47,7 +47,7 @@ _DEFINITIONS = (
     DiagnosticDefinition(
         "CTX-ABSOLUTE-PATH",
         Severity.WARNING,
-        "A durable workspace value contains a machine-specific absolute path.",
+        "A durable workspace value contains a machine-specific absolute path at the reported line.",
         "Replace the path with a context-relative path or a canonical durable URI.",
     ),
     DiagnosticDefinition(

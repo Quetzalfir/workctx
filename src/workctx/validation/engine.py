@@ -15,6 +15,7 @@ from urllib.parse import quote, urlparse
 
 import yaml
 from pydantic import BaseModel, ValidationError
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from workctx.domain import (
     ArtifactManifest,
@@ -225,13 +226,19 @@ class WorkspaceValidator:
         strict: bool,
         strict_paths: Collection[str] | None,
         freshness_probe: FreshnessProbe | None,
+        overlay_files: Mapping[str, bytes | None] | None = None,
     ) -> None:
         resolved_root = root.expanduser().resolve()
         self._root = resolved_root
         self._strict = strict
         self._strict_paths = None if strict_paths is None else frozenset(strict_paths)
         self._freshness_probe = freshness_probe
+        self._overlay_files = {
+            relative.casefold(): (relative, content)
+            for relative, content in (overlay_files or {}).items()
+        }
         self._report = ValidationReport(context_root=resolved_root)
+        self._working_dirs = {"outputs"}
         self._texts: dict[Path, str] = {}
         self._text_bytes: dict[Path, bytes] = {}
         self._secret_acknowledgments: dict[str, SecretScanAcknowledgment] = {}
@@ -249,6 +256,7 @@ class WorkspaceValidator:
         self._check_required_directories()
         self._read_workspace_text()
         self._load_context_config()
+        self._check_workspace_text_content()
         self._check_packaged_meta_schemas()
         self._load_canonical_documents()
         self._build_identity_index()
@@ -261,11 +269,18 @@ class WorkspaceValidator:
         self._finalize_issues()
         return self._report
 
-    def _add(self, code: str, path: str | None, message: str | None = None) -> None:
+    def _add(
+        self,
+        code: str,
+        path: str | None,
+        message: str | None = None,
+        *,
+        severity: Severity | None = None,
+    ) -> None:
         definition = DIAGNOSTIC_DEFINITIONS[code]
         self._report.issues.append(
             ValidationIssue(
-                severity=definition.severity,
+                severity=severity or definition.severity,
                 code=code,
                 message=message or definition.cause,
                 path=path,
@@ -288,16 +303,24 @@ class WorkspaceValidator:
                 )
 
     def _read_workspace_text(self) -> None:
+        observed_paths: set[str] = set()
         for path, failure in _iter_text_files(self._root):
             relative = path.relative_to(self._root).as_posix()
+            relative_key = relative.casefold()
+            observed_paths.add(relative_key)
             if failure == "link":
                 self._add("CTX-PATH-ESCAPE", relative)
+                continue
+            overlay = self._overlay_files.get(relative_key)
+            if overlay is not None and overlay[1] is None:
                 continue
             if failure == "unreadable":
                 self._add("CTX-UNREADABLE-PATH", relative)
                 continue
             try:
-                raw_content = path.read_bytes()
+                raw_content = path.read_bytes() if overlay is None else overlay[1]
+                if raw_content is None:  # pragma: no cover - narrowed above
+                    continue
                 content = raw_content.decode("utf-8")
             except UnicodeDecodeError:
                 self._add("CTX-NON-UTF8", relative)
@@ -312,13 +335,52 @@ class WorkspaceValidator:
 
             self._texts[path] = content
             self._text_bytes[path] = raw_content
-            if not _defer_absolute_path_scan(path, Path(relative), content) and (
-                _contains_durable_absolute_path(content)
-            ):
-                self._add("CTX-ABSOLUTE-PATH", relative)
+
+        for relative_key, (relative, raw_content) in sorted(self._overlay_files.items()):
+            if relative_key in observed_paths or raw_content is None:
+                continue
+            relative_path = Path(*PurePosixPath(relative).parts)
+            if any(part.casefold() in {".git", "98_state"} for part in relative_path.parts):
+                continue
+            if _is_opaque_evidence_path(relative_path):
+                continue
+            path = self._root / relative_path
+            if not _is_text_file(path) or _has_link_ancestor(self._root, path):
+                continue
+            try:
+                content = raw_content.decode("utf-8")
+            except UnicodeDecodeError:
+                self._add("CTX-NON-UTF8", relative)
+                if _is_canonical_file_candidate(path, Path(relative)):
+                    self._add("DOC-PARSE", relative)
+                continue
+            self._texts[path] = content
+            self._text_bytes[path] = raw_content
 
         self._load_secret_acknowledgments()
+
+    def _check_workspace_text_content(self) -> None:
+        for path, content in sorted(
+            self._texts.items(), key=lambda item: item[0].relative_to(self._root).as_posix()
+        ):
+            relative_path = path.relative_to(self._root)
+            if _defer_absolute_path_scan(path, relative_path, content):
+                continue
+            self._add_absolute_path_findings(
+                relative_path.as_posix(),
+                _absolute_path_line_numbers(content),
+            )
         self._check_possible_secrets()
+
+    def _add_absolute_path_findings(self, relative: str, lines: Collection[int]) -> None:
+        severity = Severity.ADVISORY if self._is_working_path(relative) else None
+        for line in sorted(set(lines)):
+            self._add(
+                "CTX-ABSOLUTE-PATH",
+                relative,
+                f"Machine-specific absolute path at line {line}; the value is not shown.",
+                severity=severity,
+            )
 
     def _load_secret_acknowledgments(self) -> None:
         path = self._root.joinpath(*PurePosixPath(SECRET_SCAN_ACKNOWLEDGMENTS_PATH).parts)
@@ -346,6 +408,7 @@ class WorkspaceValidator:
             if not findings:
                 continue
             relative = path.relative_to(self._root).as_posix()
+            working_path = self._is_working_path(relative)
             acknowledgment = self._secret_acknowledgments.get(relative.casefold())
             content_hash = f"sha256:{hashlib.sha256(self._text_bytes[path]).hexdigest()}"
             acknowledged = (
@@ -375,6 +438,7 @@ class WorkspaceValidator:
                         f"Possible secret at line {finding.line}: {finding.kind}; the "
                         "acknowledgment is missing or stale for this file's content hash."
                     ),
+                    severity=Severity.WARNING if working_path else None,
                 )
 
     def _load_context_config(self) -> None:
@@ -422,14 +486,23 @@ class WorkspaceValidator:
             self._add("CTX-CONFIG", "context.yaml")
             return
         self._report.context_id = config.id
+        self._working_dirs = {name.casefold() for name in config.working_dirs}
+
+    def _is_working_path(self, relative: str | Path) -> bool:
+        parts = PurePosixPath(str(relative).replace("\\", "/")).parts
+        return bool(parts) and parts[0].casefold() in self._working_dirs
 
     def _check_packaged_meta_schemas(self) -> None:
         for schema in packaged_meta_schemas():
             target = self._root.joinpath(*PurePosixPath(schema.relative_path).parts)
-            try:
-                current = None if _is_link_or_junction(target) else target.read_bytes()
-            except (OSError, ValueError):
-                current = None
+            overlay = self._overlay_files.get(schema.relative_path.casefold())
+            if overlay is not None:
+                current = overlay[1]
+            else:
+                try:
+                    current = None if _is_link_or_junction(target) else target.read_bytes()
+                except (OSError, ValueError):
+                    current = None
             if current != schema.content:
                 self._report.issues.append(
                     ValidationIssue(
@@ -452,6 +525,8 @@ class WorkspaceValidator:
                 continue
             relative = path.relative_to(self._root)
             if not relative.parts:
+                continue
+            if self._is_working_path(relative):
                 continue
 
             document: _ParsedDocument | None = None
@@ -579,15 +654,17 @@ class WorkspaceValidator:
             self._add("DOC-FILENAME-ID", record.document.relative_path)
 
     def _check_structured_absolute_paths(self, document: _ParsedDocument) -> None:
-        has_absolute_path = any(
-            _contains_durable_absolute_path(value)
-            for value in _iter_structured_path_values(document.data, kind=document.kind)
-        ) or _contains_durable_absolute_path(document.body)
-        if has_absolute_path and not any(
-            issue.code == "CTX-ABSOLUTE-PATH" and issue.path == document.relative_path
-            for issue in self._report.issues
-        ):
-            self._add("CTX-ABSOLUTE-PATH", document.relative_path)
+        content = self._texts.get(document.path)
+        if content is None:  # pragma: no cover - parsed documents originate in _texts
+            return
+        self._add_absolute_path_findings(
+            document.relative_path,
+            _structured_absolute_path_line_numbers(
+                content,
+                kind=document.kind,
+                markdown=document.path.suffix.lower() == ".md",
+            ),
+        )
 
     def _check_artifact_paths(
         self,
@@ -1006,11 +1083,96 @@ def _is_text_file(path: Path) -> bool:
 
 
 def _contains_durable_absolute_path(content: str) -> bool:
-    for line in content.splitlines():
-        stripped = line.strip().strip("`'\"")
-        if _is_absolute_machine_path(stripped):
-            return True
-    return False
+    return bool(_absolute_path_line_numbers(content))
+
+
+def _absolute_path_line_numbers(content: str) -> tuple[int, ...]:
+    return tuple(
+        line_number
+        for line_number, line in enumerate(content.splitlines(), start=1)
+        if _is_absolute_machine_path(line.strip().strip("`'\""))
+    )
+
+
+def _structured_absolute_path_line_numbers(
+    content: str,
+    *,
+    kind: str,
+    markdown: bool,
+) -> tuple[int, ...]:
+    lines = set(_absolute_path_line_numbers(content))
+    structured_source = content
+    line_offset = 0
+    if markdown:
+        frontmatter = _markdown_frontmatter_source(content)
+        if frontmatter is None:
+            return tuple(sorted(lines))
+        structured_source, line_offset = frontmatter
+    try:
+        root_node = yaml.compose(structured_source)
+    except (RecursionError, ValueError, yaml.YAMLError):
+        return tuple(sorted(lines))
+    if root_node is None:
+        return tuple(sorted(lines))
+
+    visited: set[int] = set()
+    pending: list[tuple[Node, tuple[str, ...]]] = [(root_node, ())]
+    while pending:
+        node, path = pending.pop()
+        identity = id(node)
+        if identity in visited:
+            continue
+        visited.add(identity)
+        if isinstance(node, ScalarNode):
+            if any(
+                _is_absolute_machine_path(value_line.strip().strip("`'\""))
+                for value_line in node.value.splitlines()
+            ):
+                start, end = _yaml_node_line_range(node, line_offset=line_offset)
+                if not any(start <= line <= end for line in lines):
+                    lines.add(start)
+            continue
+        if isinstance(node, SequenceNode):
+            pending.extend((value, (*path, "*")) for value in reversed(node.value))
+            continue
+        if not isinstance(node, MappingNode):
+            continue
+        is_json_pointer = any(
+            isinstance(key_node, ScalarNode)
+            and key_node.value == "type"
+            and isinstance(value_node, ScalarNode)
+            and value_node.value == "json_pointer"
+            for key_node, value_node in node.value
+        )
+        for key_node, value_node in reversed(node.value):
+            key = key_node.value if isinstance(key_node, ScalarNode) else ""
+            child_path = (*path, key)
+            if (
+                is_json_pointer
+                and key == "pointer"
+                and _is_json_pointer_locator_path(kind, child_path)
+            ):
+                start, end = _yaml_node_line_range(value_node, line_offset=line_offset)
+                lines.difference_update({line for line in lines if start <= line <= end})
+                continue
+            pending.append((value_node, child_path))
+    return tuple(sorted(lines))
+
+
+def _markdown_frontmatter_source(content: str) -> tuple[str, int] | None:
+    source_lines = content.splitlines(keepends=True)
+    if not source_lines or source_lines[0].rstrip("\r\n") != "---":
+        return None
+    for index, line in enumerate(source_lines[1:], start=1):
+        if line.rstrip("\r\n") == "---":
+            return "".join(source_lines[1:index]), 1
+    return None
+
+
+def _yaml_node_line_range(node: Node, *, line_offset: int) -> tuple[int, int]:
+    start = node.start_mark.line + line_offset + 1
+    end = max(start, node.end_mark.line + line_offset)
+    return start, end
 
 
 def contains_possible_secret(content: str) -> bool:
@@ -1286,6 +1448,19 @@ def _is_link_or_junction(path: Path) -> bool:
         return path.is_symlink() or path.is_junction()
     except OSError:
         return True
+
+
+def _has_link_ancestor(root: Path, path: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return True
+    current = root
+    for part in relative.parts[:-1]:
+        current /= part
+        if _is_link_or_junction(current):
+            return True
+    return False
 
 
 def _document_references(document: _ParsedDocument) -> Iterator[_ReferenceCandidate]:

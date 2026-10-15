@@ -207,6 +207,46 @@ def test_transaction_tools_validate_dry_run_apply_and_rebuild_end_to_end(
 
 
 @pytest.mark.integration
+def test_transaction_tools_surface_preexisting_workspace_errors_as_warnings(
+    tmp_path: Path,
+) -> None:
+    root = initialize_transaction_context(tmp_path / "mcp-baseline-context")
+    (root / "90_integrations" / "legacy-secret.txt").write_text(
+        "API_KEY=FICTIONAL_MCP_BASELINE_SECRET_123456\n",
+        encoding="utf-8",
+    )
+    transaction = proposal(
+        "mcp-baseline-notice",
+        [create_operation("PRJ-mcp-baseline")],
+    )
+    payload = transaction.model_dump(mode="json")
+    service = McpToolService(root)
+
+    dry_run = service.invoke(
+        "transaction_dry_run",
+        {"schema_version": 1, "approved": True, "proposal": payload},
+    )
+    assert dry_run.envelope.ok is True
+    assert dry_run.envelope.result["dry_run"]["valid"] is True
+    assert [warning.code for warning in dry_run.envelope.warnings] == [
+        "TXN-PREEXISTING-WORKSPACE-ERRORS"
+    ]
+    assert "workctx context validate" in (dry_run.envelope.warnings[0].repair_action or "")
+
+    applied = service.invoke(
+        "transaction_apply",
+        {"schema_version": 1, "approved": True, "proposal": payload},
+    )
+    assert applied.envelope.ok is True
+    assert [warning.code for warning in applied.envelope.warnings] == [
+        "TXN-PREEXISTING-WORKSPACE-ERRORS"
+    ]
+    assert applied.envelope.result["receipt"]["diagnostics"][0]["code"] == (
+        "TXN-PREEXISTING-WORKSPACE-ERRORS"
+    )
+
+
+@pytest.mark.integration
 def test_transaction_apply_possible_secret_acknowledgment_has_mcp_parity(
     tmp_path: Path,
 ) -> None:

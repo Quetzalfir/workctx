@@ -32,7 +32,7 @@ def test_context_validate_strict_still_reports_unrelated_legacy_violation(
     assert matching_errors == [
         {
             "code": "CTX-ABSOLUTE-PATH",
-            "message": ("A durable workspace value contains a machine-specific absolute path."),
+            "message": ("Machine-specific absolute path at line 1; the value is not shown."),
             "path": "90_integrations/legacy-notes.md",
             "repair_action": (
                 "Replace the path with a context-relative path or a canonical durable URI."

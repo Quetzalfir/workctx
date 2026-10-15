@@ -145,6 +145,7 @@ class ApplyResult(_TransactionRecord):
     ledger_event_hash: RevisionValue
     ledger_source_refs: tuple[str, ...]
     projection: ProjectionStatus
+    diagnostics: tuple[TransactionDiagnostic, ...] = ()
 
     @field_validator("applied_targets", "ledger_source_refs")
     @classmethod
@@ -153,6 +154,16 @@ class ApplyResult(_TransactionRecord):
             if not value:
                 raise ValueError("receipt values must not be empty")
             _single_line(value, "receipt value")
+        return values
+
+    @field_validator("diagnostics")
+    @classmethod
+    def require_nonfatal_diagnostics(
+        cls,
+        values: tuple[TransactionDiagnostic, ...],
+    ) -> tuple[TransactionDiagnostic, ...]:
+        if any(value.severity is DiagnosticSeverity.ERROR for value in values):
+            raise ValueError("committed apply receipt diagnostics must be non-fatal")
         return values
 
 

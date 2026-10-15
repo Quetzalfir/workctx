@@ -537,6 +537,10 @@ def test_packaged_draft_replies_requires_operator_voice_and_conversation_languag
     for marker in (
         "Write every draft in the operator's first person, as if the operator typed it.",
         "natural, human register appropriate to the relationship",
+        "keep it concise and direct, say what matters first",
+        "technical detail when needed without filler or ceremony",
+        "use lists only when they genuinely help",
+        "read like a person wrote it, not an assistant",
         "assistant phrasing",
         "AI disclaimers",
         "sign-offs the operator would not write",

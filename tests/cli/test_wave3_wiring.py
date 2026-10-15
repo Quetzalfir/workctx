@@ -322,6 +322,57 @@ def test_transaction_apply_with_yes_authenticates_receipt(tmp_path: Path) -> Non
     assert (root / "02_knowledge" / "PRJ-commit.md").is_file()
 
 
+def test_transaction_apply_surfaces_preexisting_error_notice_in_receipt_and_warnings(
+    tmp_path: Path,
+) -> None:
+    root = _initialize(tmp_path / "ctx")
+    (root / "90_integrations" / "legacy-secret.txt").write_text(
+        "API_KEY=FICTIONAL_CLI_BASELINE_SECRET_123456\n",
+        encoding="utf-8",
+    )
+    proposal = _write_proposal(tmp_path, "baseline-notice")
+
+    payload = _envelope(
+        runner.invoke(
+            app,
+            [
+                "transaction",
+                "apply",
+                str(proposal),
+                "--yes",
+                "--context",
+                str(root),
+                "--json",
+            ],
+        ),
+        exit_code=0,
+        command="transaction.apply",
+    )
+
+    receipt = ApplyResult.model_validate(payload["result"]["receipt"])
+    assert [item.code for item in receipt.diagnostics] == ["TXN-PREEXISTING-WORKSPACE-ERRORS"]
+    assert payload["warnings"][0]["code"] == "TXN-PREEXISTING-WORKSPACE-ERRORS"
+    assert "workctx context validate" in (receipt.diagnostics[0].repair_action or "")
+
+
+def test_transaction_apply_human_output_renders_preexisting_error_remedy(tmp_path: Path) -> None:
+    root = _initialize(tmp_path / "ctx")
+    (root / "90_integrations" / "legacy-secret.txt").write_text(
+        "API_KEY=FICTIONAL_CLI_HUMAN_SECRET_123456\n",
+        encoding="utf-8",
+    )
+    proposal = _write_proposal(tmp_path, "human-notice")
+
+    result = runner.invoke(
+        app,
+        ["transaction", "apply", str(proposal), "--yes", "--context", str(root)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Notice: 1 pre-existing validation error(s)" in result.stdout
+    assert "workctx context validate" in result.stdout
+
+
 def test_secret_acknowledgment_requires_yes_without_mutation(tmp_path: Path) -> None:
     root = _initialize(tmp_path / "ctx")
     proposal, target = _write_secret_proposal(tmp_path, "secret-no-approval")

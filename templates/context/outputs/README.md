@@ -1,0 +1,1 @@
+This directory holds non-canonical working material. Do not put dependencies, links or junctions, credentials, or full third-party source checkouts here; reference repositories with `repo://` locators, and delete regenerable build artifacts when done.

@@ -150,6 +150,33 @@
           "default": 60
         }
       }
+    },
+    "working_dirs": {
+      "type": "array",
+      "description": "Top-level non-canonical working-output directories.",
+      "default": [
+        "outputs"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^[^.][^/\\\\]*$",
+        "not": {
+          "enum": [
+            "00_inbox",
+            "01_processed",
+            "02_knowledge",
+            "03_work",
+            "04_views",
+            "05_outbox",
+            "06_overrides",
+            "90_integrations",
+            "98_state",
+            "99_meta"
+          ]
+        }
+      }
     }
   }
 }

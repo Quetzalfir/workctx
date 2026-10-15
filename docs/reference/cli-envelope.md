@@ -69,6 +69,12 @@ apply reports `dry_run: false` and includes the authenticated transaction receip
 `--acknowledge-possible-secret <path>` option is valid only with `--yes`, including a
 `--dry-run --yes` preview, and only for transaction-written postimages that actually trigger
 `CTX-POSSIBLE-SECRET`; the acknowledgment metadata write is shown as another exact effect.
+Dry-run and apply compare post-state validation errors with the pre-transaction baseline by
+diagnostic code and path. Errors on written postimages and newly introduced errors anywhere are
+fatal; unchanged errors on untouched paths become one non-fatal
+`TXN-PREEXISTING-WORKSPACE-ERRORS` diagnostic with their count and a
+`workctx context validate` repair action. Successful apply receipts expose that diagnostic in
+`receipt.diagnostics`.
 `context refresh-meta` idempotently installs the packaged reference schemas under
 `99_meta/schemas/`; each schema reports `updated` or `unchanged`, and no other context file is
 modified. `agent install` returns the complete plan without changing files unless `--yes` is
