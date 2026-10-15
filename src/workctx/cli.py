@@ -1483,7 +1483,9 @@ def transaction_apply(
         "dry_run": False,
         "receipt": cast("dict[str, JsonValue]", receipt.model_dump(mode="json")),
     }
-    receipt_warnings: list[CliDiagnostic] = []
+    receipt_warnings, receipt_errors = _transaction_cli_diagnostics(receipt.diagnostics)
+    if receipt_errors:  # pragma: no cover - ApplyResult rejects fatal receipt diagnostics
+        raise RuntimeError("Committed transaction receipt contains a fatal diagnostic")
     if receipt.projection.state.value == "stale":
         receipt_warnings.append(
             CliDiagnostic(
@@ -1500,6 +1502,9 @@ def transaction_apply(
                 f"ledger event {receipt.ledger_event_id}."
             )
         )
+        for diagnostic in receipt.diagnostics:
+            remedy = f" {diagnostic.repair_action}" if diagnostic.repair_action is not None else ""
+            output_console.print(Text(f"Notice: {diagnostic.message}{remedy}"))
 
 
 @transaction_app.command("history")

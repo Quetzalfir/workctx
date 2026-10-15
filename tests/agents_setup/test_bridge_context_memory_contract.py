@@ -19,6 +19,12 @@ DISCOVERY_SENTENCE = (
     "Before creating or modifying a file whose placement or ownership is uncertain, run "
     "`workctx guide`; generated files are never hand-edited."
 )
+WORKING_DISCOVERY_SENTENCE = (
+    "Before creating or modifying a file whose placement or ownership is uncertain, run "
+    "`workctx guide`; put non-canonical working material in `outputs/` or a configured "
+    "working dir, never put dependency directories, links or junctions, credentials, or "
+    "full third-party source checkouts there, and never hand-edit generated files."
+)
 SKILL_PATH_SENTENCE = (
     "Skills live at `<context root>/.agents/skills/` (Claude renders under "
     "`.claude/skills/`); resolve them from the context root, never the current working "
@@ -57,11 +63,14 @@ SECRET_ACKNOWLEDGMENT_MARKERS = (
 )
 OUTBOUND_VOICE_SENTENCE = (
     "For any outbound message drafted or sent through Work Context, including an outbox "
-    "send, write naturally in the operator's first person; detect the target conversation's "
-    "established language from recent messages in its channel, chat, or thread, never infer "
-    "language from a person's name or company, and when no conversation language is "
-    "detectable use this fallback order: an explicit operator instruction for that message > "
-    "the operator's configured default in context or user `instructions.md` > English."
+    "send, write naturally in the operator's first person, keep it concise and direct, say "
+    "what matters first, include technical detail when needed without filler or ceremony, use "
+    "lists only when they genuinely help, and make it read like a person wrote it, not an "
+    "assistant; detect the target conversation's established language from recent messages in "
+    "its channel, chat, or thread, never infer language from a person's name or company, and "
+    "when no conversation language is detectable use this fallback order: an explicit operator "
+    "instruction for that message > the operator's configured default in context or user "
+    "`instructions.md` > English."
 )
 
 
@@ -120,7 +129,7 @@ def test_bridge_extends_orientation_with_one_exact_discovery_sentence(
 ) -> None:
     content = (ROOT / relative_path).read_text(encoding="utf-8")
 
-    assert content.count(DISCOVERY_SENTENCE) == 1
+    assert content.count(WORKING_DISCOVERY_SENTENCE) == 1
     assert content.count("`workctx guide`") == 1
 
 
@@ -128,5 +137,24 @@ def test_bridge_extends_orientation_with_one_exact_discovery_sentence(
 def test_context_template_surfaces_advertise_the_ownership_guide(relative_path: str) -> None:
     content = (ROOT / relative_path).read_text(encoding="utf-8")
 
-    assert content.count(DISCOVERY_SENTENCE) == 1
+    discovery_sentence = (
+        WORKING_DISCOVERY_SENTENCE if relative_path.endswith("AGENTS.md") else DISCOVERY_SENTENCE
+    )
+    assert content.count(discovery_sentence) == 1
     assert content.count("`workctx guide`") == 1
+
+
+@pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
+def test_prompt_surfaces_keep_working_material_out_of_canonical_zones(
+    relative_path: str,
+) -> None:
+    content = (ROOT / relative_path).read_text(encoding="utf-8")
+
+    for marker in (
+        "`outputs/` or a configured working dir",
+        "dependency directories",
+        "links or junctions",
+        "credentials",
+        "full third-party source checkouts",
+    ):
+        assert marker in content, (relative_path, marker)

@@ -13,3 +13,7 @@
 # Agent-local files
 .codex/config.local.toml
 .agents/tmp/
+
+# Regenerable working-output dependencies and builds
+outputs/**/node_modules/
+outputs/**/.build/

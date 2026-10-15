@@ -6,10 +6,12 @@ Drafting is a deterministic local workflow around canonical Markdown documents i
 document was published.
 
 Every outbound body, whether only drafted or later sent with `workctx outbox send`, must
-sound natural in the operator's first person and use the target conversation's language
-detected from recent messages, never from a person's name or company. When no conversation
-language is detectable, use an explicit instruction for that message, then the configured
-context or user default, then English.
+sound natural in the operator's first person, stay concise and direct, say what matters first,
+include technical detail when needed without filler or ceremony, and use lists only when they
+genuinely help; it should read like a person wrote it, not an assistant. Use the target
+conversation's language detected from recent messages, never from a person's name or company.
+When no conversation language is detectable, use an explicit instruction for that message,
+then the configured context or user default, then English.
 
 ## Public API
 

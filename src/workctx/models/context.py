@@ -7,6 +7,21 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 CURRENT_SCHEMA_VERSION = 1
 
+_TEMPLATE_ZONE_NAMES = frozenset(
+    {
+        "00_inbox",
+        "01_processed",
+        "02_knowledge",
+        "03_work",
+        "04_views",
+        "05_outbox",
+        "06_overrides",
+        "90_integrations",
+        "98_state",
+        "99_meta",
+    }
+)
+
 
 class ContextKind(StrEnum):
     COMPANY = "company"
@@ -92,6 +107,7 @@ class ContextConfig(BaseModel):
     security_boundary: str = Field(pattern="^isolated$")
     policies: ContextPolicies
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    working_dirs: list[str] = Field(default_factory=lambda: ["outputs"])
     created_at: AwareDatetime
     updated_at: AwareDatetime
 
@@ -112,6 +128,28 @@ class ContextConfig(BaseModel):
                 f"{CURRENT_SCHEMA_VERSION} is required"
             )
         return normalized
+
+    @field_validator("working_dirs")
+    @classmethod
+    def _require_safe_working_dirs(cls, values: list[str]) -> list[str]:
+        normalized: set[str] = set()
+        for value in values:
+            key = value.casefold()
+            if (
+                not value
+                or value.startswith(".")
+                or "/" in value
+                or "\\" in value
+                or key in _TEMPLATE_ZONE_NAMES
+            ):
+                raise ValueError(
+                    "working_dirs entries must be visible single-segment names outside "
+                    "template zones"
+                )
+            if key in normalized:
+                raise ValueError("working_dirs entries must be unique ignoring case")
+            normalized.add(key)
+        return values
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

@@ -75,6 +75,12 @@ EXPECTED_ROUTING = [
     },
     {"kind": "outbound draft", "destination": "05_outbox/", "via": "draft flow"},
     {
+        "kind": "working material",
+        "destination": "outputs/ (or a configured working dir)",
+        "via": "direct non-canonical work; use repo:// locators for repositories and delete "
+        "regenerable build artifacts when done",
+    },
+    {
         "kind": "workflow customization",
         "destination": "06_overrides/skills/<name>/SKILL.md",
         "via": "operator-owned override flow",
@@ -143,6 +149,10 @@ def test_human_guide_contains_every_class_routing_section_and_escape_hatch(
     assert "reported line and pattern" in result.stdout
     assert "--acknowledge-possible-secret" in result.stdout
     assert "never acknowledge merely to clear an error" in result.stdout
+    assert "outputs/ (or a configured working dir)" in result.stdout
+    assert "Never put in working dirs" in result.stdout
+    for exclusion in GUIDE.working_material_never:
+        assert exclusion in result.stdout
 
 
 def test_json_shape_pins_paths_classes_policies_and_routing_entries(tmp_path: Path) -> None:
@@ -157,6 +167,7 @@ def test_json_shape_pins_paths_classes_policies_and_routing_entries(tmp_path: Pa
         "root",
         "ownership",
         "routing",
+        "working_material_never",
         "never_edit",
         "adapter_note",
         "escape_hatch",
@@ -165,6 +176,7 @@ def test_json_shape_pins_paths_classes_policies_and_routing_entries(tmp_path: Pa
     assert result["root"] == str(root.resolve())
     assert result["ownership"] == [entry.to_payload() for entry in GUIDE.ownership]
     assert result["routing"] == EXPECTED_ROUTING
+    assert result["working_material_never"] == list(GUIDE.working_material_never)
     assert result["never_edit"] == [entry.to_payload() for entry in GUIDE.never_edit]
     assert result["adapter_note"] == GUIDE.adapter_note
     assert result["escape_hatch"] == GUIDE.escape_hatch

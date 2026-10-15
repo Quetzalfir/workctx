@@ -8,6 +8,13 @@ from types import ModuleType
 ROOT = Path(__file__).parents[2]
 SYNC_SCRIPT = ROOT / "scripts" / "sync_context_template.py"
 CANONICAL_SCHEMA = ROOT / "schemas" / "transaction-proposal.schema.json"
+CANONICAL_TEMPLATE = ROOT / "src" / "workctx" / "resources" / "context_template"
+MIRROR_TEMPLATE = ROOT / "templates" / "context"
+OUTPUTS_README = (
+    "This directory holds non-canonical working material. Do not put dependencies, links or "
+    "junctions, credentials, or full third-party source checkouts here; reference repositories "
+    "with `repo://` locators, and delete regenerable build artifacts when done.\n"
+)
 
 
 def _load_sync_module() -> ModuleType:
@@ -47,3 +54,11 @@ def test_template_sync_materializes_schema_from_source_idempotently(tmp_path: Pa
     assert second == ("99_meta/schemas/transaction-proposal.schema.json",)
     assert third == ()
     assert target.read_bytes() == CANONICAL_SCHEMA.read_bytes()
+
+
+def test_context_template_ships_guarded_noncanonical_outputs_directory() -> None:
+    for template in (CANONICAL_TEMPLATE, MIRROR_TEMPLATE):
+        assert (template / "outputs" / "README.md").read_text(encoding="utf-8") == (OUTPUTS_README)
+        gitignore = (template / ".gitignore").read_text(encoding="utf-8")
+        assert "outputs/**/node_modules/" in gitignore
+        assert "outputs/**/.build/" in gitignore

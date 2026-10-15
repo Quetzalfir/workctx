@@ -9,6 +9,12 @@ Passing `strict=True` escalates warnings to errors. Advisories remain advisories
 they describe references or derived state that the local engine cannot resolve, rather than
 invalid canonical state.
 
+Files under a configured `working_dirs` top-level directory are non-canonical: document-model
+and reference-resolution checks are skipped there. `CTX-ABSOLUTE-PATH` is advisory in those
+directories, while an unacknowledged `CTX-POSSIBLE-SECRET` remains visible as a warning (and can
+still be escalated by strict validation). `CTX-PATH-ESCAPE` remains an error everywhere, including
+working directories.
+
 ## Diagnostic catalog
 
 | Code | Default severity | Cause | Repair action |
@@ -18,9 +24,9 @@ invalid canonical state.
 | `CTX-MISSING-DIRECTORY` | error | A required top-level context directory is absent. | Restore the named directory from the canonical context layout. |
 | `CTX-NON-UTF8` | warning | A workspace text file cannot be decoded as UTF-8. | Convert the file to UTF-8 without changing its intended content. |
 | `CTX-UNREADABLE-PATH` | error | A workspace file or directory could not be inspected. | Restore read access and rerun validation so the path can be checked. |
-| `CTX-ABSOLUTE-PATH` | warning | A durable value contains a machine-specific absolute path. | Replace it with a context-relative path or canonical durable URI. |
+| `CTX-ABSOLUTE-PATH` | warning | A durable value contains a machine-specific absolute path; the value-free diagnostic reports its line. | Replace it with a context-relative path or canonical durable URI. |
 | `CTX-PATH-ESCAPE` | error | A workspace link crosses a read boundary, or an artifact path is unsafe or non-portable. | Remove the link or use a portable forward-slash artifact path inside the context root. |
-| `CTX-POSSIBLE-SECRET` | error | Text contains a located secret-looking pattern whose acknowledgment is missing or stale. | Use the reported line and pattern to redact the value or replace it with a secret reference name. Only when the operator explicitly confirms the text is not a live credential, re-apply with `--acknowledge-possible-secret`; never acknowledge merely to clear an error. |
+| `CTX-POSSIBLE-SECRET` | error | Text contains a located secret-looking pattern whose acknowledgment is missing or stale; findings under working directories are warnings. | Use the reported line and pattern to redact the value or replace it with a secret reference name. Only when the operator explicitly confirms the text is not a live credential, re-apply with `--acknowledge-possible-secret`; never acknowledge merely to clear an error. |
 | `CTX-SECRET-ACKNOWLEDGMENT-INVALID` | error | A secret-scan acknowledgment record or requested acknowledgment is invalid. | Use a written context-relative path whose staged content reports `CTX-POSSIBLE-SECRET`, or repair the canonical acknowledgment file to match its schema. |
 | `DOC-PARSE` | error | A canonical Markdown, YAML, or JSON document cannot be parsed. | Repair its syntax and required frontmatter delimiters. |
 | `DOC-MODEL` | error | A canonical document does not satisfy its integrated domain model. | Correct its fields to satisfy the current typed domain contract. |

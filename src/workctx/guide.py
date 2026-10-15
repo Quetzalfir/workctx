@@ -113,6 +113,7 @@ class GuideDefinition:
 
     ownership: tuple[OwnershipEntry, ...]
     routing: tuple[RoutingEntry, ...]
+    working_material_never: tuple[str, ...]
     never_edit: tuple[NeverEditEntry, ...]
     adapter_note: str
     escape_hatch: str
@@ -123,6 +124,8 @@ class GuideDefinition:
             raise ValueError("Guide ownership paths must be unique")
         if {entry.ownership_class for entry in self.ownership} != set(OwnershipClass):
             raise ValueError("Guide definition must expose every ownership class")
+        if not self.working_material_never:
+            raise ValueError("Working-material guidance must name excluded content")
 
 
 _AGENT_REGEN = ("workctx agent repair", "workctx agent refresh")
@@ -310,6 +313,12 @@ GUIDE = GuideDefinition(
         RoutingEntry("task or work item", "03_work/", "proposal or transaction"),
         RoutingEntry("outbound draft", "05_outbox/", "draft flow"),
         RoutingEntry(
+            "working material",
+            "outputs/ (or a configured working dir)",
+            "direct non-canonical work; use repo:// locators for repositories and delete "
+            "regenerable build artifacts when done",
+        ),
+        RoutingEntry(
             "workflow customization",
             "06_overrides/skills/<name>/SKILL.md",
             "operator-owned override flow",
@@ -324,6 +333,12 @@ GUIDE = GuideDefinition(
             "nowhere in the context; keep reference names only",
             "the configured secret reference name",
         ),
+    ),
+    working_material_never=(
+        "dependency directories",
+        "links or junctions",
+        "credentials or secret values",
+        "full third-party source checkouts",
     ),
     never_edit=(
         NeverEditEntry(
@@ -372,6 +387,7 @@ def guide_payload(root: Path) -> dict[str, JsonValue]:
         "root": str(root),
         "ownership": cast(JsonValue, [entry.to_payload() for entry in GUIDE.ownership]),
         "routing": cast(JsonValue, [entry.to_payload() for entry in GUIDE.routing]),
+        "working_material_never": cast(JsonValue, list(GUIDE.working_material_never)),
         "never_edit": cast(JsonValue, [entry.to_payload() for entry in GUIDE.never_edit]),
         "adapter_note": GUIDE.adapter_note,
         "escape_hatch": GUIDE.escape_hatch,
@@ -401,6 +417,10 @@ def render_guide(*, context_id: str) -> RenderableType:
     for route in GUIDE.routing:
         routing.add_row(route.kind, f"{route.destination}; via {route.via}")
 
+    working_material_never = Text(
+        "Never put in working dirs: " + ", ".join(GUIDE.working_material_never) + "."
+    )
+
     never_edit = Table(box=None, pad_edge=False, collapse_padding=True)
     never_edit.add_column("Path", style="cyan", ratio=3, overflow="fold")
     never_edit.add_column("Regenerate with", ratio=2, overflow="fold")
@@ -416,6 +436,7 @@ def render_guide(*, context_id: str) -> RenderableType:
         Text(),
         Text("Where does it go?", style="bold"),
         routing,
+        working_material_never,
         Text(),
         Text("Never edit by hand", style="bold"),
         never_edit,

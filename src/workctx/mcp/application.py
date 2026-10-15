@@ -474,7 +474,11 @@ class McpToolService:
                 *(diagnostics or (self._generic_transaction_diagnostic(),)),
                 result={"dry_run": result},
             )
-        return self._success("transaction_dry_run", {"dry_run": result})
+        return self._success(
+            "transaction_dry_run",
+            {"dry_run": result},
+            warnings=self._transaction_diagnostics(result.diagnostics),
+        )
 
     def _transaction_apply(self, arguments: dict[str, Any]) -> ToolResponse:
         proposal = TransactionProposal.model_validate(arguments["proposal"])
@@ -484,18 +488,22 @@ class McpToolService:
             approved=True,
             acknowledge_possible_secret=tuple(arguments.get("acknowledge_possible_secret", ())),
         )
-        warnings: tuple[McpDiagnostic, ...] = ()
+        warnings = list(self._transaction_diagnostics(result.diagnostics))
         if result.projection.state is ProjectionState.STALE:
-            warnings = (
+            warnings.append(
                 self._diagnostic(
                     code=result.projection.diagnostic_code or "TXN-PROJECTION-STALE",
                     category=ErrorCategory.PARTIAL_SUCCESS,
                     severity=DiagnosticSeverity.WARNING,
                     message="The transaction committed but its derived projection is stale.",
                     repair_action=result.projection.repair_action,
-                ),
+                )
             )
-        return self._success("transaction_apply", {"receipt": result}, warnings=warnings)
+        return self._success(
+            "transaction_apply",
+            {"receipt": result},
+            warnings=tuple(warnings),
+        )
 
     def _index_rebuild(self, arguments: dict[str, Any]) -> ToolResponse:
         del arguments

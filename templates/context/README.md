@@ -9,4 +9,6 @@ Open the directory in a supported AI agent after installing the project adapter.
 
 Before creating or modifying a file whose placement or ownership is uncertain, run `workctx guide`; generated files are never hand-edited.
 
+Put non-canonical working material in `outputs/` or another directory named by `context.yaml` `working_dirs`; follow that directory's README and keep durable knowledge in canonical zones.
+
 Do not store secret values in this workspace.

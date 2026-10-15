@@ -8,6 +8,7 @@ context.yaml
 03_work/           Canonical tasks, investigations, incidents, and plans
 04_views/          Generated operational views
 05_outbox/         Drafts and approved output artifacts
+outputs/           Non-canonical working material (default working directory)
 90_integrations/   Connector metadata and secret references
 98_state/          Generated indexes, locks, caches, and local runtime state
 99_meta/           Policies, templates, migrations, and audit metadata
@@ -15,9 +16,15 @@ context.yaml
 
 `04_views/` and `98_state/` must be rebuildable. Do not place the only copy of knowledge there. `04_views/` starts empty and is populated by `workctx view rebuild`.
 
+`context.yaml` may set `working_dirs` to visible, non-template top-level directory names; the
+default is `outputs/`. These directories are for temporary working material, not canonical
+documents. Do not put dependency directories, links or junctions, credentials, or full
+third-party source checkouts in them. Reference repositories with `repo://` locators and delete
+regenerable build artifacts when done.
+
 Run `workctx guide` inside a resolved context for the packaged ownership table, placement routes,
-and regeneration commands; use `workctx guide --json` for the same authoritative data in the CLI
-envelope.
+working-material exclusions, and regeneration commands; use `workctx guide --json` for the same
+authoritative data in the CLI envelope.
 
 All context kinds and profiles use this required top-level layout. Profiles select defaults
 for how the context is used; they are not security roles and do not remove canonical zones.
