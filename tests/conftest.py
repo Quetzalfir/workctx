@@ -81,3 +81,18 @@ def isolated_user_config_dir(
         "A test modified the operator's real context registry; all default registry "
         "access must use isolated_user_config_dir."
     )
+
+
+@pytest.fixture(autouse=True)
+def deterministic_console_width(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the shared Rich consoles to one width on every host.
+
+    The consoles read COLUMNS once at import, so human output otherwise wraps
+    at whatever width the host terminal or CI runner reports, and phrase
+    assertions pass or fail depending on the machine.
+    """
+
+    from workctx.presentation import streams
+
+    monkeypatch.setattr(streams.output_console, "_width", 240)
+    monkeypatch.setattr(streams.error_console, "_width", 240)
