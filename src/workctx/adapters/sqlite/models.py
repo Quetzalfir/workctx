@@ -123,6 +123,7 @@ class EntityRecord:
     title: str
     aliases: tuple[str, ...]
     tags: tuple[str, ...]
+    topics: tuple[str, ...]
     status: str | None
     confidence: Confidence | None
     body: str
@@ -143,6 +144,7 @@ class EdgeRecord:
     note: str | None
     source_path: str
     ordinal: int
+    topics: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,6 +164,7 @@ class ObservationRecord:
     derived_from: tuple[str, ...]
     body: str
     source_path: str
+    topics: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +185,7 @@ class ClaimRecord:
     source_observations: tuple[WorkctxUri, ...]
     body: str
     source_path: str
+    topics: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,6 +197,7 @@ class TaskRecord:
     title: str
     aliases: tuple[str, ...]
     tags: tuple[str, ...]
+    topics: tuple[str, ...]
     confidence: Confidence | None
     task_type: TaskType
     parent_task: str | None
@@ -220,6 +225,8 @@ class TaskQuery:
     waiting_on: str | None = None
     root_task: str | None = None
     parent_task: str | None = None
+    topic: str | None = None
+    topic_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,3 +238,4 @@ class SearchHit:
     title: str
     source_path: str
     score: float
+    topics: tuple[str, ...]

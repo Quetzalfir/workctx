@@ -122,6 +122,12 @@ def test_all_live_read_tools_delegate_to_integrated_engines(
     assert tasks["count"] == 1
     assert tasks["tasks"][0]["id"] == TASK_ID
 
+    topics = _assert_success(
+        live_service.invoke("topic_list", {"schema_version": 1}),
+        "topic_list",
+    )
+    assert topics == {"topics": [], "count": 0}
+
     task = _assert_success(
         live_service.invoke("task_show", {"schema_version": 1, "task": TASK_ID}),
         "task_show",
@@ -316,6 +322,7 @@ def test_every_tool_refuses_cross_context_and_path_escape_attempts(
         "workspace_validate",
         "inbox_list",
         "audit_summary",
+        "topic_list",
         "artifact_register",
         "index_rebuild",
         "draft_save",

@@ -173,6 +173,11 @@ _SINGLE_LINE_TEXT = {
     "minLength": 1,
     "pattern": r"^[^\r\n\x00-\x1f\x7f]+$",
 }
+_TOPIC_PROPERTY = {
+    **deepcopy(_SINGLE_LINE_TEXT),
+    "maxLength": 200,
+    "description": "Active topic slug or registered alias; common material remains visible.",
+}
 
 
 TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
@@ -192,6 +197,7 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
             "query": {"type": "string", "minLength": 1, "maxLength": 2000},
             "entity_types": deepcopy(_ENTITY_TYPE_ARRAY),
             "limit": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 20},
+            "topic": {**deepcopy(_TOPIC_PROPERTY), "type": ["string", "null"]},
         },
         required=("query",),
     ),
@@ -234,6 +240,7 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
             "query": {"type": ["string", "null"], "maxLength": 2000, "default": None},
             "include_history": {"type": "boolean", "default": False},
             "include_architecture": {"type": "boolean", "default": False},
+            "topic": {**deepcopy(_TOPIC_PROPERTY), "type": ["string", "null"]},
         },
         required=("uri",),
     ),
@@ -246,7 +253,13 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
             "waiting_on": {"type": ["string", "null"], "maxLength": 2000},
             "root_task": {**deepcopy(_TASK_ID_PROPERTY), "type": ["string", "null"]},
             "parent_task": {**deepcopy(_TASK_ID_PROPERTY), "type": ["string", "null"]},
+            "topic": {**deepcopy(_TOPIC_PROPERTY), "type": ["string", "null"]},
         },
+    ),
+    _contract(
+        "topic_list",
+        "List active context-local topics, optionally including inactive entries.",
+        {"include_all": {"type": "boolean", "default": False}},
     ),
     _contract(
         "task_show",

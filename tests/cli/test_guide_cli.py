@@ -67,6 +67,11 @@ EXPECTED_ROUTING = [
         "destination": "context instructions.md; user-level instructions.md for all contexts",
         "via": "operator-reviewed suggestion",
     },
+    {
+        "kind": "durable subject",
+        "destination": "99_meta/topics.yaml",
+        "via": "workctx topic list / workctx topic review, then workctx topic add only when new",
+    },
     {"kind": "evidence", "destination": "00_inbox/", "via": "workctx inbox add"},
     {
         "kind": "task or work item",

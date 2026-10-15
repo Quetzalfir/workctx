@@ -74,7 +74,7 @@ def test_typed_frontmatter_templates_follow_canonical_model_order() -> None:
     for filename in sorted(set(FRONTMATTER_SCHEMAS) - {"claim.md"}):
         payload = _load_frontmatter(template_root / filename)
         model_type = Task if filename == "task.md" else EntityFrontmatter
-        dumped = model_type.model_validate(payload).model_dump(mode="json")
+        dumped = model_type.model_validate(payload).model_dump(mode="json", exclude_unset=True)
 
         assert payload == dumped
         assert list(payload) == list(dumped)

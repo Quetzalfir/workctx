@@ -74,4 +74,6 @@ class ProjectionReader(Protocol):
         *,
         entity_types: frozenset[EntityType] | None = None,
         limit: int = 20,
+        topic: str | None = None,
+        topic_only: bool = False,
     ) -> tuple[SearchHit, ...]: ...

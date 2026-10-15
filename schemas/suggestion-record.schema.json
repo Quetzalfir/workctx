@@ -81,6 +81,17 @@
       },
       "uniqueItems": true
     },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "uniqueItems": true,
+      "description": "Optional durable-subject facets. Absent or empty means the shared common layer."
+    },
     "references": {
       "type": "array",
       "items": {

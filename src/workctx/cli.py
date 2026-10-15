@@ -28,11 +28,13 @@ if TYPE_CHECKING:
     from workctx.adapters.filesystem.registry import ContextInventoryEntry
     from workctx.adapters.sqlite import SearchHit, SQLiteProjection, TaskRecord
     from workctx.connectors import SyncResult
+    from workctx.domain import Topic
     from workctx.domain.transactions import AuditEvent, TransactionProposal
     from workctx.drafting import SendPreview, SendResult
     from workctx.ingestion import ArtifactRecord, IngestionService, RegistrationResult
     from workctx.retrieval.records import ResolutionResult
     from workctx.suggestions import SuggestionDocument, SuggestionMutationResult
+    from workctx.topics import TopicMutationResult, TopicReviewCandidate
     from workctx.transactions.models import DryRunResult, TransactionDiagnostic
     from workctx.usage import UsageCandidate
     from workctx.usage.suggestions import UsageSuggestionResult
@@ -101,6 +103,8 @@ transaction_app = typer.Typer(help="Preview, apply, and inspect canonical transa
 app.add_typer(transaction_app, name="transaction")
 task_app = typer.Typer(help="Query projected canonical tasks.")
 app.add_typer(task_app, name="task")
+topic_app = typer.Typer(help="Manage context-local durable-subject topics.")
+app.add_typer(topic_app, name="topic")
 suggestion_app = typer.Typer(help="Inspect and review canonical suggestion records.")
 app.add_typer(suggestion_app, name="suggestion")
 usage_app = typer.Typer(help="Inspect opt-in local usage signals and create advisory records.")
@@ -1919,8 +1923,203 @@ def artifact_verify(
         output_console.print(Text(f"{artifact.manifest.id}: content hash matches."))
 
 
+@topic_app.command("list")
+def topic_list(
+    include_all: Annotated[
+        bool,
+        typer.Option("--all", help="Include archived and merged registry entries."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List active topics, or every lifecycle state with --all."""
+
+    from workctx.topics import list_topics
+
+    begin_command("topic.list", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    topics = list_topics(root, include_all=include_all)
+    result: dict[str, JsonValue] = {
+        "count": len(topics),
+        "topics": [_topic_payload(topic) for topic in topics],
+    }
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        for topic in topics:
+            output_console.print(Text(f"{topic.slug} [{topic.status.value}]: {topic.name}"))
+        if not topics:
+            output_console.print(Text("No topics are registered."))
+
+
+@topic_app.command("add")
+def topic_add(
+    name: Annotated[str, typer.Argument(help="Durable subject display name.")],
+    scope: Annotated[str, typer.Option("--scope", help="One-line subject scope.")],
+    slug: Annotated[
+        str | None,
+        typer.Option("--slug", help="Explicit kebab-case slug; defaults from the name."),
+    ] = None,
+    aliases: Annotated[
+        list[str] | None,
+        typer.Option("--alias", help="Alternate spelling; repeatable."),
+    ] = None,
+    distinct_from: Annotated[
+        str | None,
+        typer.Option("--distinct-from", help="Reviewed guard match that is truly distinct."),
+    ] = None,
+    reason: Annotated[
+        str | None,
+        typer.Option("--reason", help="Why the matched topics are distinct subjects."),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve the audited local topic mutation."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Propose or apply creation of one guarded durable-subject topic."""
+
+    from workctx.topics import add_topic
+
+    begin_command("topic.add", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    mutation = add_topic(
+        root,
+        name,
+        scope=scope,
+        slug=slug,
+        aliases=() if aliases is None else aliases,
+        distinct_from=distinct_from,
+        reason=reason,
+        approved=yes,
+    )
+    _complete_topic_mutation(
+        mutation,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
+
+
+@topic_app.command("alias")
+def topic_alias(
+    slug: Annotated[str, typer.Argument(help="Active canonical topic slug.")],
+    alias: Annotated[str, typer.Argument(help="Alternate spelling to register.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve the audited local topic mutation."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Propose or apply one alias addition to an active topic."""
+
+    from workctx.topics import add_topic_alias
+
+    begin_command("topic.alias", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    mutation = add_topic_alias(root, slug, alias, approved=yes)
+    _complete_topic_mutation(
+        mutation,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
+
+
+@topic_app.command("merge")
+def topic_merge(
+    source: Annotated[str, typer.Argument(help="Active duplicate topic slug.")],
+    target: Annotated[str, typer.Argument(help="Active canonical destination slug.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Approve registry update and atomic document retagging."),
+    ] = False,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Propose or atomically apply a topic merge and every affected retag."""
+
+    from workctx.topics import merge_topics
+
+    begin_command("topic.merge", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    mutation = merge_topics(root, source, target, approved=yes)
+    _complete_topic_mutation(
+        mutation,
+        context_id=load_context_config(root).id,
+        json_output=json_output,
+    )
+
+
+@topic_app.command("review")
+def topic_review(
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """List deterministic name-similarity and co-reference merge candidates."""
+
+    from workctx.topics import review_topics
+
+    begin_command("topic.review", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    candidates = review_topics(root)
+    result: dict[str, JsonValue] = {
+        "count": len(candidates),
+        "candidates": [_topic_review_payload(candidate) for candidate in candidates],
+    }
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+    else:
+        for candidate in candidates:
+            rule = "co-reference" if candidate.name_rule is None else candidate.name_rule.value
+            output_console.print(
+                Text(
+                    f"{candidate.left_slug} <> {candidate.right_slug}: {rule}; "
+                    f"Jaccard {candidate.co_reference_jaccard:.3f}"
+                )
+            )
+        if not candidates:
+            output_console.print(Text("No topic merge candidates found."))
+
+
 @app.command("brief")
 def brief_command(
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Scope to this active topic slug or alias."),
+    ] = None,
+    topic_only: Annotated[
+        bool,
+        typer.Option("--topic-only", help="Exclude the untagged common layer."),
+    ] = False,
     context_path: Annotated[
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
@@ -1935,7 +2134,8 @@ def brief_command(
     from workctx.views import brief
 
     root = resolve_cli_context(explicit_path=context_path)
-    payload = brief(root)
+    selected_topic = _resolve_topic_filter(root, topic, topic_only=topic_only)
+    payload = brief(root, topic=selected_topic, topic_only=topic_only)
     result = cast("dict[str, JsonValue]", payload.model_dump(mode="json"))
     if json_output:
         emit_success(result=result, context_id=payload.context_id)
@@ -2293,6 +2493,14 @@ def context_pack(
     include_architecture: Annotated[
         bool, typer.Option("--architecture", help="Include one-hop architecture entities.")
     ] = False,
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Scope to this active topic slug or alias."),
+    ] = None,
+    topic_only: Annotated[
+        bool,
+        typer.Option("--topic-only", help="Exclude the untagged common layer."),
+    ] = False,
     context_path: Annotated[
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
@@ -2308,6 +2516,11 @@ def context_pack(
 
     begin_command("context-pack", json_output=json_output)
     reader = _projection_reader(context_path)
+    selected_topic = _resolve_topic_filter(
+        reader.context_root,
+        topic,
+        topic_only=topic_only,
+    )
     outcome = _retrieval_call(
         lambda: build_pack(
             reader,
@@ -2316,6 +2529,8 @@ def context_pack(
             query=query,
             include_history=include_history,
             include_architecture=include_architecture,
+            topic=selected_topic,
+            topic_only=topic_only,
         )
     )
     if not outcome.built or outcome.pack is None:
@@ -2353,6 +2568,14 @@ def search_command(
     limit: Annotated[
         int, typer.Option("--limit", min=1, max=1000, help="Maximum result count.")
     ] = 20,
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Scope to this active topic slug or alias."),
+    ] = None,
+    topic_only: Annotated[
+        bool,
+        typer.Option("--topic-only", help="Exclude the untagged common layer."),
+    ] = False,
     context_path: Annotated[
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
@@ -2367,16 +2590,21 @@ def search_command(
     begin_command("search", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
     projection = SQLiteProjection(root)
+    selected_topic = _resolve_topic_filter(root, topic, topic_only=topic_only)
     try:
         hits = projection.search(
             query,
             entity_types=(None if entity_types is None else frozenset(entity_types)),
             limit=limit,
+            topic=selected_topic,
+            topic_only=topic_only,
         )
     except ValueError as exc:
         raise UserCorrectableError(sanitize_message(str(exc))) from exc
     result: dict[str, JsonValue] = {
         "query": query,
+        "topic": selected_topic,
+        "topic_only": topic_only,
         "count": len(hits),
         "hits": [_search_hit_payload(hit) for hit in hits],
     }
@@ -2395,6 +2623,14 @@ def task_list(
     waiting_on: Annotated[
         str | None, typer.Option("--waiting-on", help="Restrict to one waiting-on value.")
     ] = None,
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Scope to this active topic slug or alias."),
+    ] = None,
+    topic_only: Annotated[
+        bool,
+        typer.Option("--topic-only", help="Exclude the untagged common layer."),
+    ] = False,
     context_path: Annotated[
         Path | None,
         typer.Option("--context", help="Explicit context path; overrides path discovery."),
@@ -2409,15 +2645,20 @@ def task_list(
     begin_command("task.list", json_output=json_output)
     root = resolve_cli_context(explicit_path=context_path)
     projection = SQLiteProjection(root)
+    selected_topic = _resolve_topic_filter(root, topic, topic_only=topic_only)
     query = TaskQuery(
         statuses=None if statuses is None else frozenset(statuses),
         waiting_on=waiting_on,
+        topic=selected_topic,
+        topic_only=topic_only,
     )
     try:
         tasks = projection.query_tasks(query)
     except ValueError as exc:
         raise UserCorrectableError(sanitize_message(str(exc))) from exc
     result: dict[str, JsonValue] = {
+        "topic": selected_topic,
+        "topic_only": topic_only,
         "count": len(tasks),
         "tasks": [_task_summary_payload(task) for task in tasks],
     }
@@ -3388,6 +3629,7 @@ def _search_hit_payload(hit: SearchHit) -> dict[str, JsonValue]:
         "title": hit.title,
         "source_path": hit.source_path,
         "score": hit.score,
+        "topics": list(hit.topics),
     }
 
 
@@ -3405,6 +3647,7 @@ def _task_summary_payload(task: TaskRecord) -> dict[str, JsonValue]:
         "next_action": task.next_action,
         "parent_task": task.parent_task,
         "root_task": task.root_task,
+        "topics": list(task.topics),
     }
 
 
@@ -3424,6 +3667,83 @@ def _task_payload(task: TaskRecord) -> dict[str, JsonValue]:
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat(),
     }
+
+
+def _resolve_topic_filter(root: Path, value: str | None, *, topic_only: bool) -> str | None:
+    if value is None:
+        if topic_only:
+            raise UserCorrectableError("--topic-only requires --topic <slug-or-alias>.")
+        return None
+    from workctx.topics import resolve_topic
+
+    return resolve_topic(root, value).slug
+
+
+def _topic_payload(topic: Topic) -> dict[str, JsonValue]:
+    return cast("dict[str, JsonValue]", topic.model_dump(mode="json"))
+
+
+def _topic_review_payload(candidate: TopicReviewCandidate) -> dict[str, JsonValue]:
+    return {
+        "left_slug": candidate.left_slug,
+        "right_slug": candidate.right_slug,
+        "name_rule": None if candidate.name_rule is None else candidate.name_rule.value,
+        "normalized_distance": candidate.normalized_distance,
+        "shared_documents": candidate.shared_documents,
+        "union_documents": candidate.union_documents,
+        "co_reference_jaccard": candidate.co_reference_jaccard,
+    }
+
+
+def _complete_topic_mutation(
+    mutation: TopicMutationResult,
+    *,
+    context_id: str,
+    json_output: bool,
+) -> None:
+    result: dict[str, JsonValue] = {
+        "action": mutation.action,
+        "changed": mutation.changed,
+        "applied": mutation.applied,
+        "topic": _topic_payload(mutation.topic),
+        "proposal_id": mutation.proposal_id,
+    }
+    warnings: list[CliDiagnostic] = []
+    if mutation.preview is not None:
+        result["preview"] = cast(
+            "dict[str, JsonValue]",
+            mutation.preview.model_dump(mode="json"),
+        )
+        warnings, _errors = _transaction_cli_diagnostics(mutation.preview.diagnostics)
+    if mutation.receipt is not None:
+        result["receipt"] = cast(
+            "dict[str, JsonValue]",
+            mutation.receipt.model_dump(mode="json"),
+        )
+        receipt_warnings, _errors = _transaction_cli_diagnostics(mutation.receipt.diagnostics)
+        warnings.extend(receipt_warnings)
+        if mutation.receipt.projection.state.value == "stale":
+            warnings.append(
+                CliDiagnostic(
+                    code=(mutation.receipt.projection.diagnostic_code or "TXN-PROJECTION-STALE"),
+                    message="The topic mutation committed but its derived projection is stale.",
+                )
+            )
+    if json_output:
+        emit_success(result=result, context_id=context_id, warnings=warnings)
+        return
+    if not mutation.changed:
+        output_console.print(Text(f"Topic {mutation.topic.slug} is unchanged."))
+    elif mutation.receipt is not None:
+        output_console.print(
+            Text(
+                f"Applied topic {mutation.action} for {mutation.topic.slug}; "
+                f"ledger event {mutation.receipt.ledger_event_id}."
+            )
+        )
+    elif mutation.preview is not None:
+        _render_transaction_preview(mutation.preview)
+        output_console.print(Text("Re-run with --yes to approve this local mutation."))
 
 
 def _outbox_preview_payload(preview: SendPreview) -> dict[str, JsonValue]:

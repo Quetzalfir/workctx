@@ -44,6 +44,9 @@ working directories.
 | `TASK-HIERARCHY` | error | The task corpus violates parent, root, uniqueness, or context rules. | Restore the parent or correct the task type, IDs, parent, root, and context. |
 | `TASK-RELATION-CYCLE` | error | Normalized `blocks` and `depends_on` precedence relations form a cycle. | Remove or reverse a contradictory relation so prerequisites are acyclic. |
 | `TASK-RELATION-TARGET` | error | A `blocks` or `depends_on` relation points to something other than a task. | Use a canonical task ID or `workctx://` task URI. |
+| `TOPIC-REGISTRY` | error | `99_meta/topics.yaml` is unreadable or violates registry integrity, such as duplicate slugs or aliases or a dangling merge target. | Repair the registry so slugs and aliases are unique and every merged topic points to an active topic. |
+| `TOPIC-UNKNOWN` | error | A canonical document names a topic value that is neither an active slug nor an alias of an active topic. | Register the durable subject or retag the document with an existing active topic slug or alias. |
+| `TOPIC-MERGED` | warning | A canonical document still names a merged topic slug. | Retag the document with the reported active `merged_into` slug. |
 | `CLAIM-INTERVAL` | error | A claim interval is empty or ends before it starts. | Set `valid_to` after `valid_from`, or leave the appropriate bound open. |
 | `CLAIM-CURRENT-OVERLAP` | error | Current claims for one subject and predicate overlap in time. | Close or supersede the older interval so one current value applies at a time. |
 | `CLAIM-SUPERSESSION-MISSING` | error | A supersession ID has no canonical claim target. | Restore the referenced claim or correct the supersession ID. |

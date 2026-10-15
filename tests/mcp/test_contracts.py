@@ -17,7 +17,7 @@ from .support import ALL_TOOL_NAMES, MUTATION_TOOL_NAMES, READ_TOOL_NAMES
 EXPECTED_PROPERTIES = {
     "context_info": {"schema_version"},
     "workspace_validate": {"schema_version", "strict"},
-    "search": {"schema_version", "query", "entity_types", "limit"},
+    "search": {"schema_version", "query", "entity_types", "limit", "topic"},
     "ref_show": {"schema_version", "uri"},
     "ref_related": {"schema_version", "uri", "direction", "depth", "relations"},
     "ref_trace": {"schema_version", "uri", "include_history"},
@@ -28,6 +28,7 @@ EXPECTED_PROPERTIES = {
         "query",
         "include_history",
         "include_architecture",
+        "topic",
     },
     "task_list": {
         "schema_version",
@@ -36,7 +37,9 @@ EXPECTED_PROPERTIES = {
         "waiting_on",
         "root_task",
         "parent_task",
+        "topic",
     },
+    "topic_list": {"schema_version", "include_all"},
     "task_show": {"schema_version", "task"},
     "inbox_list": {"schema_version"},
     "audit_summary": {"schema_version"},
@@ -83,6 +86,7 @@ EXPECTED_REQUIRED = {
     "ref_trace": {"schema_version", "uri"},
     "context_pack": {"schema_version", "uri"},
     "task_list": {"schema_version"},
+    "topic_list": {"schema_version"},
     "task_show": {"schema_version", "task"},
     "inbox_list": {"schema_version"},
     "audit_summary": {"schema_version"},
@@ -108,8 +112,8 @@ EXPECTED_REQUIRED = {
 
 def test_discovery_contract_is_exactly_the_adr_0012_surface_in_order() -> None:
     assert tuple(contract.name for contract in TOOL_CONTRACTS) == ALL_TOOL_NAMES
-    assert len(TOOL_CONTRACTS) == 17
-    assert sum(not contract.mutation for contract in TOOL_CONTRACTS) == 11
+    assert len(TOOL_CONTRACTS) == 18
+    assert sum(not contract.mutation for contract in TOOL_CONTRACTS) == 12
     assert sum(contract.mutation for contract in TOOL_CONTRACTS) == 6
     assert tuple(contract.name for contract in TOOL_CONTRACTS if not contract.mutation) == (
         READ_TOOL_NAMES

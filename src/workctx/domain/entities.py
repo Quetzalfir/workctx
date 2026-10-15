@@ -14,6 +14,7 @@ from pydantic import (
 )
 
 from workctx.domain.references import WorkctxUri
+from workctx.domain.topics import TopicSlug
 
 EntityType = Literal[
     "evidence",
@@ -119,6 +120,7 @@ class EntityFrontmatter(BaseModel):
     status: str | None = None
     confidence: ConfidenceLevel | None = None
     tags: list[str] = Field(default_factory=list)
+    topics: list[TopicSlug] = Field(default_factory=list, exclude_if=lambda value: not value)
     references: list[_ReferencePayload] = Field(default_factory=list)
     created_at: AwareDatetime
     updated_at: AwareDatetime
@@ -149,7 +151,7 @@ class EntityFrontmatter(BaseModel):
         except ValueError as exc:
             raise ValueError("uri must be a valid workctx:// URI") from exc
 
-    @field_validator("aliases", "tags")
+    @field_validator("aliases", "tags", "topics")
     @classmethod
     def _require_unique_values(cls, value: list[str]) -> list[str]:
         if len(value) != len(set(value)):

@@ -55,6 +55,7 @@ def create_server(context_root: Path) -> Server[None]:
                             "ref_trace",
                             "context_pack",
                             "task_list",
+                            "topic_list",
                             "task_show",
                             "inbox_list",
                             "audit_summary",

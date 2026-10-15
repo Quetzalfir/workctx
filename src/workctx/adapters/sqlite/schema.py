@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-PROJECTION_SCHEMA_VERSION = 1
+PROJECTION_SCHEMA_VERSION = 2
 
 _SCHEMA_SQL = """
 CREATE TABLE projection_metadata (
@@ -55,6 +55,15 @@ CREATE TABLE entity_tags (
     PRIMARY KEY (context_id, entity_id, position),
     UNIQUE (context_id, entity_id, tag),
     FOREIGN KEY (context_id, entity_id) REFERENCES entities(context_id, id) ON DELETE CASCADE
+);
+
+CREATE TABLE document_topics (
+    context_id TEXT NOT NULL,
+    source_path TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    topic TEXT NOT NULL,
+    PRIMARY KEY (context_id, source_path, position),
+    UNIQUE (context_id, source_path, topic)
 );
 
 CREATE TABLE edges (
@@ -246,12 +255,14 @@ CREATE INDEX claims_by_supersedes ON claims(context_id, supersedes);
 CREATE INDEX tasks_by_state ON tasks(context_id, status, priority, id);
 CREATE INDEX tasks_by_root ON tasks(context_id, root_task, parent_task, id);
 CREATE INDEX task_waiting_by_value ON task_waiting_on(context_id, value, task_id);
+CREATE INDEX document_topics_by_topic ON document_topics(context_id, topic, source_path);
 """
 
 _CONTEXT_GUARDED_TABLES = (
     "entities",
     "aliases",
     "entity_tags",
+    "document_topics",
     "edges",
     "observations",
     "observation_derivations",
@@ -271,6 +282,7 @@ _REQUIRED_TABLES = frozenset(
         "entities",
         "aliases",
         "entity_tags",
+        "document_topics",
         "edges",
         "edge_source_observations",
         "observations",
@@ -298,6 +310,7 @@ _REQUIRED_INDEXES = frozenset(
         "tasks_by_state",
         "tasks_by_root",
         "task_waiting_by_value",
+        "document_topics_by_topic",
     }
 )
 _REQUIRED_TRIGGERS = frozenset(
@@ -341,7 +354,7 @@ def create_schema(connection: sqlite3.Connection) -> None:
 
 
 def schema_is_compatible(connection: sqlite3.Connection) -> bool:
-    """Return whether all version-1 query and isolation objects are present."""
+    """Return whether all current query and isolation objects are present."""
 
     objects = {
         (str(row[0]), str(row[1]))

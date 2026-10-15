@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://workctx.dev/schemas/topic-registry.schema.json",
+  "title": "Canonical topic registry",
+  "description": "Context-local durable-subject registry. Producer invariants enforced by the TopicRegistry model and workspace validator: slugs and normalized aliases are globally unique; an alias cannot equal another slug except when that slug is merged into the alias owner; merged_into targets and distinct_from slugs exist; merged_into identifies an active topic.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "topics"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/topic"
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "singleLine": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\r\\n\\u0000-\\u001f\\u007f]+$"
+    },
+    "distinction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slug",
+        "reason"
+      ],
+      "properties": {
+        "slug": {
+          "$ref": "#/$defs/slug"
+        },
+        "reason": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/singleLine"
+            },
+            {
+              "maxLength": 1000
+            }
+          ]
+        }
+      }
+    },
+    "topic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slug",
+        "name",
+        "scope",
+        "aliases",
+        "status",
+        "created_at"
+      ],
+      "properties": {
+        "slug": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/singleLine"
+            },
+            {
+              "maxLength": 200
+            }
+          ]
+        },
+        "scope": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/singleLine"
+            },
+            {
+              "maxLength": 500
+            }
+          ]
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/singleLine"
+          },
+          "uniqueItems": true
+        },
+        "status": {
+          "enum": [
+            "active",
+            "merged",
+            "archived"
+          ]
+        },
+        "merged_into": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/slug"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "distinct_from": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/distinction"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "merged"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "merged_into"
+            ],
+            "properties": {
+              "merged_into": {
+                "$ref": "#/$defs/slug"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "merged_into": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

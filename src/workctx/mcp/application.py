@@ -60,6 +60,7 @@ from workctx.retrieval import (
     serialize_context_pack,
     trace,
 )
+from workctx.topics import list_topics, resolve_topic
 from workctx.transactions import (
     LedgerIntegrityError,
     PostconditionRollbackError,
@@ -112,6 +113,7 @@ class McpToolService:
             "ref_trace": self._ref_trace,
             "context_pack": self._context_pack,
             "task_list": self._task_list,
+            "topic_list": self._topic_list,
             "task_show": self._task_show,
             "inbox_list": self._inbox_list,
             "audit_summary": self._audit_summary,
@@ -319,12 +321,17 @@ class McpToolService:
             if raw_types is None
             else frozenset(EntityType(entity_type) for entity_type in raw_types)
         )
+        topic = self._resolved_topic(arguments)
         hits = self._projection().search(
             cast(str, arguments["query"]),
             entity_types=entity_types,
             limit=cast(int, arguments.get("limit", 20)),
+            topic=topic,
         )
-        return self._success("search", {"hits": hits, "count": len(hits)})
+        return self._success(
+            "search",
+            {"hits": hits, "count": len(hits), "topic": topic},
+        )
 
     def _ref_show(self, arguments: dict[str, Any]) -> ToolResponse:
         outcome = resolve(self._projection(), cast(str, arguments["uri"]))
@@ -370,6 +377,7 @@ class McpToolService:
         return self._success("ref_trace", {"trace": outcome})
 
     def _context_pack(self, arguments: dict[str, Any]) -> ToolResponse:
+        topic = self._resolved_topic(arguments)
         outcome = build_pack(
             self._projection(),
             cast(str, arguments["uri"]),
@@ -377,6 +385,7 @@ class McpToolService:
             query=cast(str | None, arguments.get("query")),
             include_history=cast(bool, arguments.get("include_history", False)),
             include_architecture=cast(bool, arguments.get("include_architecture", False)),
+            topic=topic,
         )
         if not outcome.built or outcome.pack is None:
             return self._failure(
@@ -391,10 +400,11 @@ class McpToolService:
         payload = json.loads(serialize_context_pack(outcome.pack))
         if not isinstance(payload, dict):  # pragma: no cover - ContextPack contract
             raise TypeError("Context pack serialization must produce an object")
-        return self._success("context_pack", {"pack": payload})
+        return self._success("context_pack", {"pack": payload, "topic": topic})
 
     def _task_list(self, arguments: dict[str, Any]) -> ToolResponse:
         statuses = cast(list[str] | None, arguments.get("statuses"))
+        topic = self._resolved_topic(arguments)
         query = TaskQuery(
             statuses=(
                 None if statuses is None else frozenset(TaskStatus(status) for status in statuses)
@@ -403,9 +413,26 @@ class McpToolService:
             waiting_on=cast(str | None, arguments.get("waiting_on")),
             root_task=cast(str | None, arguments.get("root_task")),
             parent_task=cast(str | None, arguments.get("parent_task")),
+            topic=topic,
         )
         tasks = self._projection().query_tasks(query)
-        return self._success("task_list", {"tasks": tasks, "count": len(tasks)})
+        return self._success(
+            "task_list",
+            {"tasks": tasks, "count": len(tasks), "topic": topic},
+        )
+
+    def _topic_list(self, arguments: dict[str, Any]) -> ToolResponse:
+        topics = list_topics(
+            self._root,
+            include_all=cast(bool, arguments.get("include_all", False)),
+        )
+        return self._success("topic_list", {"topics": topics, "count": len(topics)})
+
+    def _resolved_topic(self, arguments: Mapping[str, object]) -> str | None:
+        value = arguments.get("topic")
+        if value is None:
+            return None
+        return resolve_topic(self._root, cast(str, value)).slug
 
     def _task_show(self, arguments: dict[str, Any]) -> ToolResponse:
         task = cast(str, arguments["task"])
