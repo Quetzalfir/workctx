@@ -161,8 +161,16 @@ GUIDE = GuideDefinition(
             "04_views/",
             OwnershipClass.GENERATED,
             EditPolicy.NEVER_EDIT_BY_HAND,
-            "Rebuildable views derived from canonical context; never the only copy.",
-            ("workctx view rebuild",),
+            "Rebuildable views derived from canonical context; never the only copy. Graph "
+            "exports are regenerated explicitly.",
+            ("workctx view rebuild", "workctx graph export"),
+        ),
+        OwnershipEntry(
+            "04_views/graph/",
+            OwnershipClass.GENERATED,
+            EditPolicy.NEVER_EDIT_BY_HAND,
+            "Two fully generated, read-only Obsidian vaults for topic and reference maps.",
+            ("workctx graph export",),
         ),
         OwnershipEntry(
             "05_outbox/",
@@ -354,7 +362,12 @@ GUIDE = GuideDefinition(
         NeverEditEntry(
             "04_views/",
             "generated operational views",
-            ("workctx view rebuild",),
+            ("workctx view rebuild", "workctx graph export"),
+        ),
+        NeverEditEntry(
+            "04_views/graph/",
+            "fully replaced topic and reference graph vaults",
+            ("workctx graph export",),
         ),
         NeverEditEntry(
             ".claude/skills/ and .gemini/skills/",
