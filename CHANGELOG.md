@@ -2,6 +2,38 @@
 
 All notable changes will be documented here.
 
+## 0.3.0-alpha - 2026-10-14
+
+Hardening release from daily use. See
+[`docs/releases/0.3.0-alpha.md`](docs/releases/0.3.0-alpha.md). The
+workspace schema is unchanged.
+
+### Added
+
+- `workctx agent refresh --all`, `agent forget`, register-on-use, pristine
+  skill/bridge/registry freshness with three-way merge surfacing, and
+  first-class `custom_skills:`.
+- `workctx guide` placement and ownership map; orient-first and ask-once
+  agent rules; exact commands named in every packaged skill.
+- `working_dirs` in `context.yaml`, `context refresh-meta`, and
+  `--acknowledge-possible-secret` for confirmed false positives.
+- `workctx doctor` app-container virtualization check;
+  `WORKCTX_SECRET_INDEX` and `WORKCTX_CONTEXT_REGISTRY` overrides.
+
+### Changed
+
+- Transactions are gated only by errors on written files or newly
+  introduced errors; strict escalation applies only to written files.
+- Secret and absolute-path findings report line numbers and pattern kinds;
+  proposal rejections report field-level detail.
+- Outbound messages use the operator's first person, a concise natural
+  voice, and the target conversation's language.
+
+### Fixed
+
+- Bridges created from older context templates heal to generated ownership.
+- The secret names index no longer diverges silently inside app containers.
+
 ## 0.2.0-alpha - 2026-08-06
 
 Second alpha: the complete Phase 2 (operational intelligence) and Phase 3
