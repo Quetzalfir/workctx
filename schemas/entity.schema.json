@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://workctx.dev/schemas/entity.schema.json",
   "title": "Canonical entity metadata",
+  "description": "Canonical entity metadata. Producer invariant: each topics value is a unique kebab-case slug that must resolve through 99_meta/topics.yaml to an active topic slug or an alias of an active topic; JSON Schema cannot perform that registry lookup.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -84,6 +85,17 @@
         "type": "string"
       },
       "uniqueItems": true
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "minLength": 1,
+        "maxLength": 100
+      },
+      "uniqueItems": true,
+      "description": "Optional durable-subject facets. Absent or empty means the shared common layer. Producer invariant: values resolve to active registry slugs or aliases."
     },
     "references": {
       "type": "array",

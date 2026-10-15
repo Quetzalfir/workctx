@@ -34,6 +34,8 @@ from workctx.domain import (
     StableId,
     SystemId,
     Task,
+    TopicRegistry,
+    TopicStatus,
     WorkctxUri,
     normalize_workctx_uri,
     parse_durable_reference,
@@ -251,6 +253,10 @@ class WorkspaceValidator:
         self._tasks: dict[str, _ModelRecord] = {}
         self._claims: dict[str, _ModelRecord] = {}
         self._canonical_edges: set[CanonicalEdge] = set()
+        self._topic_registry: TopicRegistry | None = TopicRegistry(
+            schema_version=1,
+            topics=[],
+        )
 
     def validate(self) -> ValidationReport:
         self._check_required_directories()
@@ -258,7 +264,9 @@ class WorkspaceValidator:
         self._load_context_config()
         self._check_workspace_text_content()
         self._check_packaged_meta_schemas()
+        self._load_topic_registry()
         self._load_canonical_documents()
+        self._check_document_topics()
         self._build_identity_index()
         if self._report.context_id is not None:
             self._check_references()
@@ -276,6 +284,7 @@ class WorkspaceValidator:
         message: str | None = None,
         *,
         severity: Severity | None = None,
+        repair_action: str | None = None,
     ) -> None:
         definition = DIAGNOSTIC_DEFINITIONS[code]
         self._report.issues.append(
@@ -284,7 +293,7 @@ class WorkspaceValidator:
                 code=code,
                 message=message or definition.cause,
                 path=path,
-                repair_action=definition.repair_action,
+                repair_action=repair_action or definition.repair_action,
             )
         )
 
@@ -515,6 +524,57 @@ class WorkspaceValidator:
                         path=schema.relative_path,
                         repair_action=REFRESH_META_REPAIR_ACTION,
                     )
+                )
+
+    def _load_topic_registry(self) -> None:
+        relative = "99_meta/topics.yaml"
+        path = self._root / "99_meta" / "topics.yaml"
+        overlay = self._overlay_files.get(relative.casefold())
+        if overlay is not None and overlay[1] is None:
+            self._topic_registry = TopicRegistry(schema_version=1, topics=[])
+            return
+        content = self._texts.get(path)
+        if content is None:
+            if overlay is None and not path.exists():
+                self._topic_registry = TopicRegistry(schema_version=1, topics=[])
+                return
+            self._topic_registry = None
+            self._add("TOPIC-REGISTRY", relative)
+            return
+        try:
+            loaded: Any = yaml.safe_load(content)
+            if not isinstance(loaded, dict) or _contains_container_cycle(loaded):
+                raise ValueError("topic registry must contain an acyclic mapping")
+            self._topic_registry = TopicRegistry.model_validate(loaded)
+        except (RecursionError, TypeError, ValueError, ValidationError, yaml.YAMLError):
+            self._topic_registry = None
+            self._add("TOPIC-REGISTRY", relative)
+
+    def _check_document_topics(self) -> None:
+        registry = self._topic_registry
+        if registry is None:
+            return
+        for record in self._records:
+            if record.nested or not isinstance(record.model, EntityFrontmatter):
+                continue
+            for value in record.model.topics:
+                exact = registry.get(value)
+                if exact is not None and exact.status is TopicStatus.MERGED:
+                    target = exact.merged_into or "an active topic"
+                    self._add(
+                        "TOPIC-MERGED",
+                        record.document.relative_path,
+                        f"Topic {value!r} was merged into {target!r}.",
+                        repair_action=f"Retag {value!r} to {target!r}.",
+                    )
+                    continue
+                resolution = registry.resolve(value)
+                if resolution is not None:
+                    continue
+                self._add(
+                    "TOPIC-UNKNOWN",
+                    record.document.relative_path,
+                    f"Topic {value!r} does not resolve to an active slug or alias.",
                 )
 
     def _load_canonical_documents(self) -> None:

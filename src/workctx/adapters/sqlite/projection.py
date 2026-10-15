@@ -63,6 +63,7 @@ from workctx.domain import (
     TaskPriority,
     TaskStatus,
     TaskType,
+    TopicRegistry,
     TypedReference,
     WorkctxUri,
     parse_durable_reference,
@@ -90,6 +91,13 @@ def projection_database_path(context_root: Path) -> Path:
 _REPLACE_ATTEMPTS = 100
 _REPLACE_RETRY_SECONDS = 0.01
 _LIVE_SIDECAR_SUFFIXES = ("-journal", "-wal", "-shm")
+
+
+def _is_link_or_junction(path: Path) -> bool:
+    try:
+        return path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
+    except OSError:
+        return True
 
 
 class _ReaderSwapGate:
@@ -366,6 +374,8 @@ class SQLiteProjection:
         self,
         *,
         entity_types: frozenset[EntityType] | None = None,
+        topic: str | None = None,
+        topic_only: bool = False,
     ) -> tuple[EntityRecord, ...]:
         """Return entities, optionally filtered by type, ordered by (entity_type, id)."""
 
@@ -377,13 +387,19 @@ class SQLiteProjection:
             values = sorted(entity_type.value for entity_type in entity_types)
             type_clause = f" AND entity_type IN ({_placeholders(len(values))})"
             parameters.extend(values)
+        topic_clause = self._topic_scope_clause(
+            "entities.source_path",
+            topic=topic,
+            topic_only=topic_only,
+            parameters=parameters,
+        )
         self.ensure_ready()
         try:
             with self._reader_connection() as connection:
                 rows = connection.execute(
                     f"""
                     SELECT * FROM entities
-                    WHERE context_id = ?{type_clause}
+                    WHERE context_id = ?{type_clause}{topic_clause}
                     ORDER BY entity_type, id
                     """,
                     parameters,
@@ -603,6 +619,15 @@ class SQLiteProjection:
                 """
             )
             parameters.append(query.waiting_on)
+        if query.topic is not None or query.topic_only:
+            clauses.append(
+                self._topic_scope_predicate(
+                    "entities.source_path",
+                    topic=query.topic,
+                    topic_only=query.topic_only,
+                    parameters=parameters,
+                )
+            )
         self.ensure_ready()
         try:
             with self._reader_connection() as connection:
@@ -630,6 +655,8 @@ class SQLiteProjection:
         *,
         entity_types: frozenset[EntityType] | None = None,
         limit: int = 20,
+        topic: str | None = None,
+        topic_only: bool = False,
     ) -> tuple[SearchHit, ...]:
         if not 1 <= limit <= 1000:
             raise ValueError("limit must be between 1 and 1000")
@@ -642,6 +669,12 @@ class SQLiteProjection:
             values = sorted(entity_type.value for entity_type in entity_types)
             type_clause = f" AND documents.entity_type IN ({_placeholders(len(values))})"
             parameters.extend(values)
+        topic_clause = self._topic_scope_clause(
+            "documents.source_path",
+            topic=topic,
+            topic_only=topic_only,
+            parameters=parameters,
+        )
         parameters.append(limit)
         self.ensure_ready()
         try:
@@ -660,28 +693,33 @@ class SQLiteProjection:
                     JOIN search_documents AS documents
                       ON documents.rowid = search_fts.rowid
                     WHERE search_fts MATCH ?
-                      AND documents.context_id = ?{type_clause}
+                      AND documents.context_id = ?{type_clause}{topic_clause}
                     ORDER BY rank, documents.record_kind, documents.record_id
                     LIMIT ?
                     """,
                     parameters,
                 ).fetchall()
+                hits = tuple(
+                    SearchHit(
+                        id=cast(str, row["record_id"]),
+                        uri=WorkctxUri.parse(cast(str, row["uri"])),
+                        record_kind=SearchRecordKind(cast(str, row["record_kind"])),
+                        entity_type=EntityType(cast(str, row["entity_type"])),
+                        title=cast(str, row["title"]),
+                        source_path=cast(str, row["source_path"]),
+                        score=-float(row["rank"]),
+                        topics=self._document_topics(
+                            connection,
+                            cast(str, row["source_path"]),
+                        ),
+                    )
+                    for row in rows
+                )
         except sqlite3.Error as exc:
             raise ProjectionQueryError("Full-text search failed") from exc
         if self._usage_enabled:
             usage.record(self._context_root, "search", query)
-        return tuple(
-            SearchHit(
-                id=cast(str, row["record_id"]),
-                uri=WorkctxUri.parse(cast(str, row["uri"])),
-                record_kind=SearchRecordKind(cast(str, row["record_kind"])),
-                entity_type=EntityType(cast(str, row["entity_type"])),
-                title=cast(str, row["title"]),
-                source_path=cast(str, row["source_path"]),
-                score=-float(row["rank"]),
-            )
-            for row in rows
-        )
+        return hits
 
     def _rebuild_locked(self, trigger: RebuildTrigger, config: ContextConfig) -> RebuildReport:
         operation = self._locked_operation
@@ -796,6 +834,7 @@ class SQLiteProjection:
         started_at: datetime,
     ) -> tuple[ProjectionMetadata, RebuildCounts]:
         counter = _BuildCounter()
+        topic_registry = self._load_topic_registry()
         connection = sqlite3.connect(database_path, timeout=5.0)
         connection.row_factory = sqlite3.Row
         try:
@@ -841,7 +880,7 @@ class SQLiteProjection:
                 ),
             )
             for document in documents:
-                self._insert_document(connection, document, counter)
+                self._insert_document(connection, document, counter, topic_registry)
 
             connection.execute("INSERT INTO search_fts(search_fts) VALUES ('rebuild')")
             connection.execute(
@@ -899,6 +938,7 @@ class SQLiteProjection:
         connection: sqlite3.Connection,
         document: _ParsedDocument,
         counter: _BuildCounter,
+        topic_registry: TopicRegistry,
     ) -> None:
         if document.entity is not None:
             entity = document.entity
@@ -940,6 +980,20 @@ class SQLiteProjection:
                     VALUES (?, ?, ?, ?)
                     """,
                     (self._context_id, entity.id, position, tag),
+                )
+            canonical_topics: list[str] = []
+            for value in entity.topics:
+                resolution = topic_registry.resolve(value)
+                topic = value if resolution is None else resolution.topic.slug
+                if topic not in canonical_topics:
+                    canonical_topics.append(topic)
+            for position, topic in enumerate(canonical_topics):
+                connection.execute(
+                    """
+                    INSERT INTO document_topics(context_id, source_path, position, topic)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (self._context_id, document.source_path, position, topic),
                 )
             for ordinal, reference in enumerate(document.references):
                 self._insert_edge(
@@ -1541,6 +1595,15 @@ class SQLiteProjection:
         except OSError as exc:
             raise ProjectionBuildError("Context configuration could not be read") from exc
         _update_fingerprint(digest, "context.yaml", context_content)
+        registry_path = self._context_root / "99_meta" / "topics.yaml"
+        if os.path.lexists(registry_path):
+            if _is_link_or_junction(registry_path) or not registry_path.is_file():
+                raise ProjectionBuildError("Topic registry must be a regular context-local file")
+            try:
+                registry_content = registry_path.read_bytes()
+            except OSError as exc:
+                raise ProjectionBuildError("Topic registry could not be read") from exc
+            _update_fingerprint(digest, "99_meta/topics.yaml", registry_content)
         for source in sources:
             _update_fingerprint(digest, source.relative_path, source.content)
         for skipped in sorted(scan_skips, key=lambda item: (item.path, item.reason)):
@@ -1550,6 +1613,18 @@ class SQLiteProjection:
                 f"unreadable:{skipped.reason.value}".encode("ascii"),
             )
         return digest.hexdigest()
+
+    def _load_topic_registry(self) -> TopicRegistry:
+        registry_path = self._context_root / "99_meta" / "topics.yaml"
+        if not os.path.lexists(registry_path):
+            return TopicRegistry(schema_version=1, topics=[])
+        if _is_link_or_junction(registry_path) or not registry_path.is_file():
+            raise ProjectionBuildError("Topic registry must be a regular context-local file")
+        try:
+            loaded = yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+            return TopicRegistry.model_validate(loaded)
+        except (OSError, UnicodeError, ValueError, ValidationError, yaml.YAMLError) as exc:
+            raise ProjectionBuildError("Topic registry is invalid") from exc
 
     def _readiness_trigger(self, config: ContextConfig) -> RebuildTrigger | None:
         self._verify_database_target()
@@ -1661,6 +1736,7 @@ class SQLiteProjection:
             title=cast(str, row["title"]),
             aliases=aliases,
             tags=tags,
+            topics=self._document_topics(connection, cast(str, row["source_path"])),
             status=cast(str | None, row["status"]),
             confidence=None if confidence is None else Confidence(cast(str, confidence)),
             body=cast(str, row["body"]),
@@ -1693,6 +1769,7 @@ class SQLiteProjection:
             note=cast(str | None, row["note"]),
             source_path=cast(str, row["source_path"]),
             ordinal=cast(int, row["ordinal"]),
+            topics=self._document_topics(connection, cast(str, row["source_path"])),
         )
 
     def _observation_record(
@@ -1729,6 +1806,7 @@ class SQLiteProjection:
             derived_from=derived_from,
             body=cast(str, row["body"]),
             source_path=cast(str, row["source_path"]),
+            topics=self._document_topics(connection, cast(str, row["source_path"])),
         )
 
     def _claim_record(self, connection: sqlite3.Connection, row: sqlite3.Row) -> ClaimRecord:
@@ -1760,6 +1838,7 @@ class SQLiteProjection:
             source_observations=source_observations,
             body=cast(str, row["body"]),
             source_path=cast(str, row["source_path"]),
+            topics=self._document_topics(connection, cast(str, row["source_path"])),
         )
 
     def _task_record(self, connection: sqlite3.Connection, row: sqlite3.Row) -> TaskRecord:
@@ -1794,6 +1873,7 @@ class SQLiteProjection:
             title=cast(str, row["title"]),
             aliases=aliases,
             tags=tags,
+            topics=self._document_topics(connection, cast(str, row["source_path"])),
             confidence=None if confidence is None else Confidence(cast(str, confidence)),
             task_type=TaskType(cast(str, row["task_type"])),
             parent_task=cast(str | None, row["parent_task"]),
@@ -1830,6 +1910,67 @@ class SQLiteProjection:
                 (self._context_id, task_id),
             ).fetchall()
         )
+
+    def _document_topics(
+        self,
+        connection: sqlite3.Connection,
+        source_path: str,
+    ) -> tuple[str, ...]:
+        return tuple(
+            cast(str, row[0])
+            for row in connection.execute(
+                """
+                SELECT topic FROM document_topics
+                WHERE context_id = ? AND source_path = ?
+                ORDER BY position
+                """,
+                (self._context_id, source_path),
+            ).fetchall()
+        )
+
+    def _topic_scope_clause(
+        self,
+        source_path_expression: str,
+        *,
+        topic: str | None,
+        topic_only: bool,
+        parameters: list[object],
+    ) -> str:
+        if topic is None and not topic_only:
+            return ""
+        return " AND " + self._topic_scope_predicate(
+            source_path_expression,
+            topic=topic,
+            topic_only=topic_only,
+            parameters=parameters,
+        )
+
+    def _topic_scope_predicate(
+        self,
+        source_path_expression: str,
+        *,
+        topic: str | None,
+        topic_only: bool,
+        parameters: list[object],
+    ) -> str:
+        if topic is None:
+            raise ValueError("topic_only requires a topic")
+        match = (
+            "EXISTS (SELECT 1 FROM document_topics AS scoped_topics "
+            "WHERE scoped_topics.context_id = ? "
+            f"AND scoped_topics.source_path = {source_path_expression} "
+            "AND scoped_topics.topic = ?)"
+        )
+        parameters.extend((self._context_id, topic))
+        if topic_only:
+            return match
+        parameters.append(self._context_id)
+        common = (
+            "NOT EXISTS (SELECT 1 FROM document_topics AS any_topics "
+            "WHERE any_topics.context_id = ? "
+            f"AND any_topics.source_path = {source_path_expression})"
+        )
+        return f"({match} OR {common})"
 
     def _operation_reader(self) -> sqlite3.Connection | None:
         if self._locked_operation is None:

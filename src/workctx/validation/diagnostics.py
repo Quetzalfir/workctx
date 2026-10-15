@@ -173,6 +173,26 @@ _DEFINITIONS = (
         "Replace the relation target with a canonical task ID or workctx:// task URI.",
     ),
     DiagnosticDefinition(
+        "TOPIC-REGISTRY",
+        Severity.ERROR,
+        "The canonical topic registry is malformed or violates registry integrity.",
+        "Repair 99_meta/topics.yaml so slugs, aliases, lifecycle targets, and distinctions "
+        "satisfy the version-1 topic registry contract.",
+    ),
+    DiagnosticDefinition(
+        "TOPIC-UNKNOWN",
+        Severity.ERROR,
+        "A document topic does not resolve to an active topic slug or active-topic alias.",
+        "Run workctx topic list, then retag to an active slug or create the durable topic "
+        "through workctx topic add.",
+    ),
+    DiagnosticDefinition(
+        "TOPIC-MERGED",
+        Severity.WARNING,
+        "A document still names a topic that has been merged into another active topic.",
+        "Retag the document from the merged slug to its merged_into target.",
+    ),
+    DiagnosticDefinition(
         "CLAIM-INTERVAL",
         Severity.ERROR,
         "A claim validity interval is empty or ends before it starts.",

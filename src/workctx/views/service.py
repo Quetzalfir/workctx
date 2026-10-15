@@ -31,7 +31,7 @@ from workctx.domain.transactions import (
     AuditUpdateOperation,
 )
 from workctx.ingestion import ArtifactRecord, list_inbox
-from workctx.retrieval import resolve, trace
+from workctx.retrieval import ProjectionReader, TopicScopedReader, resolve, trace
 from workctx.suggestions import SuggestionStatus, list_suggestions
 from workctx.transactions import AuditSummary, audit_summary, read_audit_events
 from workctx.views.errors import ViewSourceChangedError
@@ -144,11 +144,17 @@ class ViewService:
     def context_root(self) -> Path:
         return self._root
 
-    def brief(self, *, generated_at: datetime | None = None) -> BriefPayload:
+    def brief(
+        self,
+        *,
+        generated_at: datetime | None = None,
+        topic: str | None = None,
+        topic_only: bool = False,
+    ) -> BriefPayload:
         """Return the structured doc-04 daily-brief payload without writing view files."""
 
         timestamp = _normalize_time(self._clock() if generated_at is None else generated_at)
-        return self._snapshot(timestamp).payload
+        return self._snapshot(timestamp, topic=topic, topic_only=topic_only).payload
 
     def rebuild_views(
         self,
@@ -224,10 +230,21 @@ class ViewService:
             views=tuple(generated),
         )
 
-    def _snapshot(self, generated_at: datetime) -> _OperationalSnapshot:
+    def _snapshot(
+        self,
+        generated_at: datetime,
+        *,
+        topic: str | None = None,
+        topic_only: bool = False,
+    ) -> _OperationalSnapshot:
+        if topic_only and topic is None:
+            raise ValueError("topic_only requires a topic")
         before = audit_summary(self._root)
-        tasks = tuple(sorted(self._projection.query_tasks(), key=_task_sort_key))
-        entities = self._projection.query_entities()
+        reader: ProjectionReader = self._projection
+        if topic is not None:
+            reader = TopicScopedReader(reader, topic, topic_only=topic_only)
+        tasks = tuple(sorted(reader.query_tasks(), key=_task_sort_key))
+        entities = self._projection.query_entities(topic=topic, topic_only=topic_only)
         events = read_audit_events(self._root, through=generated_at)
         artifacts = list_inbox(
             self._root,
@@ -243,8 +260,8 @@ class ViewService:
             for task in tasks
             if task.status is TaskStatus.BLOCKED or task.blockers
         )
-        waiting_on = self._waiting_on(tasks, task_items)
-        stale_claims = self._stale_claims(tasks, generated_at)
+        waiting_on = self._waiting_on(tasks, task_items, reader)
+        stale_claims = self._stale_claims(tasks, generated_at, reader)
         resource_directory = self._resource_directory(
             tuple(entity for entity in entities if entity.entity_type in _RESOURCE_ENTITY_TYPES)
         )
@@ -290,6 +307,7 @@ class ViewService:
         self,
         tasks: tuple[TaskRecord, ...],
         task_items: dict[str, TaskViewItem],
+        reader: ProjectionReader,
     ) -> tuple[WaitingOnGroup, ...]:
         grouped: dict[str, list[TaskViewItem]] = defaultdict(list)
         for task in tasks:
@@ -298,7 +316,7 @@ class ViewService:
 
         results: list[WaitingOnGroup] = []
         for value in sorted(grouped, key=str.casefold):
-            display_name, person_uri = self._waiting_party(value)
+            display_name, person_uri = self._waiting_party(value, reader)
             results.append(
                 WaitingOnGroup(
                     value=value,
@@ -311,10 +329,14 @@ class ViewService:
             sorted(results, key=lambda group: (group.display_name.casefold(), group.value))
         )
 
-    def _waiting_party(self, value: str) -> tuple[str, str | None]:
+    def _waiting_party(
+        self,
+        value: str,
+        reader: ProjectionReader | None = None,
+    ) -> tuple[str, str | None]:
         if not value.startswith("workctx://"):
             return value, None
-        resolution = resolve(self._projection, value)
+        resolution = resolve(self._projection if reader is None else reader, value)
         record = resolution.record
         if isinstance(record, (EntityRecord, TaskRecord)):
             return record.title, value
@@ -324,10 +346,11 @@ class ViewService:
         self,
         tasks: tuple[TaskRecord, ...],
         generated_at: datetime,
+        reader: ProjectionReader,
     ) -> tuple[StaleClaimItem, ...]:
         claims: dict[str, ClaimRecord] = {}
         for task in tasks:
-            for claim in self._projection.claims_for_subject(
+            for claim in reader.claims_for_subject(
                 task.uri,
                 statuses=frozenset({ClaimStatus.CURRENT}),
             ):
@@ -1087,10 +1110,15 @@ def brief(
     *,
     clock: Callable[[], datetime] | None = None,
     stale_after: timedelta = DEFAULT_STALE_AFTER,
+    topic: str | None = None,
+    topic_only: bool = False,
 ) -> BriefPayload:
     """Return one structured daily brief from the active projected context."""
 
-    return ViewService(context_root, clock=clock, stale_after=stale_after).brief()
+    return ViewService(context_root, clock=clock, stale_after=stale_after).brief(
+        topic=topic,
+        topic_only=topic_only,
+    )
 
 
 def rebuild_views(

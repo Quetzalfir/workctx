@@ -58,6 +58,7 @@ from workctx.retrieval.records import (
 )
 from workctx.retrieval.references import ResolvableReference, resolve
 from workctx.retrieval.security import sanitize_json, sanitize_named_value, sanitize_text
+from workctx.retrieval.topics import TopicScopedReader
 from workctx.retrieval.tracing import TraceResult, trace
 
 DEFAULT_BUDGET_UNITS = 12_000
@@ -126,11 +127,17 @@ def build_pack(
     query: str | None = None,
     include_history: bool = False,
     include_architecture: bool = False,
+    topic: str | None = None,
+    topic_only: bool = False,
 ) -> PackBuildResult:
     """Build a deterministic pack without reading outside the typed projection API."""
 
     if type(budget) is not int or budget < 0:
         raise ValueError("budget must be a non-negative integer")
+    if topic_only and topic is None:
+        raise ValueError("topic_only requires a topic")
+    if topic is not None:
+        reader = TopicScopedReader(reader, topic, topic_only=topic_only)
     normalized_query = None if query is None or not query.strip() else query.strip()
 
     initial = resolve(reader, reference)

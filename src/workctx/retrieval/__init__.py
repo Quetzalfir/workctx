@@ -52,6 +52,7 @@ from workctx.retrieval.references import (
     resolve,
 )
 from workctx.retrieval.serialization import serialize_context_pack
+from workctx.retrieval.topics import TopicScopedReader, topic_matches
 from workctx.retrieval.tracing import trace
 
 __all__ = [
@@ -85,6 +86,7 @@ __all__ = [
     "ResolutionResult",
     "ResolutionStatus",
     "ResolvableReference",
+    "TopicScopedReader",
     "TraceResult",
     "TracedObservation",
     "TraversalDirection",
@@ -97,5 +99,6 @@ __all__ = [
     "resolve",
     "score_candidate",
     "serialize_context_pack",
+    "topic_matches",
     "trace",
 ]

@@ -37,6 +37,11 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `search` | `search` | `query`, `count`, `hits` |
 | `task list` | `task.list` | `count`, `tasks` |
 | `task show` | `task.show` | `task` |
+| `topic list` | `topic.list` | `count`, `topics` |
+| `topic add` | `topic.add` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
+| `topic alias` | `topic.alias` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
+| `topic merge` | `topic.merge` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
+| `topic review` | `topic.review` | `count`, `candidates` |
 | `suggestion list` | `suggestion.list` | `count`, `suggestions` |
 | `suggestion show` | `suggestion.show` | `suggestion` |
 | `suggestion adopt` | `suggestion.adopt` | `operation`, `suggestion`, `receipt` |
@@ -75,6 +80,11 @@ fatal; unchanged errors on untouched paths become one non-fatal
 `TXN-PREEXISTING-WORKSPACE-ERRORS` diagnostic with their count and a
 `workctx context validate` repair action. Successful apply receipts expose that diagnostic in
 `receipt.diagnostics`.
+`topic add`, `topic alias`, and `topic merge` also preview by default and apply only with
+`--yes`. Their writes use the audited transaction engine; a merge updates the registry and
+every affected document in one transaction. `search`, `task list`, `context-pack`, and `brief`
+accept `--topic`; aliases resolve to their active canonical slug, and untagged common-layer
+documents remain included unless `--topic-only` is also present.
 `context refresh-meta` idempotently installs the packaged reference schemas under
 `99_meta/schemas/`; each schema reports `updated` or `unchanged`, and no other context file is
 modified. `agent install` returns the complete plan without changing files unless `--yes` is

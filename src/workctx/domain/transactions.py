@@ -29,6 +29,7 @@ from workctx.domain.observations import Observation
 from workctx.domain.references import WorkctxUri, validate_durable_reference
 from workctx.domain.relations import ContractDateTime
 from workctx.domain.tasks import Task
+from workctx.domain.topics import TOPICS_REGISTRY_PATH, TopicRegistry
 
 TRANSACTION_PROPOSAL_ID_PATTERN = r"^TXP-[0-9]{8}T[0-9]{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*$"
 AUDIT_EVENT_ID_PATTERN = r"^AUD-[0-9]{8}T[0-9]{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*$"
@@ -171,6 +172,13 @@ class ObservationDocumentPayload(_ContractModel):
 class ArtifactManifestDocumentPayload(_ContractModel):
     kind: Literal["artifact_manifest"]
     document: ArtifactManifest
+
+
+class TopicRegistryDocumentPayload(_ContractModel):
+    """Internal typed payload used only by audited topic mutations."""
+
+    kind: Literal["topic_registry"]
+    document: TopicRegistry
 
 
 DocumentPayload = Annotated[
@@ -500,10 +508,17 @@ def _path_key(value: str) -> str:
     return unicodedata.normalize("NFC", value).casefold()
 
 
-def _validate_document_target(target: str, payload: DocumentPayload) -> None:
+def _validate_document_target(
+    target: str,
+    payload: DocumentPayload | TopicRegistryDocumentPayload,
+) -> None:
     path = PurePosixPath(target)
     suffix = path.suffix
     zone = path.parts[0]
+    if isinstance(payload, TopicRegistryDocumentPayload):
+        if target != TOPICS_REGISTRY_PATH:
+            raise ValueError("Topic registries must target 99_meta/topics.yaml")
+        return
     if isinstance(payload, ArtifactManifestDocumentPayload):
         if not target.startswith("00_inbox/manifests/") or suffix not in {
             ".json",
@@ -639,6 +654,7 @@ __all__ = [
     "Revision",
     "SystemActor",
     "TaskDocumentPayload",
+    "TopicRegistryDocumentPayload",
     "TransactionCondition",
     "TransactionOperation",
     "TransactionProposal",

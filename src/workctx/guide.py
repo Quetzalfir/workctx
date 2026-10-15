@@ -309,6 +309,11 @@ GUIDE = GuideDefinition(
             "context instructions.md; user-level instructions.md for all contexts",
             "operator-reviewed suggestion",
         ),
+        RoutingEntry(
+            "durable subject",
+            "99_meta/topics.yaml",
+            "workctx topic list / workctx topic review, then workctx topic add only when new",
+        ),
         RoutingEntry("evidence", "00_inbox/", "workctx inbox add"),
         RoutingEntry("task or work item", "03_work/", "proposal or transaction"),
         RoutingEntry("outbound draft", "05_outbox/", "draft flow"),
