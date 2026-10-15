@@ -43,6 +43,9 @@ JSON object and no decorative text. Human diagnostics are written to stderr.
 | `topic alias` | `topic.alias` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
 | `topic merge` | `topic.merge` | `action`, `changed`, `applied`, `topic`, `proposal_id`, then optional `preview` or `receipt` |
 | `topic review` | `topic.review` | `count`, `candidates` |
+| `graph export` | `graph.export` | `schema_version`, `context_id`, `source_revision`, `selected_topic`, `topics`, `vaults` |
+| `obsidian install` | `obsidian.install` | `schema_version`, `platform`, `installed`, `manager`, `command`, `command_text`, `executed` |
+| `obsidian open` | `obsidian.open` | `schema_version`, `map`, `vault_path`, `uri`, `exported` |
 | `checkpoint save` | `checkpoint.save` | `applied`, `checkpoint`, `proposal_id`, then optional `preview` or `receipt` |
 | `checkpoint check` | `checkpoint.check` | `checkpoint_id`, `label`, `checkpoint_created_at`, `checked_at`, `topic`, `items`, `new_items`, `counts` |
 | `checkpoint list` | `checkpoint.list` | `count`, `checkpoints` |
@@ -89,6 +92,11 @@ fatal; unchanged errors on untouched paths become one non-fatal
 every affected document in one transaction. `search`, `task list`, `context-pack`, and `brief`
 accept `--topic`; aliases resolve to their active canonical slug, and untagged common-layer
 documents remain included unless `--topic-only` is also present.
+`graph export` fully replaces the two generated vaults under `04_views/graph/`; optional
+`--topic` resolves aliases and limits output to that topic's one-hop co-reference neighborhood.
+`obsidian install` is a preview unless `--yes` is present, and agreement flags are included only
+when `--accept-agreements` is explicit. `obsidian open` exports missing vaults before invoking the
+platform URI opener.
 `checkpoint save` likewise previews by default and applies only with `--yes`; the canonical
 checkpoint contains content-free URI/path/revision/hash metadata and is committed through the
 audited transaction engine. `checkpoint check` and `checkpoint list` are read-only.

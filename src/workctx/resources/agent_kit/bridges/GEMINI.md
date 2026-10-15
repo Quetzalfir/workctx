@@ -14,6 +14,8 @@ At task start, read `context.yaml` policies and, when present, the generated vie
 
 Resolve durable subjects with `workctx topic list` and `workctx topic review`; use `workctx topic heat` to prioritize hot topics when triaging new findings, reuse an existing topic or alias, and use `workctx topic add` only for a durable account, initiative, system, or workstream, never for a test run, variant, date, or document. Reconcile every finding from each reviewed thread, channel, meeting, or source in the same session as evidence or events under the relevant topics through the normal proposal flow. At session start, run `workctx checkpoint check <id>` when a session checkpoint exists and surface yellow or red items first; at close, use `workctx checkpoint save` for the canonical items relied on without secret values.
 
+When the operator asks for a visual map, run `workctx graph export` and treat both generated Obsidian vaults under `04_views/graph/` as read-only.
+
 When the operator supplies a fact the context lacked, persist it in the same session through the normal approval-gated proposal flow: route a person fact to a person entity, an access or process fact to an integration entity under `90_integrations/` or a system entity, and a standing preference to a suggested context `instructions.md` addition for the operator to apply. Before closing, check: "Did the operator repeat or newly supply any fact?" If yes, it must be recorded before closing.
 
 Write project artifacts in English. When `context.yaml` is present, communicate with the operator in the language configured by `languages.user_interaction`; otherwise use English.

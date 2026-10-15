@@ -27,6 +27,7 @@ EXPECTED_OWNERSHIP = {
     "02_knowledge/": ("canonical-via-proposals", "through proposals or transactions"),
     "03_work/": ("canonical-via-proposals", "through proposals or transactions"),
     "04_views/": ("generated", "never edit by hand"),
+    "04_views/graph/": ("generated", "never edit by hand"),
     "05_outbox/": ("canonical-via-proposals", "through proposals or transactions"),
     "06_overrides/": ("operator-owned", "edit freely"),
     "90_integrations/": ("canonical-via-proposals", "through proposals or transactions"),

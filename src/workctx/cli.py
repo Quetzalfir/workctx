@@ -106,6 +106,10 @@ task_app = typer.Typer(help="Query projected canonical tasks.")
 app.add_typer(task_app, name="task")
 topic_app = typer.Typer(help="Manage context-local durable-subject topics.")
 app.add_typer(topic_app, name="topic")
+graph_app = typer.Typer(help="Export deterministic read-only graph vaults.")
+app.add_typer(graph_app, name="graph")
+obsidian_app = typer.Typer(help="Install Obsidian or open a generated graph vault.")
+app.add_typer(obsidian_app, name="obsidian")
 checkpoint_app = typer.Typer(help="Save and check canonical session checkpoints.")
 app.add_typer(checkpoint_app, name="checkpoint")
 suggestion_app = typer.Typer(help="Inspect and review canonical suggestion records.")
@@ -2162,6 +2166,113 @@ def topic_review(
             )
         if not candidates:
             output_console.print(Text("No topic merge candidates found."))
+
+
+@graph_app.command("export")
+def graph_export(
+    topic: Annotated[
+        str | None,
+        typer.Option("--topic", help="Active topic slug or alias whose neighborhood to export."),
+    ] = None,
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Fully replace the generated topic and reference Obsidian vaults."""
+
+    from workctx.graph import export_graph
+
+    begin_command("graph.export", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    exported = export_graph(root, topic=topic)
+    result = cast("dict[str, JsonValue]", exported.model_dump(mode="json"))
+    if json_output:
+        emit_success(result=result, context_id=exported.context_id)
+        return
+    topic_scope = (
+        "all active topics"
+        if exported.selected_topic is None
+        else f"the {exported.selected_topic} neighborhood"
+    )
+    output_console.print(Text(f"Exported {topic_scope}:"))
+    for vault in exported.vaults:
+        output_console.print(
+            Text(
+                f"{vault.path} ({vault.topic_count} topics, {vault.item_count} items, "
+                f"{vault.file_count} files)"
+            )
+        )
+
+
+@obsidian_app.command("install")
+def obsidian_install(
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Run the displayed platform package-manager command."),
+    ] = False,
+    accept_agreements: Annotated[
+        bool,
+        typer.Option(
+            "--accept-agreements",
+            help="On Windows, pass package and source agreement flags to winget.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Detect Obsidian, or preview and explicitly run its platform installer."""
+
+    from workctx.obsidian import install_obsidian
+
+    begin_command("obsidian.install", json_output=json_output)
+    installed = install_obsidian(yes=yes, accept_agreements=accept_agreements)
+    result = cast("dict[str, JsonValue]", installed.model_dump(mode="json"))
+    if json_output:
+        emit_success(result=result)
+        return
+    if installed.command_text is None:
+        output_console.print(Text("Obsidian is already installed."))
+    elif installed.executed:
+        output_console.print(Text(f"Obsidian installed with: {installed.command_text}"))
+    else:
+        output_console.print(Text("Obsidian is not installed. Review this command:"))
+        output_console.print(Text(installed.command_text, style="bold"))
+        output_console.print(Text("Re-run with --yes to execute it."))
+
+
+@obsidian_app.command("open")
+def obsidian_open(
+    map_name: Annotated[
+        str,
+        typer.Option("--map", help="Generated vault to open: topics or references."),
+    ],
+    context_path: Annotated[
+        Path | None,
+        typer.Option("--context", help="Explicit context path; overrides path discovery."),
+    ] = None,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit machine-readable JSON.")
+    ] = False,
+) -> None:
+    """Ensure and open one generated graph vault with the Obsidian URI scheme."""
+
+    from workctx.obsidian import open_obsidian_map
+
+    begin_command("obsidian.open", json_output=json_output)
+    root = resolve_cli_context(explicit_path=context_path)
+    opened = open_obsidian_map(root, map_name)
+    result = cast("dict[str, JsonValue]", opened.model_dump(mode="json"))
+    context_id = load_context_config(root).id
+    if json_output:
+        emit_success(result=result, context_id=context_id)
+        return
+    prefix = "Exported and opened" if opened.exported else "Opened"
+    output_console.print(Text(f"{prefix} the {opened.map.value} graph: {opened.vault_path}"))
 
 
 @checkpoint_app.command("save")
