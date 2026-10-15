@@ -143,21 +143,24 @@ def test_human_guide_contains_every_class_routing_section_and_escape_hatch(
 
     assert result.exit_code == 0, result.output
     assert result.stderr == ""
-    assert "File placement and ownership — guide-context" in result.stdout
-    assert "Ownership" in result.stdout
-    assert "Where does it go?" in result.stdout
-    assert "Never edit by hand" in result.stdout
+    # Rich wraps human output at the terminal width, which differs between
+    # hosts and CI runners, so phrases are matched whitespace-insensitively.
+    rendered = _normalized(result.stdout)
+    assert "File placement and ownership — guide-context" in rendered
+    assert "Ownership" in rendered
+    assert "Where does it go?" in rendered
+    assert "Never edit by hand" in rendered
     for ownership_class in OwnershipClass:
-        assert ownership_class.value in result.stdout
-    assert _normalized(GUIDE.escape_hatch) in _normalized(result.stdout)
-    assert "CTX-POSSIBLE-SECRET" in result.stdout
-    assert "reported line and pattern" in result.stdout
-    assert "--acknowledge-possible-secret" in result.stdout
-    assert "never acknowledge merely to clear an error" in result.stdout
-    assert "outputs/ (or a configured working dir)" in result.stdout
-    assert "Never put in working dirs" in result.stdout
+        assert ownership_class.value in rendered
+    assert _normalized(GUIDE.escape_hatch) in rendered
+    assert "CTX-POSSIBLE-SECRET" in rendered
+    assert "reported line and pattern" in rendered
+    assert "--acknowledge-possible-secret" in rendered
+    assert "never acknowledge merely to clear an error" in rendered
+    assert "outputs/ (or a configured working dir)" in rendered
+    assert "Never put in working dirs" in rendered
     for exclusion in GUIDE.working_material_never:
-        assert exclusion in result.stdout
+        assert _normalized(exclusion) in rendered
 
 
 def test_json_shape_pins_paths_classes_policies_and_routing_entries(tmp_path: Path) -> None:
