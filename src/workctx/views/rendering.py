@@ -6,6 +6,7 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
+from workctx.domain import TopicHeat
 from workctx.validation.engine import contains_possible_secret
 from workctx.views.models import (
     AgendaPayload,
@@ -34,6 +35,7 @@ def render_view(
     name: ViewName,
     payload: BriefPayload,
     *,
+    topic_heat: Sequence[TopicHeat],
     next_actions: Sequence[TaskViewItem],
     resource_directory: ResourceDirectoryPayload,
     status_report: StatusReportPayload,
@@ -56,6 +58,7 @@ def render_view(
         ViewName.GLOSSARY: _glossary(glossary),
         ViewName.AGENDA: _agenda(agenda),
         ViewName.SUGGESTIONS: _suggestions(suggestions),
+        ViewName.TOPICS: _topics(topic_heat),
     }
     content = _header(payload) + sections[name]
     return content.encode("utf-8")
@@ -172,9 +175,25 @@ def _brief(payload: BriefPayload) -> str:
     lines = [
         "# Daily brief",
         "",
-        "## Today focus",
+        "## Hot topics",
         "",
     ]
+    if payload.hot_topics:
+        for topic in payload.hot_topics:
+            lines.append(
+                f"- `{_inline(topic.slug)}` — {_inline(topic.name)} "
+                f"(score {topic.score:.6f}; last activity "
+                f"{_optional_timestamp(topic.last_activity)})"
+            )
+    else:
+        lines.append("_No topics meet the hot threshold._")
+    lines.extend(
+        (
+            "",
+            "## Today focus",
+            "",
+        )
+    )
     lines.extend(_task_bullets(payload.today_focus, "No current-focus tasks."))
     lines.extend(("", "## Blockers", ""))
     lines.extend(_task_bullets(payload.blockers, "No blockers recorded."))
@@ -205,6 +224,32 @@ def _brief(payload: BriefPayload) -> str:
             f"- Last timestamp: {_optional_timestamp(activity.last_timestamp)}",
         )
     )
+    return "\n".join(lines) + "\n"
+
+
+def _topics(topics: Sequence[TopicHeat]) -> str:
+    lines = [
+        "# Topics",
+        "",
+        "| Topic | Heat | Score | Last activity |",
+        "| --- | --- | ---: | --- |",
+    ]
+    if not topics:
+        lines.append("| _No active topics._ | — | — | — |")
+    else:
+        for topic in topics:
+            lines.append(
+                "| "
+                + " | ".join(
+                    (
+                        f"`{_inline(topic.slug)}` — {_cell(topic.name)}",
+                        topic.heat.value,
+                        f"{topic.score:.6f}",
+                        _optional_timestamp(topic.last_activity),
+                    )
+                )
+                + " |"
+            )
     return "\n".join(lines) + "\n"
 
 

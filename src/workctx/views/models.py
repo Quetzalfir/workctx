@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue
 
-from workctx.domain import EntityType, TaskPriority, TaskStatus
+from workctx.domain import EntityType, TaskPriority, TaskStatus, TopicHeat
 
 
 class _ViewRecord(BaseModel):
@@ -26,6 +26,7 @@ class ViewName(StrEnum):
     GLOSSARY = "glossary"
     AGENDA = "agenda"
     SUGGESTIONS = "suggestions"
+    TOPICS = "topics"
 
     @property
     def relative_path(self) -> str:
@@ -255,6 +256,7 @@ class BriefPayload(_ViewRecord):
     context_id: str
     generated_at: AwareDatetime
     source_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    hot_topics: tuple[TopicHeat, ...]
     today_focus: tuple[TaskViewItem, ...]
     blockers: tuple[TaskViewItem, ...]
     waiting_on: tuple[WaitingOnGroup, ...]

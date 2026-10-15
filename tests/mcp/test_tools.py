@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 from transactions.support import create_operation, initialize_transaction_context, proposal
 
+from workctx.checkpoints import CheckpointService
 from workctx.errors import UserCorrectableError
 from workctx.mcp.application import McpToolService
 from workctx.mcp.models import ToolResponse
@@ -128,6 +129,25 @@ def test_all_live_read_tools_delegate_to_integrated_engines(
     )
     assert topics == {"topics": [], "count": 0}
 
+    saved = CheckpointService(live_service.context_root).save(
+        "MCP read fixture",
+        references=[TASK_URI],
+        approved=True,
+    )
+    checkpoint = _assert_success(
+        live_service.invoke(
+            "checkpoint_check",
+            {"schema_version": 1, "checkpoint_id": saved.checkpoint.id},
+        ),
+        "checkpoint_check",
+    )
+    assert checkpoint["checkpoint"]["counts"] == {
+        "green": 1,
+        "yellow": 0,
+        "red": 0,
+        "new": 0,
+    }
+
     task = _assert_success(
         live_service.invoke("task_show", {"schema_version": 1, "task": TASK_ID}),
         "task_show",
@@ -138,7 +158,7 @@ def test_all_live_read_tools_delegate_to_integrated_engines(
         live_service.invoke("audit_summary", {"schema_version": 1}),
         "audit_summary",
     )
-    assert audit["audit"]["event_count"] == 0
+    assert audit["audit"]["event_count"] == 1
 
     inbox = _assert_success(
         live_service.invoke("inbox_list", {"schema_version": 1}),
@@ -323,6 +343,7 @@ def test_every_tool_refuses_cross_context_and_path_escape_attempts(
         "inbox_list",
         "audit_summary",
         "topic_list",
+        "checkpoint_check",
         "artifact_register",
         "index_rebuild",
         "draft_save",

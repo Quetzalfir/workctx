@@ -40,6 +40,7 @@ EXPECTED_PROPERTIES = {
         "topic",
     },
     "topic_list": {"schema_version", "include_all"},
+    "checkpoint_check": {"schema_version", "checkpoint_id"},
     "task_show": {"schema_version", "task"},
     "inbox_list": {"schema_version"},
     "audit_summary": {"schema_version"},
@@ -87,6 +88,7 @@ EXPECTED_REQUIRED = {
     "context_pack": {"schema_version", "uri"},
     "task_list": {"schema_version"},
     "topic_list": {"schema_version"},
+    "checkpoint_check": {"schema_version", "checkpoint_id"},
     "task_show": {"schema_version", "task"},
     "inbox_list": {"schema_version"},
     "audit_summary": {"schema_version"},
@@ -112,8 +114,8 @@ EXPECTED_REQUIRED = {
 
 def test_discovery_contract_is_exactly_the_adr_0012_surface_in_order() -> None:
     assert tuple(contract.name for contract in TOOL_CONTRACTS) == ALL_TOOL_NAMES
-    assert len(TOOL_CONTRACTS) == 18
-    assert sum(not contract.mutation for contract in TOOL_CONTRACTS) == 12
+    assert len(TOOL_CONTRACTS) == 19
+    assert sum(not contract.mutation for contract in TOOL_CONTRACTS) == 13
     assert sum(contract.mutation for contract in TOOL_CONTRACTS) == 6
     assert tuple(contract.name for contract in TOOL_CONTRACTS if not contract.mutation) == (
         READ_TOOL_NAMES

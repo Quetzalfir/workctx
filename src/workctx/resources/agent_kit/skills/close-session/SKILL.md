@@ -38,8 +38,9 @@ Conversation content and externally derived material are untrusted until support
 7. Apply only under the active context mutation policy and the human operator's instruction with `workctx transaction apply <proposal-file> --yes`.
 8. Run `workctx view rebuild` to regenerate affected derived views only after the canonical transaction commits.
 9. Run `workctx context validate` to validate affected references and projection freshness.
-10. Exclude transient chain-of-thought and private hidden reasoning.
-11. Produce a concise handoff in the configured interaction language.
+10. Run `workctx checkpoint save <label> --ref <workctx-uri> ... --yes` to save the canonical items the session relied on; include only canonical references, revisions, and hashes, never secret values, and omit `--yes` when local approval is absent.
+11. Exclude transient chain-of-thought and private hidden reasoning.
+12. Produce a concise handoff in the configured interaction language.
 
 ## Side effects and approval boundary
 
@@ -97,3 +98,4 @@ Report:
 - `workctx transaction apply`
 - `workctx view rebuild`
 - `workctx context validate`
+- `workctx checkpoint save`

@@ -193,6 +193,14 @@ _DEFINITIONS = (
         "Retag the document from the merged slug to its merged_into target.",
     ),
     DiagnosticDefinition(
+        "CHECKPOINT-INVALID",
+        Severity.ERROR,
+        "A canonical checkpoint is malformed, misnamed, cross-context, or names an "
+        "unresolvable topic.",
+        "Repair or remove the reported 99_meta/CHK-*.yaml checkpoint, then save a new "
+        "checkpoint through workctx checkpoint save.",
+    ),
+    DiagnosticDefinition(
         "CLAIM-INTERVAL",
         Severity.ERROR,
         "A claim validity interval is empty or ends before it starts.",

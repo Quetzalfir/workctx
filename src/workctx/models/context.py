@@ -93,6 +93,14 @@ class TelemetryConfig(BaseModel):
     decay_days: int = Field(default=60, ge=1, le=3650)
 
 
+class TopicsConfig(BaseModel):
+    """Context-local settings for computed topic signals."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    heat_half_life_days: int = Field(default=7, ge=1, le=90)
+
+
 class ContextConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -107,6 +115,7 @@ class ContextConfig(BaseModel):
     security_boundary: str = Field(pattern="^isolated$")
     policies: ContextPolicies
     telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
+    topics: TopicsConfig = Field(default_factory=TopicsConfig)
     working_dirs: list[str] = Field(default_factory=lambda: ["outputs"])
     created_at: AwareDatetime
     updated_at: AwareDatetime

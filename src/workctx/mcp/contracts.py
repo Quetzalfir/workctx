@@ -178,6 +178,11 @@ _TOPIC_PROPERTY = {
     "maxLength": 200,
     "description": "Active topic slug or registered alias; common material remains visible.",
 }
+_CHECKPOINT_ID_PROPERTY = {
+    "type": "string",
+    "pattern": r"^CHK-[0-9]{8}T[0-9]{6}Z-[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{8}$",
+    "description": "Canonical checkpoint ID.",
+}
 
 
 TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
@@ -260,6 +265,12 @@ TOOL_CONTRACTS: Final[tuple[ToolContract, ...]] = (
         "topic_list",
         "List active context-local topics, optionally including inactive entries.",
         {"include_all": {"type": "boolean", "default": False}},
+    ),
+    _contract(
+        "checkpoint_check",
+        "Check canonical item revisions and topic additions against one saved checkpoint.",
+        {"checkpoint_id": deepcopy(_CHECKPOINT_ID_PROPERTY)},
+        required=("checkpoint_id",),
     ),
     _contract(
         "task_show",

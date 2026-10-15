@@ -314,6 +314,11 @@ GUIDE = GuideDefinition(
             "99_meta/topics.yaml",
             "workctx topic list / workctx topic review, then workctx topic add only when new",
         ),
+        RoutingEntry(
+            "session checkpoint",
+            "99_meta/CHK-<timestamp>-<label>-<digest>.yaml",
+            "workctx checkpoint save",
+        ),
         RoutingEntry("evidence", "00_inbox/", "workctx inbox add"),
         RoutingEntry("task or work item", "03_work/", "proposal or transaction"),
         RoutingEntry("outbound draft", "05_outbox/", "draft flow"),

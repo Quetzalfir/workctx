@@ -72,6 +72,11 @@ EXPECTED_ROUTING = [
         "destination": "99_meta/topics.yaml",
         "via": "workctx topic list / workctx topic review, then workctx topic add only when new",
     },
+    {
+        "kind": "session checkpoint",
+        "destination": "99_meta/CHK-<timestamp>-<label>-<digest>.yaml",
+        "via": "workctx checkpoint save",
+    },
     {"kind": "evidence", "destination": "00_inbox/", "via": "workctx inbox add"},
     {
         "kind": "task or work item",

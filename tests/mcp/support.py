@@ -20,6 +20,7 @@ READ_TOOL_NAMES = (
     "context_pack",
     "task_list",
     "topic_list",
+    "checkpoint_check",
     "task_show",
     "inbox_list",
     "audit_summary",
@@ -85,6 +86,8 @@ def boundary_arguments(name: str, value: str) -> dict[str, Any]:
         arguments["owner"] = value
     elif name == "task_show":
         arguments["task"] = value
+    elif name == "checkpoint_check":
+        arguments["checkpoint_id"] = value
     elif name in {"proposal_validate", "transaction_dry_run", "transaction_apply"}:
         arguments["proposal"] = {"boundary_probe": value}
     else:

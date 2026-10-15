@@ -23,6 +23,7 @@ from pydantic import (
 )
 
 from workctx.domain.artifacts import ArtifactManifest
+from workctx.domain.checkpoints import CHECKPOINTS_DIRECTORY, Checkpoint
 from workctx.domain.claims import Claim
 from workctx.domain.entities import EntityFrontmatter
 from workctx.domain.observations import Observation
@@ -179,6 +180,13 @@ class TopicRegistryDocumentPayload(_ContractModel):
 
     kind: Literal["topic_registry"]
     document: TopicRegistry
+
+
+class CheckpointDocumentPayload(_ContractModel):
+    """Internal typed payload used only by audited checkpoint saves."""
+
+    kind: Literal["checkpoint"]
+    document: Checkpoint
 
 
 DocumentPayload = Annotated[
@@ -510,7 +518,7 @@ def _path_key(value: str) -> str:
 
 def _validate_document_target(
     target: str,
-    payload: DocumentPayload | TopicRegistryDocumentPayload,
+    payload: DocumentPayload | TopicRegistryDocumentPayload | CheckpointDocumentPayload,
 ) -> None:
     path = PurePosixPath(target)
     suffix = path.suffix
@@ -518,6 +526,12 @@ def _validate_document_target(
     if isinstance(payload, TopicRegistryDocumentPayload):
         if target != TOPICS_REGISTRY_PATH:
             raise ValueError("Topic registries must target 99_meta/topics.yaml")
+        return
+    if isinstance(payload, CheckpointDocumentPayload):
+        if target != payload.document.relative_path or not target.startswith(
+            f"{CHECKPOINTS_DIRECTORY}/"
+        ):
+            raise ValueError("Checkpoints must target their canonical 99_meta/<id>.yaml path")
         return
     if isinstance(payload, ArtifactManifestDocumentPayload):
         if not target.startswith("00_inbox/manifests/") or suffix not in {
@@ -537,11 +551,16 @@ def _validate_document_target(
         raise ValueError("Narrative payloads must target a canonical Markdown zone")
 
 
-def _payload_identifier(payload: DocumentPayload) -> str:
+def _payload_identifier(
+    payload: DocumentPayload | TopicRegistryDocumentPayload | CheckpointDocumentPayload,
+) -> str:
     return payload.document.id
 
 
-def _require_target_filename_identity(target: str, payload: DocumentPayload) -> None:
+def _require_target_filename_identity(
+    target: str,
+    payload: DocumentPayload | TopicRegistryDocumentPayload | CheckpointDocumentPayload,
+) -> None:
     identifier = _payload_identifier(payload)
     stem = PurePosixPath(target).stem
     encoded = quote(identifier, safe="-._~")
@@ -589,8 +608,15 @@ def _require_local_reference_context(value: str, context_id: str) -> None:
     WorkctxUri.parse(value).require_context(context_id)
 
 
-def _require_payload_context(payload: DocumentPayload, context_id: str) -> None:
+def _require_payload_context(
+    payload: DocumentPayload | TopicRegistryDocumentPayload | CheckpointDocumentPayload,
+    context_id: str,
+) -> None:
     document = payload.document
+    if isinstance(document, Checkpoint):
+        for item in document.items:
+            WorkctxUri.parse(item.uri).require_context(context_id)
+        return
     if isinstance(document, (EntityFrontmatter, Task)):
         WorkctxUri.parse(document.uri).require_context(context_id)
         for reference in document.references:
@@ -634,6 +660,7 @@ __all__ = [
     "AuditMoveOperation",
     "AuditOperation",
     "AuditUpdateOperation",
+    "CheckpointDocumentPayload",
     "ClaimDocumentPayload",
     "ContentHash",
     "ContextId",

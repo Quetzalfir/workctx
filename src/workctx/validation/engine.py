@@ -18,8 +18,10 @@ from pydantic import BaseModel, ValidationError
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from workctx.domain import (
+    CHECKPOINT_ID_PATTERN,
     ArtifactManifest,
     ArtifactReference,
+    Checkpoint,
     Claim,
     ClaimStatus,
     DecisionId,
@@ -265,6 +267,7 @@ class WorkspaceValidator:
         self._check_workspace_text_content()
         self._check_packaged_meta_schemas()
         self._load_topic_registry()
+        self._load_checkpoints()
         self._load_canonical_documents()
         self._check_document_topics()
         self._build_identity_index()
@@ -576,6 +579,42 @@ class WorkspaceValidator:
                     record.document.relative_path,
                     f"Topic {value!r} does not resolve to an active slug or alias.",
                 )
+
+    def _load_checkpoints(self) -> None:
+        for path, content in sorted(
+            self._texts.items(), key=lambda item: item[0].relative_to(self._root).as_posix()
+        ):
+            relative = path.relative_to(self._root)
+            if (
+                len(relative.parts) != 2
+                or relative.parts[0] != "99_meta"
+                or path.suffix.casefold() not in {".yaml", ".yml"}
+                or not path.stem.startswith("CHK-")
+            ):
+                continue
+            relative_text = relative.as_posix()
+            try:
+                loaded: Any = yaml.safe_load(content)
+                if not isinstance(loaded, dict) or _contains_container_cycle(loaded):
+                    raise ValueError("checkpoint must contain an acyclic mapping")
+                checkpoint = Checkpoint.model_validate(loaded)
+                if (
+                    re.fullmatch(CHECKPOINT_ID_PATTERN, path.stem) is None
+                    or checkpoint.id != path.stem
+                    or checkpoint.relative_path != relative_text
+                ):
+                    raise ValueError("checkpoint filename must match its ID")
+                if self._report.context_id is None:
+                    raise ValueError("checkpoint context cannot be established")
+                for item in checkpoint.items:
+                    WorkctxUri.parse(item.uri).require_context(self._report.context_id)
+                if checkpoint.topic is not None and (
+                    self._topic_registry is None
+                    or self._topic_registry.resolve(checkpoint.topic) is None
+                ):
+                    raise ValueError("checkpoint topic must resolve in the registry")
+            except (RecursionError, TypeError, ValueError, ValidationError, yaml.YAMLError):
+                self._add("CHECKPOINT-INVALID", relative_text)
 
     def _load_canonical_documents(self) -> None:
         for path, content in sorted(

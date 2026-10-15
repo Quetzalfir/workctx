@@ -20,6 +20,7 @@ from workctx.adapters.sqlite import (
 )
 from workctx.adapters.sqlite.freshness import SqliteFreshnessProbe
 from workctx.adapters.sqlite.projection import projection_database_path
+from workctx.checkpoints import check_checkpoint
 from workctx.doctor import run_doctor
 from workctx.domain import EntityType, RelationType, TaskStatus, WorkctxUri
 from workctx.domain.tasks import TASK_ID_PATTERN
@@ -60,7 +61,7 @@ from workctx.retrieval import (
     serialize_context_pack,
     trace,
 )
-from workctx.topics import list_topics, resolve_topic
+from workctx.topics import compute_topic_heat, list_topics, resolve_topic
 from workctx.transactions import (
     LedgerIntegrityError,
     PostconditionRollbackError,
@@ -114,6 +115,7 @@ class McpToolService:
             "context_pack": self._context_pack,
             "task_list": self._task_list,
             "topic_list": self._topic_list,
+            "checkpoint_check": self._checkpoint_check,
             "task_show": self._task_show,
             "inbox_list": self._inbox_list,
             "audit_summary": self._audit_summary,
@@ -426,7 +428,26 @@ class McpToolService:
             self._root,
             include_all=cast(bool, arguments.get("include_all", False)),
         )
-        return self._success("topic_list", {"topics": topics, "count": len(topics)})
+        heat_by_slug = {item.slug: item for item in compute_topic_heat(self._root)}
+        payload: list[dict[str, object]] = []
+        for topic in topics:
+            item = topic.model_dump(mode="json")
+            heat = heat_by_slug.get(topic.slug)
+            item.update(
+                {
+                    "heat": None if heat is None else heat.heat.value,
+                    "score": None if heat is None else heat.score,
+                    "last_activity": (
+                        None if heat is None or heat.last_activity is None else heat.last_activity
+                    ),
+                }
+            )
+            payload.append(item)
+        return self._success("topic_list", {"topics": payload, "count": len(payload)})
+
+    def _checkpoint_check(self, arguments: dict[str, Any]) -> ToolResponse:
+        result = check_checkpoint(self._root, cast(str, arguments["checkpoint_id"]))
+        return self._success("checkpoint_check", {"checkpoint": result})
 
     def _resolved_topic(self, arguments: Mapping[str, object]) -> str | None:
         value = arguments.get("topic")

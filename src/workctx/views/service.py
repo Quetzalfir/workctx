@@ -23,6 +23,8 @@ from workctx.domain import (
     EntityType,
     TaskPriority,
     TaskStatus,
+    TopicHeat,
+    TopicHeatBucket,
 )
 from workctx.domain.transactions import (
     AuditCreateOperation,
@@ -33,6 +35,7 @@ from workctx.domain.transactions import (
 from workctx.ingestion import ArtifactRecord, list_inbox
 from workctx.retrieval import ProjectionReader, TopicScopedReader, resolve, trace
 from workctx.suggestions import SuggestionStatus, list_suggestions
+from workctx.topics import compute_topic_heat
 from workctx.transactions import AuditSummary, audit_summary, read_audit_events
 from workctx.views.errors import ViewSourceChangedError
 from workctx.views.models import (
@@ -110,6 +113,7 @@ _PRIORITY_ORDER = {
 @dataclass(frozen=True, slots=True)
 class _OperationalSnapshot:
     payload: BriefPayload
+    topic_heat: tuple[TopicHeat, ...]
     next_actions: tuple[TaskViewItem, ...]
     resource_directory: ResourceDirectoryPayload
     status_report: StatusReportPayload
@@ -201,6 +205,7 @@ class ViewService:
                 content = render_view(
                     name,
                     snapshot.payload,
+                    topic_heat=snapshot.topic_heat,
                     next_actions=snapshot.next_actions,
                     resource_directory=snapshot.resource_directory,
                     status_report=snapshot.status_report,
@@ -240,6 +245,9 @@ class ViewService:
         if topic_only and topic is None:
             raise ValueError("topic_only requires a topic")
         before = audit_summary(self._root)
+        topic_heat = compute_topic_heat(self._root, clock=lambda: generated_at)
+        if topic is not None:
+            topic_heat = tuple(item for item in topic_heat if item.slug == topic)
         reader: ProjectionReader = self._projection
         if topic is not None:
             reader = TopicScopedReader(reader, topic, topic_only=topic_only)
@@ -286,6 +294,7 @@ class ViewService:
             context_id=self._context_id,
             generated_at=generated_at,
             source_revision=after.head_hash,
+            hot_topics=tuple(item for item in topic_heat if item.heat is TopicHeatBucket.HOT),
             today_focus=today_focus,
             blockers=blockers,
             waiting_on=waiting_on,
@@ -294,6 +303,7 @@ class ViewService:
         )
         return _OperationalSnapshot(
             payload=payload,
+            topic_heat=topic_heat,
             next_actions=next_actions,
             resource_directory=resource_directory,
             status_report=status_report,
