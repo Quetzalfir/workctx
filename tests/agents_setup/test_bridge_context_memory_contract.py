@@ -15,6 +15,17 @@ README_SURFACES = (
     "src/workctx/resources/context_template/README.md",
     "templates/context/README.md",
 )
+BOOTSTRAP_SURFACE = "src/workctx/resources/agent_kit/skills/bootstrap-session/SKILL.md"
+INTEGRATION_LOCATION_SENTENCE = (
+    "Integration entities (`INT-*`) live under `02_knowledge/integrations/`; "
+    "`90_integrations/` holds the source catalog and integration configuration files; "
+    "declarative connector manifests live in `07_connectors/`."
+)
+RESOLVE_CANONICAL_SENTENCE = (
+    'Find canonical items with `workctx search "<topic>" --json` and resolve relevant hits '
+    "with `workctx ref show <workctx-uri> --json`, which returns the real `source_path`; a "
+    "supposed path not existing never proves an item is missing."
+)
 DISCOVERY_SENTENCE = (
     "Before creating or modifying a file whose placement or ownership is uncertain, run "
     "`workctx guide`; generated files are never hand-edited."
@@ -36,19 +47,19 @@ ORIENTATION_MARKERS = (
     "`04_views/resource-directory.md`",
     "`04_views/glossary.md`",
     "`04_views/current-focus.md`",
-    '`workctx search "<topic>"`',
-    "`90_integrations/`",
+    '`workctx search "<topic>" --json`',
+    "`90_integrations/source-catalog.yaml`",
     "`workctx secret list`",
     "`workctx connector list`",
-    "relevant entities",
-    "`workctx ref show <workctx-uri>`",
+    "`workctx ref show <workctx-uri> --json`",
+    "real `source_path`",
+    "a supposed path not existing never proves an item is missing",
     "Asking the operator something the context already answers is a protocol violation.",
 )
 RETENTION_MARKERS = (
     "normal approval-gated proposal flow",
     "a person fact to a person entity",
-    "an access or process fact to an integration entity",
-    "or a system entity",
+    "an access or process fact to the applicable integration or system entity",
     "a standing preference to a suggested context `instructions.md` addition",
     "Did the operator repeat or newly supply any fact?",
     "it must be recorded before closing.",
@@ -86,6 +97,18 @@ def test_prompt_surface_orients_before_asking_and_records_new_facts(
     assert content.count("protocol violation") == 1
 
 
+@pytest.mark.parametrize("relative_path", (*PROMPT_SURFACES, BOOTSTRAP_SURFACE))
+def test_prompt_surface_states_one_truthful_location_and_resolution_rule(
+    relative_path: str,
+) -> None:
+    content = (ROOT / relative_path).read_text(encoding="utf-8")
+
+    assert content.count(INTEGRATION_LOCATION_SENTENCE) == 1, relative_path
+    assert content.count(RESOLVE_CANONICAL_SENTENCE) == 1, relative_path
+    assert "integration entity under `90_integrations/`" not in content
+    assert "integration entity in `90_integrations/`" not in content
+
+
 @pytest.mark.parametrize("relative_path", PROMPT_SURFACES)
 def test_prompt_surface_requires_safe_explicit_secret_acknowledgment(
     relative_path: str,
@@ -106,7 +129,7 @@ def test_prompt_surface_requires_operator_voice_and_conversation_language(
 
 
 def test_bootstrap_session_orients_before_asking_and_records_new_facts() -> None:
-    path = ROOT / "src/workctx/resources/agent_kit/skills/bootstrap-session/SKILL.md"
+    path = ROOT / BOOTSTRAP_SURFACE
     content = path.read_text(encoding="utf-8")
 
     for marker in (*ORIENTATION_MARKERS, *RETENTION_MARKERS):

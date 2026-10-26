@@ -42,6 +42,39 @@ def test_freshly_initialized_workspace_is_clean(tmp_path: Path) -> None:
     assert report.issues == []
 
 
+def test_integration_entity_outside_canonical_directory_is_warning(
+    canonical_workspace: FixtureWorkspace,
+) -> None:
+    identifier = "INT-fictional-access"
+    path = canonical_workspace.write_markdown(
+        "90_integrations",
+        canonical_workspace.entity_payload(identifier, "integration"),
+    )
+
+    report = validate_workspace(canonical_workspace.root)
+    issue = next(issue for issue in report.issues if issue.code == "CTX-MISPLACED-ENTITY")
+
+    assert issue.severity is Severity.WARNING
+    assert issue.path == path.relative_to(canonical_workspace.root).as_posix()
+    assert "02_knowledge/integrations/" in (issue.repair_action or "")
+    assert report.ok
+
+
+def test_integration_entity_in_canonical_directory_has_no_location_warning(
+    canonical_workspace: FixtureWorkspace,
+) -> None:
+    identifier = "INT-fictional-access"
+    canonical_workspace.write_markdown(
+        "02_knowledge/integrations",
+        canonical_workspace.entity_payload(identifier, "integration"),
+    )
+
+    report = validate_workspace(canonical_workspace.root)
+
+    assert "CTX-MISPLACED-ENTITY" not in {issue.code for issue in report.issues}
+    assert report.ok
+
+
 def test_validation_never_writes_workspace(canonical_workspace: FixtureWorkspace) -> None:
     before = _snapshot(canonical_workspace.root)
 

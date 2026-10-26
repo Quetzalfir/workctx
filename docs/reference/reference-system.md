@@ -43,6 +43,10 @@ workctx://example-context/observation/EVD-20260730-auth-review-01%23OBS-004
 `#OBS-NNN` to its canonical `%23` representation. Empty path segments, decoded traversal
 segments, queries, and URI fragments are rejected.
 
+Find canonical items with `workctx search <query> --json`, then resolve the selected URI with
+`workctx ref show <workctx-uri> --json`. The resolved record reports its real context-relative
+`source_path`; a supposed path not existing never proves that a canonical item is missing.
+
 ## Source references
 
 Artifacts use immutable content addressing with a 64-character lowercase SHA-256 digest:

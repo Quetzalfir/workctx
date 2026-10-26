@@ -9,12 +9,17 @@ context.yaml
 04_views/          Generated operational views
 05_outbox/         Drafts and approved output artifacts
 outputs/           Non-canonical working material (default working directory)
-90_integrations/   Connector metadata and secret references
+07_connectors/     Declarative connector manifests (created on first use)
+90_integrations/   Source catalog and integration configuration files; no entity records
 98_state/          Generated indexes, locks, caches, and local runtime state
 99_meta/           Policies, templates, migrations, and audit metadata
 ```
 
 `04_views/` and `98_state/` must be rebuildable. Do not place the only copy of knowledge there. `04_views/` starts empty and is populated by `workctx view rebuild`.
+
+Integration entities (`INT-*`, entity type `integration`) live in
+`02_knowledge/integrations/`. `90_integrations/` holds the source catalog and integration configuration
+files; declarative connector manifests live in `07_connectors/`.
 
 `context.yaml` may set `working_dirs` to visible, non-template top-level directory names; the
 default is `outputs/`. These directories are for temporary working material, not canonical
