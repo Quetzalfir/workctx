@@ -122,6 +122,21 @@ def test_working_dir_downgrades_content_findings_without_silencing_them(
     assert report.ok
 
 
+def test_working_dir_is_exempt_from_entity_location_diagnostic(
+    canonical_workspace: FixtureWorkspace,
+) -> None:
+    identifier = "INT-working-copy"
+    canonical_workspace.write_markdown(
+        "outputs",
+        canonical_workspace.entity_payload(identifier, "integration"),
+    )
+
+    report = validate_workspace(canonical_workspace.root)
+
+    assert "CTX-MISPLACED-ENTITY" not in {issue.code for issue in report.issues}
+    assert report.ok
+
+
 def test_configured_working_dir_replaces_the_default(tmp_path: Path) -> None:
     root = tmp_path / "working-custom"
     initialize_context(root, name="Working Custom", context_id="working-custom")

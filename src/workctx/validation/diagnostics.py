@@ -33,6 +33,13 @@ _DEFINITIONS = (
         "Restore the named directory from the canonical context layout.",
     ),
     DiagnosticDefinition(
+        "CTX-MISPLACED-ENTITY",
+        Severity.WARNING,
+        "An integration entity file is outside its canonical directory.",
+        "Move the integration entity to 02_knowledge/integrations/ through an approved "
+        "proposal or transaction.",
+    ),
+    DiagnosticDefinition(
         "CTX-NON-UTF8",
         Severity.WARNING,
         "A workspace text file cannot be decoded as UTF-8.",

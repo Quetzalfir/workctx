@@ -136,7 +136,12 @@ def test_decisive_alpha_cycle_is_traceable_rebuildable_and_audited(tmp_path: Pat
     )
     resolution = shown["result"]["resolution"]
     assert resolution["status"] == "resolved"
-    assert resolution["record"] == {"id": TASK_ID, "uri": TASK_URI, "kind": "task"}
+    assert resolution["record"] == {
+        "id": TASK_ID,
+        "uri": TASK_URI,
+        "kind": "task",
+        "source_path": f"03_work/tasks/{TASK_ID}.md",
+    }
 
     traced = invoke_envelope(
         ["ref", "trace", TASK_URI, "--context", str(root), "--json"],

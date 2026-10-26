@@ -46,6 +46,10 @@ or registry discovery. Its typed APIs are:
   `00_inbox/manifests/`;
 - per-document `*_has_hand_edits` checks.
 
+Integration entities (`INT-*`, entity type `integration`) are entity documents under
+`02_knowledge/integrations/`. The separate `90_integrations/` zone holds connector
+configuration and the source catalog, not entity documents.
+
 Artifact manifests support `.yaml`, `.yml`, and `.json`. This preserves the architecture's
 explicit YAML-or-JSON allowance while keeping both forms byte deterministic. Artifact
 preserved-file and sidecar paths must remain below `00_inbox/` or `01_processed/`.

@@ -108,6 +108,36 @@ def _write_task(root: Path) -> None:
     )
 
 
+def _write_search_projects(root: Path, *, count: int) -> None:
+    for index in range(1, count + 1):
+        identifier = f"PRJ-search-{index:02d}"
+        frontmatter = {
+            "schema_version": 1,
+            "id": identifier,
+            "entity_type": "project",
+            "title": f"Lookup marker project {index:02d}",
+            "uri": f"workctx://cli-wave3/project/{identifier}",
+            "aliases": [],
+            "status": "active",
+            "confidence": "high",
+            "tags": ["fictional"],
+            "references": [],
+            "created_at": TIMESTAMP,
+            "updated_at": TIMESTAMP,
+        }
+        rendered = yaml.safe_dump(
+            frontmatter,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
+        (root / "02_knowledge" / "projects" / f"{identifier}.md").write_text(
+            f"---\n{rendered}---\n\nShared lookup marker.\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+
 def _proposal_payload(
     slug: str,
     *,
@@ -630,9 +660,61 @@ def test_search_and_task_commands_emit_filtered_envelopes(tmp_path: Path) -> Non
         command="task.show",
     )
 
-    assert search["result"]["hits"][0]["id"] == "TASK-2026-001"
+    hit = search["result"]["hits"][0]
+    assert hit["id"] == "TASK-2026-001"
+    assert set(hit) == {
+        "id",
+        "uri",
+        "record_kind",
+        "entity_type",
+        "title",
+        "source_path",
+        "score",
+        "topics",
+    }
     assert listed["result"]["tasks"][0]["status"] == "waiting"
     assert shown["result"]["task"]["next_action"].startswith("Review")
+
+
+def test_human_search_output_lists_ranked_hit_fields_before_count(tmp_path: Path) -> None:
+    root = _initialize(tmp_path / "ctx", with_task=True)
+
+    result = runner.invoke(
+        app,
+        ["search", "rollout readiness", "--type", "task", "--context", str(root)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    assert result.stdout == (
+        "Rank Type          ID / title                                         "
+        "Source                   Canonical URI                         \n"
+        "   1 task          TASK-2026-001 — Review fictional rollout readiness "
+        "03_work/TASK-2026-001.md workctx://cli-wave3/task/TASK-2026-001\n"
+        "Found 1 results for 'rollout readiness'.\n"
+    )
+
+
+def test_human_search_defaults_to_ten_hits_and_respects_limit(tmp_path: Path) -> None:
+    root = tmp_path / "ctx"
+    initialize_context(root, name="CLI Wave 3", context_id="cli-wave3")
+    _write_search_projects(root, count=12)
+    SQLiteProjection(root).rebuild()
+
+    default = runner.invoke(app, ["search", "lookup marker", "--context", str(root)])
+    limited = runner.invoke(
+        app,
+        ["search", "lookup marker", "--limit", "2", "--context", str(root)],
+    )
+
+    assert default.exit_code == 0, default.output
+    assert default.stderr == ""
+    assert default.stdout.count("workctx://cli-wave3/project/") == 10
+    assert default.stdout.endswith("Found 10 results for 'lookup marker'.\n")
+    assert limited.exit_code == 0, limited.output
+    assert limited.stderr == ""
+    assert limited.stdout.count("workctx://cli-wave3/project/") == 2
+    assert limited.stdout.endswith("Found 2 results for 'lookup marker'.\n")
 
 
 @pytest.mark.parametrize(

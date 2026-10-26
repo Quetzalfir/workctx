@@ -22,6 +22,7 @@ working directories.
 | `CTX-CONFIG` | error | `context.yaml` is missing, unreadable, or invalid for `ContextConfig`. | Restore `context.yaml` and correct it to satisfy the current typed model. |
 | `CTX-FEDERATED-SEARCH` | error | The Phase 1 context enables `federated_search`. | Set `policies.federated_search` to `false`. |
 | `CTX-MISSING-DIRECTORY` | error | A required top-level context directory is absent. | Restore the named directory from the canonical context layout. |
+| `CTX-MISPLACED-ENTITY` | warning | An integration entity file is outside its canonical directory. | Move the integration entity to `02_knowledge/integrations/` through an approved proposal or transaction. |
 | `CTX-NON-UTF8` | warning | A workspace text file cannot be decoded as UTF-8. | Convert the file to UTF-8 without changing its intended content. |
 | `CTX-UNREADABLE-PATH` | error | A workspace file or directory could not be inspected. | Restore read access and rerun validation so the path can be checked. |
 | `CTX-ABSOLUTE-PATH` | warning | A durable value contains a machine-specific absolute path; the value-free diagnostic reports its line. | Replace it with a context-relative path or canonical durable URI. |

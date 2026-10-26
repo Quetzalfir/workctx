@@ -113,6 +113,7 @@ _TEXT_SUFFIXES = {
 }
 _TEXT_FILENAMES = {"dockerfile", "makefile", ".netrc", ".npmrc", ".pypirc"}
 _CANONICAL_ZONES = {"02_knowledge", "03_work", "05_outbox"}
+_INTEGRATION_ENTITY_DIRECTORY = ("02_knowledge", "integrations")
 _STRUCTURED_SUFFIXES = {".yaml", ".yml", ".json"}
 _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[\\/]")
 _REPO_COMMIT = re.compile(r"^[0-9a-fA-F]{7,64}$")
@@ -268,6 +269,7 @@ class WorkspaceValidator:
         self._check_packaged_meta_schemas()
         self._load_topic_registry()
         self._load_checkpoints()
+        self._check_misplaced_integration_entities()
         self._load_canonical_documents()
         self._check_document_topics()
         self._build_identity_index()
@@ -615,6 +617,27 @@ class WorkspaceValidator:
                     raise ValueError("checkpoint topic must resolve in the registry")
             except (RecursionError, TypeError, ValueError, ValidationError, yaml.YAMLError):
                 self._add("CHECKPOINT-INVALID", relative_text)
+
+    def _check_misplaced_integration_entities(self) -> None:
+        for path, content in sorted(
+            self._texts.items(), key=lambda item: item[0].relative_to(self._root).as_posix()
+        ):
+            relative = path.relative_to(self._root)
+            if (
+                self._is_working_path(relative)
+                or path.suffix.casefold() != ".md"
+                or path.name.casefold() == "readme.md"
+                or relative.parts[:2] == _INTEGRATION_ENTITY_DIRECTORY
+                or not (content.startswith("---\n") or content.startswith("---\r\n"))
+            ):
+                continue
+            try:
+                data, _body = parse_frontmatter(content)
+                entity = EntityFrontmatter.model_validate(data)
+            except (RecursionError, TypeError, ValueError, ValidationError, yaml.YAMLError):
+                continue
+            if entity.entity_type == "integration":
+                self._add("CTX-MISPLACED-ENTITY", relative.as_posix())
 
     def _load_canonical_documents(self) -> None:
         for path, content in sorted(

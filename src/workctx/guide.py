@@ -189,7 +189,8 @@ GUIDE = GuideDefinition(
             "90_integrations/",
             OwnershipClass.CANONICAL_VIA_PROPOSALS,
             EditPolicy.PROPOSALS_OR_TRANSACTIONS,
-            "Integration records and secret reference names only.",
+            "Source catalog and integration configuration files; connector manifests live in "
+            "07_connectors/; integration entities live under 02_knowledge/integrations/.",
         ),
         OwnershipEntry(
             "98_state/",
@@ -309,7 +310,8 @@ GUIDE = GuideDefinition(
         ),
         RoutingEntry(
             "access or process fact",
-            "integration entity in 90_integrations/ or system entity in 02_knowledge/",
+            "integration entity under 02_knowledge/integrations/ or system entity under "
+            "02_knowledge/systems/",
             "proposal or transaction",
         ),
         RoutingEntry(

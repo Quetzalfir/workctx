@@ -60,7 +60,8 @@ EXPECTED_ROUTING = [
     },
     {
         "kind": "access or process fact",
-        "destination": "integration entity in 90_integrations/ or system entity in 02_knowledge/",
+        "destination": "integration entity under 02_knowledge/integrations/ or system entity "
+        "under 02_knowledge/systems/",
         "via": "proposal or transaction",
     },
     {
@@ -197,7 +198,19 @@ def test_json_shape_pins_paths_classes_policies_and_routing_entries(tmp_path: Pa
     actual_ownership = {
         entry["path"]: (entry["class"], entry["policy"]) for entry in result["ownership"]
     }
+    integration_ownership = next(
+        entry for entry in result["ownership"] if entry["path"] == "90_integrations/"
+    )
     assert actual_ownership == EXPECTED_OWNERSHIP
+    assert integration_ownership["details"] == (
+        "Source catalog and integration configuration files; connector manifests live in "
+        "07_connectors/; integration entities live under 02_knowledge/integrations/."
+    )
+    assert all(
+        "integration entity in 90_integrations/" not in entry["destination"]
+        and "integration entity under 90_integrations/" not in entry["destination"]
+        for entry in result["routing"]
+    )
     assert {entry["class"] for entry in result["ownership"]} == {
         ownership_class.value for ownership_class in OwnershipClass
     }

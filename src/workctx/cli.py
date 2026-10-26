@@ -2869,7 +2869,7 @@ def search_command(
     ] = None,
     limit: Annotated[
         int, typer.Option("--limit", min=1, max=1000, help="Maximum result count.")
-    ] = 20,
+    ] = 10,
     topic: Annotated[
         str | None,
         typer.Option("--topic", help="Scope to this active topic slug or alias."),
@@ -2913,6 +2913,22 @@ def search_command(
     if json_output:
         emit_success(result=result, context_id=projection.context_id)
     else:
+        if hits:
+            table = Table(box=None, pad_edge=False, collapse_padding=True)
+            table.add_column("Rank", justify="right", width=4, no_wrap=True)
+            table.add_column("Type", width=13, no_wrap=True)
+            table.add_column("ID / title", min_width=12, ratio=3, overflow="fold")
+            table.add_column("Source", min_width=10, ratio=2, overflow="fold")
+            table.add_column("Canonical URI", min_width=14, ratio=3, overflow="fold")
+            for rank, hit in enumerate(hits, start=1):
+                table.add_row(
+                    str(rank),
+                    hit.entity_type.value,
+                    f"{hit.id} — {hit.title}",
+                    hit.source_path,
+                    str(hit.uri),
+                )
+            output_console.print(table)
         output_console.print(Text(f"Found {len(hits)} results for {query!r}."))
 
 
@@ -3802,6 +3818,7 @@ def _resolution_payload(resolution: ResolutionResult) -> dict[str, JsonValue]:
             "id": record.id,
             "uri": str(record.uri),
             "kind": type(record).__name__.removesuffix("Record").lower(),
+            "source_path": record.source_path,
         }
     return payload
 
