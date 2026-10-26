@@ -421,7 +421,7 @@ notified; removal is the operator's decision). Operator also asked that
 outbound messages be concise, direct, and human — lists when they help,
 technical detail without filler.
 
-## C-226 — Integration location truth, resolve-don't-guess, human search results
+## C-226 — Integration location truth, resolve-don't-guess, human search results — DELIVERED (WP-890, 2026-10-26)
 
 Field incident (2026-10-26, Loftware): an agent declared an integration
 missing because the packaged instructions (C-218 bridges, C-219 guide,
