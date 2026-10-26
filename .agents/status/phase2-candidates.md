@@ -420,3 +420,16 @@ service config with plaintext production credentials (operator
 notified; removal is the operator's decision). Operator also asked that
 outbound messages be concise, direct, and human — lists when they help,
 technical detail without filler.
+
+## C-226 — Integration location truth, resolve-don't-guess, human search results
+
+Field incident (2026-10-26, Loftware): an agent declared an integration
+missing because the packaged instructions (C-218 bridges, C-219 guide,
+bootstrap-session) tell agents to look for and persist integration
+entities under `90_integrations/`. The real contract: integration
+entities (`INT-*`) live in `02_knowledge/integrations/` (template since
+day one; all operator contexts comply); `90_integrations/` holds
+connector configuration and the source catalog. Lead wording error in
+the C-218 brief, propagated. Also: human-mode `workctx search` prints
+only "Found N results", hiding the hits from agents not using --json.
+Operator approved all corrections 2026-10-26.
